@@ -58,5 +58,10 @@ Generate a new Drizzle migration after schema changes with `npm run db:generate`
 
 ## Current scope
 
-Authentication, outlet assignments, geofenced clock-in/out, recent shift history, staff correction-request submission, role-scoped invitations, pending-link revocation, and manager/admin-issued password-reset links are connected to Postgres. Invite links are single-use, expire after seven days, and store only a token hash. Password-reset links are shared manually, single-use, and expire after 30 minutes. Correction approvals, manager timesheets and edits, outlet/team administration beyond invitations, and CSV export are not implemented yet. Browser GPS is evidence for location checks, not tamper-proof proof of physical presence.
+Global admins manage outlets and manager assignments but do not receive outlet roles or clock shifts. Managers can be assigned to multiple outlets; they invite staff and supervisors only within their assigned outlets. Outlet edits and soft deactivation are audited, and deactivation is blocked while a shift is open.
+
+Staff and supervisors can clock against their outlet geofence, review their own history by outlet-local date range, and submit corrections. Managers and admins can review correction requests and manage filtered timesheets. Direct time edits and approved corrections require a reason and are audited. Approved missed clock-ins are stored as manual punches with no fabricated GPS data. The timesheet export follows the active outlet, employee, and date filters, uses outlet-local timestamps, and escapes spreadsheet formula prefixes. Timesheet results are limited to 500 rows per query.
+
+Run `npm run db:migrate` after updating to apply the punch-provenance migration. Existing clock-in and completed clock-out records are retained as GPS-verified; manually adjusted punches are labeled separately. Invite links are single-use and expire after seven days. Password-reset links are shared manually, single-use, and expire after 30 minutes. Browser GPS is operational evidence, not tamper-proof proof of physical presence.
+
 # ydm-clockin

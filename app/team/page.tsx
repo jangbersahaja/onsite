@@ -1,0 +1,896 @@
+"use client";
+
+import { ModalDialog } from "@/app/modal-dialog";
+import { managementNavigation, WorkspaceShell } from "@/app/workspace-shell";
+import Link from "next/link";
+import { useEffect, useState, type FormEvent } from "react";
+
+type TeamMember = {
+  userId: string;
+  name: string;
+  email: string;
+  outletId: string;
+  outletName: string;
+  role: "manager" | "supervisor" | "staff";
+  canReset: boolean;
+};
+
+type TeamInvitation = {
+  id: string;
+  email: string;
+  role: "manager" | "supervisor" | "staff";
+  outletId: string;
+  outletName: string;
+  expiresAt: string;
+};
+
+type TeamOutlet = {
+  id: string;
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+  timezone: string;
+};
+
+type TeamData = {
+  isAdmin: boolean;
+  outlets: TeamOutlet[];
+  members: TeamMember[];
+  invitations: TeamInvitation[];
+  managers: { id: string; name: string; email: string }[];
+  managerAssignments: { userId: string; outletId: string; isActive: boolean }[];
+};
+
+async function loadTeamData() {
+  const response = await fetch("/api/team", { cache: "no-store" });
+  const body = await response.json();
+  if (!response.ok) throw new Error(body.error ?? "Could not load team data.");
+  return body as TeamData;
+}
+
+function formatExpiry(value: string) {
+  return new Intl.DateTimeFormat("en-SG", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+export default function TeamPage() {
+  const [data, setData] = useState<TeamData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isInviting, setIsInviting] = useState(false);
+  const [isCreatingOutlet, setIsCreatingOutlet] = useState(false);
+  const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
+  const [isOutletDialogOpen, setIsOutletDialogOpen] = useState(false);
+  const [email, setEmail] = useState("");
+  const [outletId, setOutletId] = useState("");
+  const [role, setRole] = useState<"manager" | "supervisor" | "staff">("staff");
+  const [issuedInvite, setIssuedInvite] = useState("");
+  const [issuedResetLink, setIssuedResetLink] = useState("");
+  const [message, setMessage] = useState("");
+  const [inviteMessage, setInviteMessage] = useState("");
+  const [outletMessage, setOutletMessage] = useState("");
+  const [resettingUserId, setResettingUserId] = useState("");
+  const [revokingInvitationId, setRevokingInvitationId] = useState("");
+  const [editingOutletId, setEditingOutletId] = useState("");
+  const [assignmentKey, setAssignmentKey] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    loadTeamData()
+      .then((team) => {
+        if (!active) return;
+        setData(team);
+        setOutletId(team.outlets[0]?.id ?? "");
+        setRole(team.isAdmin ? "manager" : "staff");
+      })
+      .catch((error: unknown) => {
+        if (active)
+          setMessage(
+            error instanceof Error
+              ? error.message
+              : "Could not load team data.",
+          );
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  async function handleInvite(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!outletId || isInviting) return;
+    setIsInviting(true);
+    setInviteMessage("");
+    setIssuedInvite("");
+    try {
+      const response = await fetch("/api/invitations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, role, outletId }),
+      });
+      const body = await response.json();
+      if (!response.ok)
+        throw new Error(body.error ?? "Could not create invitation.");
+      setIssuedInvite(body.inviteUrl);
+      setInviteMessage(
+        `Link created for ${email}. It expires ${formatExpiry(body.expiresAt)}.`,
+      );
+      setEmail("");
+      setData(await loadTeamData());
+    } catch (error) {
+      setInviteMessage(
+        error instanceof Error ? error.message : "Could not create invitation.",
+      );
+    } finally {
+      setIsInviting(false);
+    }
+  }
+
+  async function handleCreateOutlet(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isCreatingOutlet) return;
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    setIsCreatingOutlet(true);
+    setOutletMessage("");
+    try {
+      const response = await fetch("/api/outlets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: formData.get("name"),
+          address: formData.get("address"),
+          latitude: Number(formData.get("latitude")),
+          longitude: Number(formData.get("longitude")),
+          radiusMeters: Number(formData.get("radiusMeters")),
+          timezone: formData.get("timezone"),
+        }),
+      });
+      const body = await response.json();
+      if (!response.ok)
+        throw new Error(body.error ?? "Could not create outlet.");
+      const team = await loadTeamData();
+      setData(team);
+      setOutletId(body.outlet.id);
+      setMessage(`${body.outlet.name} was added.`);
+      setIsOutletDialogOpen(false);
+      form.reset();
+    } catch (error) {
+      setOutletMessage(
+        error instanceof Error ? error.message : "Could not create outlet.",
+      );
+    } finally {
+      setIsCreatingOutlet(false);
+    }
+  }
+
+  async function handleEditOutlet(
+    event: FormEvent<HTMLFormElement>,
+    id: string,
+  ) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    setOutletMessage("");
+    try {
+      const response = await fetch("/api/outlets", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id,
+          name: formData.get("name"),
+          address: formData.get("address"),
+          latitude: Number(formData.get("latitude")),
+          longitude: Number(formData.get("longitude")),
+          radiusMeters: Number(formData.get("radiusMeters")),
+          timezone: formData.get("timezone"),
+        }),
+      });
+      const body = await response.json();
+      if (!response.ok)
+        throw new Error(body.error ?? "Could not update outlet.");
+      setData(await loadTeamData());
+      setEditingOutletId("");
+      setIsOutletDialogOpen(false);
+      setMessage(`${body.outlet.name} was updated.`);
+    } catch (error) {
+      setOutletMessage(
+        error instanceof Error ? error.message : "Could not update outlet.",
+      );
+    }
+  }
+
+  async function handleDeactivateOutlet(id: string, reason: string) {
+    const outletName = data?.outlets.find((outlet) => outlet.id === id)?.name;
+    if (!reason.trim()) {
+      setOutletMessage("Enter a reason before deactivating this outlet.");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Deactivate ${outletName ?? "this outlet"}? Its historical shifts will remain available.`,
+      )
+    ) {
+      return;
+    }
+    setOutletMessage("");
+    try {
+      const response = await fetch("/api/outlets", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, reason }),
+      });
+      const body = await response.json();
+      if (!response.ok)
+        throw new Error(body.error ?? "Could not deactivate outlet.");
+      setData(await loadTeamData());
+      setEditingOutletId("");
+      setIsOutletDialogOpen(false);
+      setMessage("Outlet deactivated. Its historical shifts remain available.");
+    } catch (error) {
+      setOutletMessage(
+        error instanceof Error ? error.message : "Could not deactivate outlet.",
+      );
+    }
+  }
+
+  async function handleManagerAssignment(
+    managerId: string,
+    assignedOutletId: string,
+    assigned: boolean,
+  ) {
+    const key = `${managerId}:${assignedOutletId}`;
+    setAssignmentKey(key);
+    setMessage("");
+    try {
+      const response = await fetch("/api/outlet-assignments", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          managerId,
+          outletId: assignedOutletId,
+          assigned,
+        }),
+      });
+      const body = await response.json();
+      if (!response.ok)
+        throw new Error(body.error ?? "Could not update assignment.");
+      setData(await loadTeamData());
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Could not update assignment.",
+      );
+      setData(await loadTeamData());
+    } finally {
+      setAssignmentKey("");
+    }
+  }
+
+  async function handleReset(userId: string, memberEmail: string) {
+    if (resettingUserId) return;
+    setResettingUserId(userId);
+    setIssuedResetLink("");
+    setMessage("");
+    try {
+      const response = await fetch("/api/team/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId }),
+      });
+      const body = await response.json();
+      if (!response.ok)
+        throw new Error(body.error ?? "Could not create reset link.");
+      setIssuedResetLink(body.resetUrl);
+      setMessage(`One-time password reset link created for ${memberEmail}.`);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Could not create reset link.",
+      );
+    } finally {
+      setResettingUserId("");
+    }
+  }
+
+  async function handleRevoke(invitationId: string) {
+    if (revokingInvitationId) return;
+    setRevokingInvitationId(invitationId);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/invitations/${invitationId}`, {
+        method: "DELETE",
+      });
+      const body = await response.json();
+      if (!response.ok)
+        throw new Error(body.error ?? "Could not revoke invitation.");
+      setData(await loadTeamData());
+      setMessage("Invitation revoked. Its link can no longer be used.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Could not revoke invitation.",
+      );
+    } finally {
+      setRevokingInvitationId("");
+    }
+  }
+
+  async function copyInvite() {
+    try {
+      await navigator.clipboard.writeText(issuedInvite);
+      setInviteMessage("Invitation link copied.");
+    } catch {
+      setInviteMessage("Copy failed. Select and copy the invitation link.");
+    }
+  }
+
+  async function copyResetLink() {
+    try {
+      await navigator.clipboard.writeText(issuedResetLink);
+      setMessage("Password reset link copied.");
+    } catch {
+      setMessage("Copy failed. Select and copy the password reset link.");
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <main className="loading-screen" aria-live="polite">
+        Loading team…
+      </main>
+    );
+  }
+
+  if (!data) {
+    return (
+      <main className="auth-screen">
+        <section className="auth-panel">
+          <p className="eyebrow">TEAM ACCESS</p>
+          <h1>Team management</h1>
+          <p className="auth-description">
+            {message || "Sign in with an admin or manager account."}
+          </p>
+          <Link className="auth-submit invite-link-button" href="/">
+            Return to clock
+          </Link>
+        </section>
+      </main>
+    );
+  }
+
+  const visibleMembers = data.members;
+  const editingOutlet = data.outlets.find(
+    (outlet) => outlet.id === editingOutletId,
+  );
+
+  return (
+    <WorkspaceShell
+      activeHref="/team"
+      pageTitle="Team"
+      workspaceName="Operations"
+      navigation={managementNavigation}
+    >
+      <div className="team-page-content">
+        <div className="page-heading">
+          <div>
+            <p className="eyebrow">
+              {data.isAdmin ? "SUPER ADMIN" : "ACCESS CONTROL"}
+            </p>
+            <h1>Team</h1>
+            <p className="subheading">
+              Invite people to the right outlet and role.
+            </p>
+          </div>
+          <button
+            className="team-primary-action"
+            type="button"
+            disabled={!data.outlets.length}
+            onClick={() => {
+              setInviteMessage("");
+              setIsInviteDialogOpen(true);
+            }}
+          >
+            Invite a person
+          </button>
+        </div>
+        {message && (
+          <p className="team-message" role="status" aria-live="polite">
+            {message}
+          </p>
+        )}
+
+        {data.isAdmin && (
+          <section
+            className="team-list-section"
+            aria-labelledby="outlets-title"
+          >
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">COMPANY LOCATIONS</p>
+                <h2 id="outlets-title">Outlets</h2>
+              </div>
+              <div className="team-heading-actions">
+                <span className="team-count">{data.outlets.length}</span>
+                <button
+                  className="team-secondary-action"
+                  type="button"
+                  onClick={() => {
+                    setEditingOutletId("");
+                    setOutletMessage("");
+                    setIsOutletDialogOpen(true);
+                  }}
+                >
+                  Add outlet
+                </button>
+              </div>
+            </div>
+            <div className="outlet-list" aria-label="Active outlets">
+              {data.outlets.map((outlet) => (
+                <div className="outlet-list-item" key={outlet.id}>
+                  <div className="outlet-list-heading">
+                    <div>
+                      <strong>{outlet.name}</strong>
+                      <small>{outlet.address}</small>
+                    </div>
+                    <button
+                      className="reset-link-button"
+                      type="button"
+                      onClick={() => {
+                        setEditingOutletId(outlet.id);
+                        setOutletMessage("");
+                        setIsOutletDialogOpen(true);
+                      }}
+                    >
+                      Edit outlet
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <ModalDialog
+              open={isOutletDialogOpen}
+              onOpenChange={(isOpen) => {
+                setIsOutletDialogOpen(isOpen);
+                if (!isOpen) setEditingOutletId("");
+              }}
+              labelledBy="outlet-dialog-title"
+            >
+              <div className="dialog-panel">
+                <header className="dialog-header">
+                  <div>
+                    <p className="eyebrow">COMPANY LOCATIONS</p>
+                    <h2 id="outlet-dialog-title">
+                      {editingOutlet ? "Edit outlet" : "Add outlet"}
+                    </h2>
+                  </div>
+                  <button
+                    className="dialog-close"
+                    type="button"
+                    aria-label="Close dialog"
+                    onClick={() => setIsOutletDialogOpen(false)}
+                  >
+                    ×
+                  </button>
+                </header>
+                <form
+                  className="team-dialog-form"
+                  key={editingOutlet?.id ?? "new-outlet"}
+                  onSubmit={(event) =>
+                    editingOutlet
+                      ? void handleEditOutlet(event, editingOutlet.id)
+                      : void handleCreateOutlet(event)
+                  }
+                >
+                  <label>
+                    Outlet name
+                    <input
+                      name="name"
+                      defaultValue={editingOutlet?.name}
+                      required
+                      maxLength={120}
+                    />
+                  </label>
+                  <label className="dialog-wide-field">
+                    Address
+                    <input
+                      name="address"
+                      defaultValue={editingOutlet?.address}
+                      required
+                      maxLength={300}
+                    />
+                  </label>
+                  <label>
+                    Latitude
+                    <input
+                      name="latitude"
+                      type="number"
+                      min={-90}
+                      max={90}
+                      step="any"
+                      defaultValue={editingOutlet?.latitude}
+                      required
+                    />
+                  </label>
+                  <label>
+                    Longitude
+                    <input
+                      name="longitude"
+                      type="number"
+                      min={-180}
+                      max={180}
+                      step="any"
+                      defaultValue={editingOutlet?.longitude}
+                      required
+                    />
+                  </label>
+                  <label>
+                    Geofence radius (meters)
+                    <input
+                      name="radiusMeters"
+                      type="number"
+                      min={25}
+                      max={1000}
+                      step={1}
+                      defaultValue={editingOutlet?.radiusMeters ?? 100}
+                      required
+                    />
+                  </label>
+                  <label>
+                    IANA timezone
+                    <input
+                      name="timezone"
+                      defaultValue={
+                        editingOutlet?.timezone ?? "Asia/Kuala_Lumpur"
+                      }
+                      required
+                      maxLength={100}
+                    />
+                  </label>
+                  {editingOutlet && (
+                    <div className="dialog-danger-zone dialog-wide-field">
+                      <label>
+                        Deactivation reason
+                        <input name="deactivationReason" maxLength={500} />
+                      </label>
+                      <button
+                        className="deactivate-outlet-button"
+                        type="button"
+                        onClick={(event) =>
+                          void handleDeactivateOutlet(
+                            editingOutlet.id,
+                            String(
+                              new FormData(event.currentTarget.form!).get(
+                                "deactivationReason",
+                              ) ?? "",
+                            ),
+                          )
+                        }
+                      >
+                        Deactivate outlet
+                      </button>
+                    </div>
+                  )}
+                  {outletMessage && (
+                    <p className="team-message dialog-wide-field" role="alert">
+                      {outletMessage}
+                    </p>
+                  )}
+                  <div className="dialog-actions dialog-wide-field">
+                    <button
+                      className="team-secondary-action"
+                      type="button"
+                      onClick={() => setIsOutletDialogOpen(false)}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="team-primary-action"
+                      type="submit"
+                      disabled={isCreatingOutlet}
+                    >
+                      {isCreatingOutlet
+                        ? "Saving…"
+                        : editingOutlet
+                          ? "Save changes"
+                          : "Add outlet"}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </ModalDialog>
+            {data.managers.length > 0 && (
+              <div className="manager-assignment-list">
+                <div className="section-heading">
+                  <div>
+                    <p className="eyebrow">MANAGER ACCESS</p>
+                    <h2>Outlet assignments</h2>
+                  </div>
+                  <span className="team-count">{data.managers.length}</span>
+                </div>
+                {data.managers.map((manager) => (
+                  <div className="manager-assignment-row" key={manager.id}>
+                    <div className="manager-assignment-person">
+                      <strong>{manager.name}</strong>
+                      <small>{manager.email}</small>
+                    </div>
+                    <details className="manager-assignment-details">
+                      <summary>Manage outlet access</summary>
+                      <div className="manager-outlet-options">
+                        {data.outlets.map((outlet) => {
+                          const key = `${manager.id}:${outlet.id}`;
+                          const assigned = data.managerAssignments.some(
+                            (assignment) =>
+                              assignment.userId === manager.id &&
+                              assignment.outletId === outlet.id &&
+                              assignment.isActive,
+                          );
+                          return (
+                            <label key={outlet.id}>
+                              <input
+                                type="checkbox"
+                                checked={assigned}
+                                disabled={assignmentKey === key}
+                                onChange={(event) =>
+                                  void handleManagerAssignment(
+                                    manager.id,
+                                    outlet.id,
+                                    event.target.checked,
+                                  )
+                                }
+                              />
+                              {outlet.name}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </details>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
+
+        <ModalDialog
+          open={isInviteDialogOpen}
+          onOpenChange={setIsInviteDialogOpen}
+          labelledBy="invite-team-title"
+        >
+          <div className="dialog-panel">
+            <header className="dialog-header">
+              <div>
+                <p className="eyebrow">NEW ACCESS</p>
+                <h2 id="invite-team-title">
+                  {data.isAdmin ? "Invite a manager" : "Invite a team member"}
+                </h2>
+              </div>
+              <button
+                className="dialog-close"
+                type="button"
+                aria-label="Close dialog"
+                onClick={() => setIsInviteDialogOpen(false)}
+              >
+                ×
+              </button>
+            </header>
+            {data.outlets.length ? (
+              <form
+                className="team-dialog-form invite-dialog-form"
+                onSubmit={handleInvite}
+              >
+                <label>
+                  Work email
+                  <input
+                    type="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    required
+                  />
+                </label>
+                <label>
+                  Outlet
+                  <select
+                    value={outletId}
+                    onChange={(event) => setOutletId(event.target.value)}
+                    required
+                  >
+                    {data.outlets.map((outlet) => (
+                      <option key={outlet.id} value={outlet.id}>
+                        {outlet.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  Role
+                  <select
+                    value={role}
+                    onChange={(event) =>
+                      setRole(event.target.value as typeof role)
+                    }
+                  >
+                    {data.isAdmin ? (
+                      <option value="manager">Manager</option>
+                    ) : (
+                      <>
+                        <option value="staff">Staff</option>
+                        <option value="supervisor">Supervisor</option>
+                      </>
+                    )}
+                  </select>
+                </label>
+                <div className="dialog-actions">
+                  <button
+                    className="team-secondary-action"
+                    type="button"
+                    onClick={() => setIsInviteDialogOpen(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="team-primary-action"
+                    type="submit"
+                    disabled={isInviting}
+                  >
+                    {isInviting ? "Creating…" : "Create invite link"}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <p className="auth-description">
+                No active outlets are available for your account.
+              </p>
+            )}
+            {inviteMessage && (
+              <p className="team-message" role="status" aria-live="polite">
+                {inviteMessage}
+              </p>
+            )}
+            {issuedInvite && (
+              <div className="issued-invite">
+                <input
+                  aria-label="Invitation link"
+                  readOnly
+                  value={issuedInvite}
+                  onFocus={(event) => event.currentTarget.select()}
+                />
+                <button
+                  className="copy-invite-button"
+                  type="button"
+                  onClick={copyInvite}
+                >
+                  Copy link
+                </button>
+                <p>
+                  This link works once and expires after seven days. Share it
+                  only with the invited person.
+                </p>
+              </div>
+            )}
+          </div>
+        </ModalDialog>
+
+        <section
+          className="team-list-section"
+          aria-labelledby="team-members-title"
+        >
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">ACTIVE ACCESS</p>
+              <h2 id="team-members-title">People</h2>
+            </div>
+            <span className="team-count">{visibleMembers.length}</span>
+          </div>
+          <div className="team-table-wrap">
+            <table className="team-table">
+              <thead>
+                <tr>
+                  <th>PERSON</th>
+                  <th>OUTLET</th>
+                  <th>ROLE</th>
+                  <th>ACCOUNT</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleMembers.map((member) => (
+                  <tr key={`${member.userId}-${member.outletId}`}>
+                    <td>
+                      <strong>{member.name}</strong>
+                      <small>{member.email}</small>
+                    </td>
+                    <td>{member.outletName}</td>
+                    <td className="team-role">{member.role}</td>
+                    <td>
+                      {member.canReset && (
+                        <button
+                          className="reset-link-button"
+                          type="button"
+                          disabled={Boolean(resettingUserId)}
+                          onClick={() =>
+                            void handleReset(member.userId, member.email)
+                          }
+                        >
+                          {resettingUserId === member.userId
+                            ? "Creating…"
+                            : "Create reset link"}
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {!visibleMembers.length && (
+                  <tr>
+                    <td colSpan={4} className="empty-table">
+                      No team members found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          {issuedResetLink && (
+            <div className="issued-invite">
+              <input
+                aria-label="Password reset link"
+                readOnly
+                value={issuedResetLink}
+                onFocus={(event) => event.currentTarget.select()}
+              />
+              <button
+                className="copy-invite-button"
+                type="button"
+                onClick={copyResetLink}
+              >
+                Copy link
+              </button>
+              <p>
+                Share this link directly with the team member. It works once and
+                expires after 30 minutes.
+              </p>
+            </div>
+          )}
+        </section>
+
+        <section
+          className="team-list-section"
+          aria-labelledby="pending-invites-title"
+        >
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">UNACCEPTED LINKS</p>
+              <h2 id="pending-invites-title">Pending invitations</h2>
+            </div>
+            <span className="team-count">{data.invitations.length}</span>
+          </div>
+          <div className="pending-invite-list">
+            {data.invitations.map((invitation) => (
+              <div className="pending-invite-row" key={invitation.id}>
+                <strong>{invitation.email}</strong>
+                <span>
+                  {invitation.role} · {invitation.outletName}
+                </span>
+                <small>Expires {formatExpiry(invitation.expiresAt)}</small>
+                <button
+                  className="reset-link-button"
+                  type="button"
+                  disabled={Boolean(revokingInvitationId)}
+                  onClick={() => void handleRevoke(invitation.id)}
+                >
+                  {revokingInvitationId === invitation.id
+                    ? "Revoking…"
+                    : "Revoke link"}
+                </button>
+              </div>
+            ))}
+            {!data.invitations.length && (
+              <p className="auth-description">No pending invitations.</p>
+            )}
+          </div>
+        </section>
+      </div>
+    </WorkspaceShell>
+  );
+}
