@@ -62,6 +62,11 @@ export type WorkspaceOutlet = {
   role?: string;
 };
 
+type InstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
+};
+
 type WorkspaceShellProps = {
   activeHref: string;
   pageTitle: string;
@@ -99,6 +104,9 @@ export function WorkspaceShell({
   const router = useRouter();
   const session = authClient.useSession();
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(
+    null,
+  );
   const userName = session.data?.user.name ?? "Account";
   const selectedOutlet = outlets.find(
     (outlet) => outlet.id === selectedOutletId,
@@ -125,6 +133,28 @@ export function WorkspaceShell({
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [isMobileNavOpen]);
+
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      void navigator.serviceWorker.register("/sw.js").catch(() => {});
+    }
+
+    function onBeforeInstallPrompt(event: Event) {
+      event.preventDefault();
+      setInstallPrompt(event as InstallPromptEvent);
+    }
+
+    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+    return () =>
+      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+  }, []);
+
+  async function installApp() {
+    if (!installPrompt) return;
+    await installPrompt.prompt();
+    await installPrompt.userChoice;
+    setInstallPrompt(null);
+  }
 
   return (
     <div className="workspace-shell">
@@ -258,6 +288,15 @@ export function WorkspaceShell({
           </div>
           <div className="top-actions">
             {dateLabel && <span className="today-label">{dateLabel}</span>}
+            {installPrompt && (
+              <button
+                className="install-app-button"
+                type="button"
+                onClick={() => void installApp()}
+              >
+                Install app
+              </button>
+            )}
             <span className="top-avatar">{initials(userName)}</span>
           </div>
         </header>

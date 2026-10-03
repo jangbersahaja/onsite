@@ -274,6 +274,19 @@ a {
 .top-actions {
   gap: 17px;
 }
+.install-app-button {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  padding: 6px 10px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.install-app-button:hover {
+  background: var(--paper);
+}
 .mobile-nav-toggle,
 .mobile-nav-backdrop {
   display: none;
