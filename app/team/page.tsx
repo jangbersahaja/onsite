@@ -87,6 +87,7 @@ function formatExpiry(value: string) {
 }
 
 const roleOrder = { manager: 0, supervisor: 1, staff: 2 } as const;
+type TeamView = "people" | "invitations" | "devices" | "locations";
 
 export default function TeamPage() {
   const [data, setData] = useState<TeamData | null>(null);
@@ -111,6 +112,8 @@ export default function TeamPage() {
   const [assignmentKey, setAssignmentKey] = useState("");
   const [deviceActionId, setDeviceActionId] = useState("");
   const [permissionUserId, setPermissionUserId] = useState("");
+  const [activeTeamView, setActiveTeamView] = useState<TeamView>("people");
+  const [showAllStaffDevices, setShowAllStaffDevices] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -510,6 +513,38 @@ export default function TeamPage() {
         .map((member) => [member.userId, member]),
     ).values(),
   );
+  const visibleStaffMembers = staffMembers
+    .filter(
+      (member) =>
+        showAllStaffDevices ||
+        data.staffDevices.some((device) => device.userId === member.userId),
+    )
+    .sort((left, right) => {
+      const leftPending = data.staffDevices.some(
+        (device) =>
+          device.userId === left.userId && device.status === "pending",
+      );
+      const rightPending = data.staffDevices.some(
+        (device) =>
+          device.userId === right.userId && device.status === "pending",
+      );
+      return (
+        Number(rightPending) - Number(leftPending) ||
+        left.name.localeCompare(right.name)
+      );
+    });
+  const pendingDeviceCount = data.staffDevices.filter(
+    (device) => device.status === "pending",
+  ).length;
+  const teamViews: { id: TeamView; label: string; count?: number }[] = [
+    { id: "people", label: "People" },
+    { id: "invitations", label: "Invitations", count: data.invitations.length },
+    { id: "devices", label: "Devices", count: pendingDeviceCount },
+    { id: "locations", label: "Locations" },
+  ];
+  const visibleTeamViews = teamViews.filter(
+    (view) => view.id !== "locations" || data.isAdmin,
+  );
   const editingOutlet = data.outlets.find(
     (outlet) => outlet.id === editingOutletId,
   );
@@ -539,7 +574,22 @@ export default function TeamPage() {
           </p>
         )}
 
-        {data.isAdmin && (
+        <nav className="team-view-nav" aria-label="Team sections">
+          {visibleTeamViews.map((view) => (
+            <button
+              className={`team-view-tab${activeTeamView === view.id ? " is-active" : ""}`}
+              type="button"
+              key={view.id}
+              aria-current={activeTeamView === view.id ? "page" : undefined}
+              onClick={() => setActiveTeamView(view.id)}
+            >
+              {view.label}
+              {view.count ? <span>{view.count}</span> : null}
+            </button>
+          ))}
+        </nav>
+
+        {activeTeamView === "locations" && data.isAdmin && (
           <section
             className="team-list-section"
             aria-labelledby="outlets-title"
@@ -947,323 +997,355 @@ export default function TeamPage() {
           </div>
         </ModalDialog>
 
-        <section
-          className="team-list-section"
-          aria-labelledby="team-members-title"
-        >
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">TEAM ACCESS</p>
-              <h2 id="team-members-title">People</h2>
-              <p className="team-section-description">
-                Manage people and their outlet access.
-              </p>
+        {activeTeamView === "people" && (
+          <section
+            className="team-list-section"
+            aria-labelledby="team-members-title"
+          >
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">TEAM ACCESS</p>
+                <h2 id="team-members-title">People</h2>
+                <p className="team-section-description">
+                  Manage people and their outlet access.
+                </p>
+              </div>
+              <div className="team-heading-actions">
+                <span className="team-count">{visiblePeople.length}</span>
+                <button
+                  className="team-primary-action"
+                  type="button"
+                  disabled={!data.outlets.length && !data.isSuperAdmin}
+                  onClick={() => {
+                    setInviteMessage("");
+                    setIsInviteDialogOpen(true);
+                  }}
+                >
+                  Add person
+                </button>
+              </div>
             </div>
-            <div className="team-heading-actions">
-              <span className="team-count">{visiblePeople.length}</span>
-              <button
-                className="team-primary-action"
-                type="button"
-                disabled={!data.outlets.length && !data.isSuperAdmin}
-                onClick={() => {
-                  setInviteMessage("");
-                  setIsInviteDialogOpen(true);
-                }}
-              >
-                Add person
-              </button>
-            </div>
-          </div>
-          <div className="team-table-wrap">
-            <table className="team-table">
-              <thead>
-                <tr>
-                  <th>PERSON</th>
-                  <th>OUTLET ACCESS</th>
-                  <th>APP ACCESS</th>
-                  <th>ACCOUNT</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visiblePeople.map((person) => (
-                  <tr key={person.userId}>
-                    <td>
-                      <strong>{person.name}</strong>
-                      <small>{person.email}</small>
-                    </td>
-                    <td className="team-assignment-cell">
-                      <div className="team-access-list">
-                        {person.assignments.map((assignment) => (
-                          <div
-                            className="team-access-item"
-                            key={assignment.outletId}
-                          >
-                            <span>{assignment.outletName}</span>
-                            <span className="team-role">{assignment.role}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </td>
-                    <td>
-                      <div className="team-permission-options">
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={person.canAccessClock}
-                            disabled={
-                              !person.canManageAccess ||
-                              permissionUserId === person.userId ||
-                              (person.canAccessClock &&
-                                !person.canAccessBackoffice)
-                            }
-                            onChange={(event) =>
-                              void handleAccessChange(
-                                person,
-                                "canAccessClock",
-                                event.target.checked,
-                              )
-                            }
-                          />
-                          Clock
-                        </label>
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={person.canAccessBackoffice}
-                            disabled={
-                              !person.canManageAccess ||
-                              permissionUserId === person.userId ||
-                              (person.canAccessBackoffice &&
-                                !person.canAccessClock)
-                            }
-                            onChange={(event) =>
-                              void handleAccessChange(
-                                person,
-                                "canAccessBackoffice",
-                                event.target.checked,
-                              )
-                            }
-                          />
-                          Backoffice
-                        </label>
-                      </div>
-                    </td>
-                    <td>
-                      {person.canReset && (
-                        <button
-                          className="reset-link-button"
-                          type="button"
-                          disabled={Boolean(resettingUserId)}
-                          onClick={() =>
-                            void handleReset(person.userId, person.email)
-                          }
-                        >
-                          {resettingUserId === person.userId
-                            ? "Creating…"
-                            : "Create reset link"}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {!visiblePeople.length && (
+            <div className="team-table-wrap">
+              <table className="team-table">
+                <thead>
                   <tr>
-                    <td colSpan={4} className="empty-table">
-                      No team members found.
-                    </td>
+                    <th>PERSON</th>
+                    <th>OUTLET ACCESS</th>
+                    <th>APP ACCESS</th>
+                    <th>ACTIONS</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          {issuedResetLink && (
-            <div className="issued-invite">
-              <input
-                aria-label="Password reset link"
-                readOnly
-                value={issuedResetLink}
-                onFocus={(event) => event.currentTarget.select()}
-              />
-              <button
-                className="copy-invite-button"
-                type="button"
-                onClick={copyResetLink}
-              >
-                Copy link
-              </button>
-              <p>
-                Share this link directly with the team member. It works once and
-                expires after 30 minutes.
-              </p>
-            </div>
-          )}
-        </section>
-
-        <section
-          className="team-list-section"
-          aria-labelledby="staff-devices-title"
-        >
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">CLOCK-IN ACCESS</p>
-              <h2 id="staff-devices-title">Staff devices</h2>
-            </div>
-            <span className="team-count">{staffMembers.length}</span>
-          </div>
-          <div className="team-table-wrap">
-            <table className="team-table">
-              <thead>
-                <tr>
-                  <th>PERSON</th>
-                  <th>DEVICE STATUS</th>
-                  <th>REQUESTED</th>
-                  <th>ACTIONS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {staffMembers.map((member) => {
-                  const devices = data.staffDevices.filter(
-                    (device) => device.userId === member.userId,
-                  );
-                  const pending = devices.find(
-                    (device) => device.status === "pending",
-                  );
-                  const active = devices.find(
-                    (device) => device.status === "active",
-                  );
-                  return (
-                    <tr key={member.userId}>
+                </thead>
+                <tbody>
+                  {visiblePeople.map((person) => (
+                    <tr key={person.userId}>
                       <td>
-                        <strong>{member.name}</strong>
-                        <small>{member.email}</small>
+                        <strong>{person.name}</strong>
+                        <small>{person.email}</small>
+                      </td>
+                      <td className="team-assignment-cell">
+                        <div className="team-access-list">
+                          {person.assignments.map((assignment) => (
+                            <div
+                              className="team-access-item"
+                              key={assignment.outletId}
+                            >
+                              <span>{assignment.outletName}</span>
+                              <span className="team-role">
+                                {assignment.role}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
                       </td>
                       <td>
-                        {pending
-                          ? active
-                            ? "Replacement awaiting approval"
-                            : "Awaiting approval"
-                          : active
-                            ? "Approved"
-                            : "Not enrolled"}
-                      </td>
-                      <td>
-                        {pending
-                          ? formatExpiry(pending.createdAt)
-                          : active?.approvedAt
-                            ? formatExpiry(active.approvedAt)
-                            : "—"}
-                      </td>
-                      <td>
-                        {pending && (
-                          <>
-                            <button
-                              className="reset-link-button"
-                              type="button"
-                              disabled={Boolean(deviceActionId)}
-                              onClick={() =>
-                                void handleStaffDeviceAction(
-                                  pending.id,
-                                  "approve",
+                        <div className="team-permission-options">
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={person.canAccessClock}
+                              disabled={
+                                !person.canManageAccess ||
+                                permissionUserId === person.userId ||
+                                (person.canAccessClock &&
+                                  !person.canAccessBackoffice)
+                              }
+                              onChange={(event) =>
+                                void handleAccessChange(
+                                  person,
+                                  "canAccessClock",
+                                  event.target.checked,
                                 )
                               }
-                            >
-                              {deviceActionId === pending.id
-                                ? "Saving…"
-                                : "Approve"}
-                            </button>{" "}
-                            <button
-                              className="reset-link-button"
-                              type="button"
-                              disabled={Boolean(deviceActionId)}
-                              onClick={() =>
-                                void handleStaffDeviceAction(
-                                  pending.id,
-                                  "reject",
+                            />
+                            Clock
+                          </label>
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={person.canAccessBackoffice}
+                              disabled={
+                                !person.canManageAccess ||
+                                permissionUserId === person.userId ||
+                                (person.canAccessBackoffice &&
+                                  !person.canAccessClock)
+                              }
+                              onChange={(event) =>
+                                void handleAccessChange(
+                                  person,
+                                  "canAccessBackoffice",
+                                  event.target.checked,
                                 )
                               }
-                            >
-                              Reject
-                            </button>
-                          </>
-                        )}
-                        {!pending && active && (
-                          <button
-                            className="reset-link-button"
-                            type="button"
-                            disabled={Boolean(deviceActionId)}
-                            onClick={() =>
-                              void handleStaffDeviceAction(active.id, "revoke")
-                            }
-                          >
-                            {deviceActionId === active.id
-                              ? "Saving…"
-                              : "Revoke"}
-                          </button>
+                            />
+                            Backoffice
+                          </label>
+                        </div>
+                      </td>
+                      <td>
+                        {person.canReset && (
+                          <details className="team-person-actions">
+                            <summary>Actions</summary>
+                            <div>
+                              <button
+                                className="reset-link-button"
+                                type="button"
+                                disabled={Boolean(resettingUserId)}
+                                onClick={() =>
+                                  void handleReset(person.userId, person.email)
+                                }
+                              >
+                                {resettingUserId === person.userId
+                                  ? "Creating…"
+                                  : "Create reset link"}
+                              </button>
+                            </div>
+                          </details>
                         )}
                       </td>
                     </tr>
-                  );
-                })}
-                {!staffMembers.length && (
-                  <tr>
-                    <td colSpan={4} className="empty-table">
-                      No staff members found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          {data.staffDevices.some((device) => device.status === "pending") && (
-            <p className="auth-description">
-              Approving a replacement immediately revokes the previous device.
-            </p>
-          )}
-        </section>
-
-        <section
-          className="team-list-section"
-          aria-labelledby="pending-invites-title"
-        >
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">UNACCEPTED LINKS</p>
-              <h2 id="pending-invites-title">Pending invitations</h2>
+                  ))}
+                  {!visiblePeople.length && (
+                    <tr>
+                      <td colSpan={4} className="empty-table">
+                        No team members found.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
-            <span className="team-count">{data.invitations.length}</span>
-          </div>
-          <div className="pending-invite-list">
-            {data.invitations.map((invitation) => (
-              <div className="pending-invite-row" key={invitation.id}>
-                <strong>{invitation.email}</strong>
-                <span>
-                  {invitation.accountType} ·{" "}
-                  {[
-                    invitation.canAccessClock && "Clock",
-                    invitation.canAccessBackoffice && "Backoffice",
-                  ]
-                    .filter(Boolean)
-                    .join(" + ")}{" "}
-                  · {invitation.outletNames.join(", ") || "No outlets yet"}
-                </span>
-                <small>Expires {formatExpiry(invitation.expiresAt)}</small>
+            {issuedResetLink && (
+              <div className="issued-invite">
+                <input
+                  aria-label="Password reset link"
+                  readOnly
+                  value={issuedResetLink}
+                  onFocus={(event) => event.currentTarget.select()}
+                />
                 <button
-                  className="reset-link-button"
+                  className="copy-invite-button"
                   type="button"
-                  disabled={Boolean(revokingInvitationId)}
-                  onClick={() => void handleRevoke(invitation.id)}
+                  onClick={copyResetLink}
                 >
-                  {revokingInvitationId === invitation.id
-                    ? "Revoking…"
-                    : "Revoke link"}
+                  Copy link
                 </button>
+                <p>
+                  Share this link directly with the team member. It works once
+                  and expires after 30 minutes.
+                </p>
               </div>
-            ))}
-            {!data.invitations.length && (
-              <p className="auth-description">No pending invitations.</p>
             )}
-          </div>
-        </section>
+          </section>
+        )}
+
+        {activeTeamView === "devices" && (
+          <section
+            className="team-list-section"
+            aria-labelledby="staff-devices-title"
+          >
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">CLOCK-IN ACCESS</p>
+                <h2 id="staff-devices-title">Staff devices</h2>
+              </div>
+              <div className="team-heading-actions">
+                <label className="device-all-staff-toggle">
+                  <input
+                    type="checkbox"
+                    checked={showAllStaffDevices}
+                    onChange={(event) =>
+                      setShowAllStaffDevices(event.target.checked)
+                    }
+                  />
+                  Show all staff
+                </label>
+                <span className="team-count">{visibleStaffMembers.length}</span>
+              </div>
+            </div>
+            <div className="team-table-wrap">
+              <table className="team-table">
+                <thead>
+                  <tr>
+                    <th>PERSON</th>
+                    <th>DEVICE STATUS</th>
+                    <th>REQUESTED</th>
+                    <th>ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleStaffMembers.map((member) => {
+                    const devices = data.staffDevices.filter(
+                      (device) => device.userId === member.userId,
+                    );
+                    const pending = devices.find(
+                      (device) => device.status === "pending",
+                    );
+                    const active = devices.find(
+                      (device) => device.status === "active",
+                    );
+                    return (
+                      <tr key={member.userId}>
+                        <td>
+                          <strong>{member.name}</strong>
+                          <small>{member.email}</small>
+                        </td>
+                        <td>
+                          {pending
+                            ? active
+                              ? "Replacement awaiting approval"
+                              : "Awaiting approval"
+                            : active
+                              ? "Approved"
+                              : "Not enrolled"}
+                        </td>
+                        <td>
+                          {pending
+                            ? formatExpiry(pending.createdAt)
+                            : active?.approvedAt
+                              ? formatExpiry(active.approvedAt)
+                              : "—"}
+                        </td>
+                        <td>
+                          {pending && (
+                            <>
+                              <button
+                                className="reset-link-button"
+                                type="button"
+                                disabled={Boolean(deviceActionId)}
+                                onClick={() =>
+                                  void handleStaffDeviceAction(
+                                    pending.id,
+                                    "approve",
+                                  )
+                                }
+                              >
+                                {deviceActionId === pending.id
+                                  ? "Saving…"
+                                  : "Approve"}
+                              </button>{" "}
+                              <button
+                                className="reset-link-button"
+                                type="button"
+                                disabled={Boolean(deviceActionId)}
+                                onClick={() =>
+                                  void handleStaffDeviceAction(
+                                    pending.id,
+                                    "reject",
+                                  )
+                                }
+                              >
+                                Reject
+                              </button>
+                            </>
+                          )}
+                          {!pending && active && (
+                            <button
+                              className="reset-link-button"
+                              type="button"
+                              disabled={Boolean(deviceActionId)}
+                              onClick={() =>
+                                void handleStaffDeviceAction(
+                                  active.id,
+                                  "revoke",
+                                )
+                              }
+                            >
+                              {deviceActionId === active.id
+                                ? "Saving…"
+                                : "Revoke"}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {!visibleStaffMembers.length && (
+                    <tr>
+                      <td colSpan={4} className="empty-table">
+                        {showAllStaffDevices
+                          ? "No staff members found."
+                          : "No device requests or enrolled devices."}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {data.staffDevices.some(
+              (device) => device.status === "pending",
+            ) && (
+              <p className="auth-description">
+                Approving a replacement immediately revokes the previous device.
+              </p>
+            )}
+          </section>
+        )}
+
+        {activeTeamView === "invitations" && (
+          <section
+            className="team-list-section"
+            aria-labelledby="pending-invites-title"
+          >
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">UNACCEPTED LINKS</p>
+                <h2 id="pending-invites-title">Pending invitations</h2>
+              </div>
+              <span className="team-count">{data.invitations.length}</span>
+            </div>
+            <div className="pending-invite-list">
+              {data.invitations.map((invitation) => (
+                <div className="pending-invite-row" key={invitation.id}>
+                  <strong>{invitation.email}</strong>
+                  <span>
+                    {invitation.accountType} ·{" "}
+                    {[
+                      invitation.canAccessClock && "Clock",
+                      invitation.canAccessBackoffice && "Backoffice",
+                    ]
+                      .filter(Boolean)
+                      .join(" + ")}{" "}
+                    · {invitation.outletNames.join(", ") || "No outlets yet"}
+                  </span>
+                  <small>Expires {formatExpiry(invitation.expiresAt)}</small>
+                  <button
+                    className="reset-link-button"
+                    type="button"
+                    disabled={Boolean(revokingInvitationId)}
+                    onClick={() => void handleRevoke(invitation.id)}
+                  >
+                    {revokingInvitationId === invitation.id
+                      ? "Revoking…"
+                      : "Revoke link"}
+                  </button>
+                </div>
+              ))}
+              {!data.invitations.length && (
+                <p className="auth-description">No pending invitations.</p>
+              )}
+            </div>
+          </section>
+        )}
       </div>
     </WorkspaceShell>
   );
