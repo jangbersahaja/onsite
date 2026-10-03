@@ -42,6 +42,19 @@ type CorrectionRequest = {
   createdAt: string;
 };
 
+type StaffDeviceStatus = {
+  required: boolean;
+  status:
+    | "not_required"
+    | "not_enrolled"
+    | "pending"
+    | "active"
+    | "replacement_pending";
+  hasActiveDevice: boolean;
+  currentBrowserApproved: boolean;
+  currentBrowserHasPendingRequest: boolean;
+};
+
 type ClockPageData = {
   user: {
     id: string;
@@ -80,6 +93,14 @@ async function loadClockData(history?: { from: string; to: string }) {
     ...clockBody,
     correctionRequests: correctionBody.requests,
   } as ClockPageData;
+}
+
+async function loadStaffDeviceStatus() {
+  const response = await fetch("/api/staff-devices", { cache: "no-store" });
+  const body = await response.json();
+  if (!response.ok)
+    throw new Error(body.error ?? "Could not load device status.");
+  return body as StaffDeviceStatus;
 }
 
 function formatDuration(start: string, end: Date | string) {
@@ -148,6 +169,9 @@ export default function Home() {
   const authSession = authClient.useSession();
   const [isConfigured, setIsConfigured] = useState<boolean | null>(null);
   const [clockData, setClockData] = useState<ClockPageData | null>(null);
+  const [staffDeviceStatus, setStaffDeviceStatus] =
+    useState<StaffDeviceStatus | null>(null);
+  const [isRequestingStaffDevice, setIsRequestingStaffDevice] = useState(false);
   const [selectedOutletId, setSelectedOutletId] = useState("");
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [historyFrom, setHistoryFrom] = useState("");
@@ -221,6 +245,21 @@ export default function Home() {
   }, [authSession.data?.user.id, isConfigured]);
 
   useEffect(() => {
+    if (!authSession.data?.user.id || isConfigured !== true) return;
+    let active = true;
+    loadStaffDeviceStatus()
+      .then((status) => {
+        if (active) setStaffDeviceStatus(status);
+      })
+      .catch(() => {
+        if (active) setStaffDeviceStatus(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, [authSession.data?.user.id, isConfigured]);
+
+  useEffect(() => {
     const updateTime = () => setCurrentTime(new Date());
     updateTime();
     const timer = window.setInterval(updateTime, 30_000);
@@ -242,6 +281,32 @@ export default function Home() {
         Loading your timekeeping data…
       </main>
     );
+  }
+
+  async function handleRequestStaffDevice() {
+    if (isRequestingStaffDevice) return;
+    setIsRequestingStaffDevice(true);
+    setActionMessage("");
+    try {
+      const response = await fetch("/api/staff-devices", { method: "POST" });
+      const body = await response.json();
+      if (!response.ok)
+        throw new Error(body.error ?? "Could not request this device.");
+      setStaffDeviceStatus(await loadStaffDeviceStatus());
+      setActionMessage(
+        body.status === "active"
+          ? "This browser is already approved for your account."
+          : "Device request sent. A manager must approve this browser before it can clock.",
+      );
+    } catch (error) {
+      setActionMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not request this device.",
+      );
+    } finally {
+      setIsRequestingStaffDevice(false);
+    }
   }
 
   function handleClockAction() {
@@ -523,6 +588,49 @@ export default function Home() {
                     ? "Clock out"
                     : "Clock in"}
               </button>
+              {selectedOutlet?.role === "staff" &&
+                staffDeviceStatus?.required && (
+                  <div>
+                    {(staffDeviceStatus.status === "not_enrolled" ||
+                      (staffDeviceStatus.status === "active" &&
+                        !staffDeviceStatus.currentBrowserApproved)) && (
+                      <button
+                        className="reset-link-button"
+                        type="button"
+                        disabled={isRequestingStaffDevice}
+                        onClick={() => void handleRequestStaffDevice()}
+                      >
+                        {isRequestingStaffDevice
+                          ? "Requesting…"
+                          : staffDeviceStatus.status === "active"
+                            ? "Request this browser"
+                            : "Enroll this browser"}
+                      </button>
+                    )}
+                    {staffDeviceStatus.status === "pending" && (
+                      <p className="clock-hint" role="status">
+                        {staffDeviceStatus.currentBrowserHasPendingRequest
+                          ? "This browser is awaiting manager approval."
+                          : "A device request is already awaiting approval. Ask your manager if you need to replace it."}
+                      </p>
+                    )}
+                    {staffDeviceStatus.status === "replacement_pending" && (
+                      <p className="clock-hint" role="status">
+                        {staffDeviceStatus.currentBrowserApproved
+                          ? "This browser remains approved while the replacement request is reviewed."
+                          : staffDeviceStatus.currentBrowserHasPendingRequest
+                            ? "This replacement browser is awaiting manager approval."
+                            : "A replacement request is pending from another browser; the currently approved browser can still clock."}
+                      </p>
+                    )}
+                    {staffDeviceStatus.status === "active" &&
+                      staffDeviceStatus.currentBrowserApproved && (
+                        <p className="clock-hint" role="status">
+                          This browser is approved for staff clock actions.
+                        </p>
+                      )}
+                  </div>
+                )}
               <p className="clock-hint" aria-live="polite">
                 {actionMessage ||
                   "Every clock action is checked against your assigned outlet."}

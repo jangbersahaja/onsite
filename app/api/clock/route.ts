@@ -2,6 +2,7 @@ import {
   auditEvents,
   outletMemberships,
   outlets,
+  staffDeviceEnrollments,
   workSessions,
 } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
@@ -9,7 +10,13 @@ import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { verifyGeofence } from "@/lib/geofence";
 import { parseDateRange } from "@/lib/outlet-time";
+import {
+  getStaffDeviceCookieName,
+  isApprovedStaffDevice,
+  isStaffDeviceRequired,
+} from "@/lib/staff-device";
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { cookies } from "next/headers";
 import { z } from "zod";
 
 const clockActionSchema = z
@@ -179,6 +186,42 @@ export async function POST(request: Request) {
         { error: "You are not assigned to this outlet." },
         { status: 403 },
       );
+
+    if (isStaffDeviceRequired(assignment.role)) {
+      const cookieStore = await cookies();
+      const deviceToken = cookieStore.get(
+        getStaffDeviceCookieName(session.user.id),
+      )?.value;
+      const [activeDevice] = await db
+        .select({
+          status: staffDeviceEnrollments.status,
+          tokenHash: staffDeviceEnrollments.tokenHash,
+        })
+        .from(staffDeviceEnrollments)
+        .where(
+          and(
+            eq(staffDeviceEnrollments.userId, session.user.id),
+            eq(staffDeviceEnrollments.status, "active"),
+          ),
+        )
+        .limit(1);
+
+      if (
+        !isApprovedStaffDevice(
+          deviceToken,
+          activeDevice?.status,
+          activeDevice?.tokenHash,
+        )
+      ) {
+        return Response.json(
+          {
+            error: "This browser is not approved for staff clock actions.",
+            code: "staff_device_not_approved",
+          },
+          { status: 403 },
+        );
+      }
+    }
 
     const [outlet] = await db
       .select({

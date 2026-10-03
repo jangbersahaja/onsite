@@ -1,4 +1,10 @@
-import { invitations, outletMemberships, outlets, user } from "@/db/schema";
+import {
+  invitations,
+  outletMemberships,
+  outlets,
+  staffDeviceEnrollments,
+  user,
+} from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
@@ -36,6 +42,7 @@ export async function GET(request: Request) {
         invitations: [],
         managers: [],
         managerAssignments: [],
+        staffDevices: [],
       });
     }
 
@@ -121,6 +128,31 @@ export async function GET(request: Request) {
           : Promise.resolve([]),
       ]);
 
+    const staffUserIds = Array.from(
+      new Set(
+        members
+          .filter((member) => member.role === "staff")
+          .map((member) => member.userId),
+      ),
+    );
+    const staffDevices = staffUserIds.length
+      ? await db
+          .select({
+            id: staffDeviceEnrollments.id,
+            userId: staffDeviceEnrollments.userId,
+            status: staffDeviceEnrollments.status,
+            createdAt: staffDeviceEnrollments.createdAt,
+            approvedAt: staffDeviceEnrollments.approvedAt,
+          })
+          .from(staffDeviceEnrollments)
+          .where(
+            and(
+              inArray(staffDeviceEnrollments.userId, staffUserIds),
+              inArray(staffDeviceEnrollments.status, ["pending", "active"]),
+            ),
+          )
+      : [];
+
     return Response.json({
       isAdmin: access.isAdmin,
       outlets: access.outlets,
@@ -133,6 +165,7 @@ export async function GET(request: Request) {
       invitations: pendingInvitations,
       managers,
       managerAssignments,
+      staffDevices,
     });
   } catch {
     return Response.json(

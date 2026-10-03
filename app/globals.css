@@ -1652,6 +1652,26 @@ h2 {
 .team-role {
   text-transform: capitalize;
 }
+.team-table .team-assignment-cell {
+  height: auto;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+.team-access-list {
+  display: grid;
+  gap: 5px;
+  min-width: 190px;
+}
+.team-access-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.team-access-item .team-role {
+  color: var(--muted);
+  font-size: 10px;
+}
 .reset-link-button:disabled {
   cursor: wait;
   opacity: 0.6;

@@ -15,6 +15,14 @@ type TeamMember = {
   canReset: boolean;
 };
 
+type TeamPerson = {
+  userId: string;
+  name: string;
+  email: string;
+  assignments: TeamMember[];
+  canReset: boolean;
+};
+
 type TeamInvitation = {
   id: string;
   email: string;
@@ -34,6 +42,14 @@ type TeamOutlet = {
   timezone: string;
 };
 
+type StaffDevice = {
+  id: string;
+  userId: string;
+  status: "pending" | "active";
+  createdAt: string;
+  approvedAt: string | null;
+};
+
 type TeamData = {
   isAdmin: boolean;
   outlets: TeamOutlet[];
@@ -41,6 +57,7 @@ type TeamData = {
   invitations: TeamInvitation[];
   managers: { id: string; name: string; email: string }[];
   managerAssignments: { userId: string; outletId: string; isActive: boolean }[];
+  staffDevices: StaffDevice[];
 };
 
 async function loadTeamData() {
@@ -76,6 +93,7 @@ export default function TeamPage() {
   const [revokingInvitationId, setRevokingInvitationId] = useState("");
   const [editingOutletId, setEditingOutletId] = useState("");
   const [assignmentKey, setAssignmentKey] = useState("");
+  const [deviceActionId, setDeviceActionId] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -296,6 +314,41 @@ export default function TeamPage() {
     }
   }
 
+  async function handleStaffDeviceAction(
+    deviceId: string,
+    action: "approve" | "reject" | "revoke",
+  ) {
+    if (deviceActionId) return;
+    setDeviceActionId(deviceId);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/staff-devices/${deviceId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const body = await response.json();
+      if (!response.ok)
+        throw new Error(body.error ?? "Could not update trusted device.");
+      setData(await loadTeamData());
+      setMessage(
+        action === "approve"
+          ? "Staff device approved. Any previous device is now revoked."
+          : action === "reject"
+            ? "Device request rejected."
+            : "Staff device revoked.",
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not update trusted device.",
+      );
+    } finally {
+      setDeviceActionId("");
+    }
+  }
+
   async function handleRevoke(invitationId: string) {
     if (revokingInvitationId) return;
     setRevokingInvitationId(invitationId);
@@ -361,7 +414,30 @@ export default function TeamPage() {
     );
   }
 
-  const visibleMembers = data.members;
+  const peopleById = new Map<string, TeamPerson>();
+  for (const member of data.members) {
+    const person = peopleById.get(member.userId);
+    if (person) {
+      person.assignments.push(member);
+      person.canReset ||= member.canReset;
+    } else {
+      peopleById.set(member.userId, {
+        userId: member.userId,
+        name: member.name,
+        email: member.email,
+        assignments: [member],
+        canReset: member.canReset,
+      });
+    }
+  }
+  const visiblePeople = Array.from(peopleById.values());
+  const staffMembers = Array.from(
+    new Map(
+      data.members
+        .filter((member) => member.role === "staff")
+        .map((member) => [member.userId, member]),
+    ).values(),
+  );
   const editingOutlet = data.outlets.find(
     (outlet) => outlet.id === editingOutletId,
   );
@@ -782,38 +858,48 @@ export default function TeamPage() {
               <p className="eyebrow">ACTIVE ACCESS</p>
               <h2 id="team-members-title">People</h2>
             </div>
-            <span className="team-count">{visibleMembers.length}</span>
+            <span className="team-count">{visiblePeople.length}</span>
           </div>
           <div className="team-table-wrap">
             <table className="team-table">
               <thead>
                 <tr>
                   <th>PERSON</th>
-                  <th>OUTLET</th>
-                  <th>ROLE</th>
+                  <th>OUTLET ACCESS</th>
                   <th>ACCOUNT</th>
                 </tr>
               </thead>
               <tbody>
-                {visibleMembers.map((member) => (
-                  <tr key={`${member.userId}-${member.outletId}`}>
+                {visiblePeople.map((person) => (
+                  <tr key={person.userId}>
                     <td>
-                      <strong>{member.name}</strong>
-                      <small>{member.email}</small>
+                      <strong>{person.name}</strong>
+                      <small>{person.email}</small>
                     </td>
-                    <td>{member.outletName}</td>
-                    <td className="team-role">{member.role}</td>
+                    <td className="team-assignment-cell">
+                      <div className="team-access-list">
+                        {person.assignments.map((assignment) => (
+                          <div
+                            className="team-access-item"
+                            key={assignment.outletId}
+                          >
+                            <span>{assignment.outletName}</span>
+                            <span className="team-role">{assignment.role}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </td>
                     <td>
-                      {member.canReset && (
+                      {person.canReset && (
                         <button
                           className="reset-link-button"
                           type="button"
                           disabled={Boolean(resettingUserId)}
                           onClick={() =>
-                            void handleReset(member.userId, member.email)
+                            void handleReset(person.userId, person.email)
                           }
                         >
-                          {resettingUserId === member.userId
+                          {resettingUserId === person.userId
                             ? "Creating…"
                             : "Create reset link"}
                         </button>
@@ -821,9 +907,9 @@ export default function TeamPage() {
                     </td>
                   </tr>
                 ))}
-                {!visibleMembers.length && (
+                {!visiblePeople.length && (
                   <tr>
-                    <td colSpan={4} className="empty-table">
+                    <td colSpan={3} className="empty-table">
                       No team members found.
                     </td>
                   </tr>
@@ -851,6 +937,128 @@ export default function TeamPage() {
                 expires after 30 minutes.
               </p>
             </div>
+          )}
+        </section>
+
+        <section
+          className="team-list-section"
+          aria-labelledby="staff-devices-title"
+        >
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">CLOCK-IN ACCESS</p>
+              <h2 id="staff-devices-title">Staff devices</h2>
+            </div>
+            <span className="team-count">{staffMembers.length}</span>
+          </div>
+          <div className="team-table-wrap">
+            <table className="team-table">
+              <thead>
+                <tr>
+                  <th>PERSON</th>
+                  <th>DEVICE STATUS</th>
+                  <th>REQUESTED</th>
+                  <th>ACTIONS</th>
+                </tr>
+              </thead>
+              <tbody>
+                {staffMembers.map((member) => {
+                  const devices = data.staffDevices.filter(
+                    (device) => device.userId === member.userId,
+                  );
+                  const pending = devices.find(
+                    (device) => device.status === "pending",
+                  );
+                  const active = devices.find(
+                    (device) => device.status === "active",
+                  );
+                  return (
+                    <tr key={member.userId}>
+                      <td>
+                        <strong>{member.name}</strong>
+                        <small>{member.email}</small>
+                      </td>
+                      <td>
+                        {pending
+                          ? active
+                            ? "Replacement awaiting approval"
+                            : "Awaiting approval"
+                          : active
+                            ? "Approved"
+                            : "Not enrolled"}
+                      </td>
+                      <td>
+                        {pending
+                          ? formatExpiry(pending.createdAt)
+                          : active?.approvedAt
+                            ? formatExpiry(active.approvedAt)
+                            : "—"}
+                      </td>
+                      <td>
+                        {pending && (
+                          <>
+                            <button
+                              className="reset-link-button"
+                              type="button"
+                              disabled={Boolean(deviceActionId)}
+                              onClick={() =>
+                                void handleStaffDeviceAction(
+                                  pending.id,
+                                  "approve",
+                                )
+                              }
+                            >
+                              {deviceActionId === pending.id
+                                ? "Saving…"
+                                : "Approve"}
+                            </button>{" "}
+                            <button
+                              className="reset-link-button"
+                              type="button"
+                              disabled={Boolean(deviceActionId)}
+                              onClick={() =>
+                                void handleStaffDeviceAction(
+                                  pending.id,
+                                  "reject",
+                                )
+                              }
+                            >
+                              Reject
+                            </button>
+                          </>
+                        )}
+                        {!pending && active && (
+                          <button
+                            className="reset-link-button"
+                            type="button"
+                            disabled={Boolean(deviceActionId)}
+                            onClick={() =>
+                              void handleStaffDeviceAction(active.id, "revoke")
+                            }
+                          >
+                            {deviceActionId === active.id
+                              ? "Saving…"
+                              : "Revoke"}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {!staffMembers.length && (
+                  <tr>
+                    <td colSpan={4} className="empty-table">
+                      No staff members found.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          {data.staffDevices.some((device) => device.status === "pending") && (
+            <p className="auth-description">
+              Approving a replacement immediately revokes the previous device.
+            </p>
           )}
         </section>
 

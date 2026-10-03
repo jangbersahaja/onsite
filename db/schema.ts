@@ -29,6 +29,11 @@ export const correctionStatusEnum = pgEnum("correction_status", [
   "rejected",
 ]);
 export const punchSourceEnum = pgEnum("punch_source", ["gps", "manual"]);
+export const staffDeviceStatusEnum = pgEnum("staff_device_status", [
+  "pending",
+  "active",
+  "revoked",
+]);
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -111,6 +116,38 @@ export const verification = pgTable(
       .defaultNow(),
   },
   (table) => [index("verification_identifier_idx").on(table.identifier)],
+);
+
+export const staffDeviceEnrollments = pgTable(
+  "staff_device_enrollments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    status: staffDeviceStatusEnum("status").notNull().default("pending"),
+    approvedBy: text("approved_by").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("staff_device_one_pending_per_user_uq")
+      .on(table.userId)
+      .where(sql`${table.status} = 'pending'`),
+    uniqueIndex("staff_device_one_active_per_user_uq")
+      .on(table.userId)
+      .where(sql`${table.status} = 'active'`),
+    index("staff_device_user_idx").on(table.userId),
+  ],
 );
 
 export const outlets = pgTable("outlets", {
