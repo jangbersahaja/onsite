@@ -2107,6 +2107,12 @@ h2 {
   align-items: flex-end;
   margin-bottom: 24px;
 }
+.team-section-description {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
 .team-heading-actions {
   display: flex;
   align-items: center;
@@ -2155,6 +2161,11 @@ h2 {
   border-radius: 4px;
   background: #fff;
   padding: 13px;
+}
+.team-empty-outlets {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
 }
 .workspace-dialog {
   position: fixed;

@@ -472,20 +472,9 @@ export default function TeamPage() {
             </p>
             <h1>Team</h1>
             <p className="subheading">
-              Invite people to the right outlet and role.
+              Manage outlet locations and team access.
             </p>
           </div>
-          <button
-            className="team-primary-action"
-            type="button"
-            disabled={!data.outlets.length && !data.isSuperAdmin}
-            onClick={() => {
-              setInviteMessage("");
-              setIsInviteDialogOpen(true);
-            }}
-          >
-            Invite a person
-          </button>
         </div>
         {message && (
           <p className="team-message" role="status" aria-live="polite">
@@ -500,8 +489,11 @@ export default function TeamPage() {
           >
             <div className="section-heading">
               <div>
-                <p className="eyebrow">COMPANY LOCATIONS</p>
+                <p className="eyebrow">OUTLET MANAGEMENT</p>
                 <h2 id="outlets-title">Outlets</h2>
+                <p className="team-section-description">
+                  Manage outlet details and clock-in locations.
+                </p>
               </div>
               <div className="team-heading-actions">
                 <span className="team-count">{data.outlets.length}</span>
@@ -519,27 +511,33 @@ export default function TeamPage() {
               </div>
             </div>
             <div className="outlet-list" aria-label="Active outlets">
-              {data.outlets.map((outlet) => (
-                <div className="outlet-list-item" key={outlet.id}>
-                  <div className="outlet-list-heading">
-                    <div>
-                      <strong>{outlet.name}</strong>
-                      <small>{outlet.address}</small>
+              {data.outlets.length ? (
+                data.outlets.map((outlet) => (
+                  <div className="outlet-list-item" key={outlet.id}>
+                    <div className="outlet-list-heading">
+                      <div>
+                        <strong>{outlet.name}</strong>
+                        <small>{outlet.address}</small>
+                      </div>
+                      <button
+                        className="reset-link-button"
+                        type="button"
+                        onClick={() => {
+                          setEditingOutletId(outlet.id);
+                          setOutletMessage("");
+                          setIsOutletDialogOpen(true);
+                        }}
+                      >
+                        Edit outlet
+                      </button>
                     </div>
-                    <button
-                      className="reset-link-button"
-                      type="button"
-                      onClick={() => {
-                        setEditingOutletId(outlet.id);
-                        setOutletMessage("");
-                        setIsOutletDialogOpen(true);
-                      }}
-                    >
-                      Edit outlet
-                    </button>
                   </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <p className="team-empty-outlets">
+                  No outlets yet. Add an outlet to set up your locations.
+                </p>
+              )}
             </div>
             <ModalDialog
               open={isOutletDialogOpen}
@@ -755,7 +753,7 @@ export default function TeamPage() {
               <div>
                 <p className="eyebrow">NEW ACCESS</p>
                 <h2 id="invite-team-title">
-                  Invite an account
+                  Invite a person
                 </h2>
               </div>
               <button
@@ -895,10 +893,26 @@ export default function TeamPage() {
         >
           <div className="section-heading">
             <div>
-              <p className="eyebrow">ACTIVE ACCESS</p>
+              <p className="eyebrow">TEAM ACCESS</p>
               <h2 id="team-members-title">People</h2>
+              <p className="team-section-description">
+                Manage people and their outlet access.
+              </p>
             </div>
-            <span className="team-count">{visiblePeople.length}</span>
+            <div className="team-heading-actions">
+              <span className="team-count">{visiblePeople.length}</span>
+              <button
+                className="team-primary-action"
+                type="button"
+                disabled={!data.outlets.length && !data.isSuperAdmin}
+                onClick={() => {
+                  setInviteMessage("");
+                  setIsInviteDialogOpen(true);
+                }}
+              >
+                Add person
+              </button>
+            </div>
           </div>
           <div className="team-table-wrap">
             <table className="team-table">
