@@ -7,6 +7,7 @@ export type AuthUser = {
   name: string;
   username: string | null;
   email: string;
+  profilePhotoUrl: string | null;
   accountType: "super_admin" | "admin" | "staff";
   canAccessClock: boolean;
   canAccessBackoffice: boolean;

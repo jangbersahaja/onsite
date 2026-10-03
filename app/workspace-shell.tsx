@@ -4,7 +4,8 @@ import { authClient } from "@/lib/auth-client";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { MAX_PROFILE_PHOTO_BYTES } from "@/lib/profile-photo";
 
 export type WorkspaceNavigationItem = {
   href: string;
@@ -18,6 +19,8 @@ export type WorkspaceNavigationGroup = {
   label: string;
   items: WorkspaceNavigationItem[];
 };
+
+export const REVIEW_REQUESTS_CHANGED_EVENT = "review-requests-changed";
 
 export const managementNavigation: WorkspaceNavigationGroup[] = [
   {
@@ -34,6 +37,12 @@ export const managementNavigation: WorkspaceNavigationGroup[] = [
   {
     label: "MANAGE",
     items: [
+      {
+        href: "/manage",
+        label: "Dashboard",
+        glyph: "⌂",
+        requiredAccess: "backoffice",
+      },
       {
         href: "/timesheets",
         label: "Timesheets",
@@ -104,21 +113,35 @@ export function WorkspaceShell({
   const router = useRouter();
   const session = authClient.useSession();
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+  const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const [profilePhotoMessage, setProfilePhotoMessage] = useState("");
+  const [isPhotoSaving, setIsPhotoSaving] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
+  const profilePhotoInputRef = useRef<HTMLInputElement>(null);
+  const [pendingReviewCount, setPendingReviewCount] = useState(0);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(
     null,
   );
+  const canAccessBackoffice = session.data?.user.canAccessBackoffice === true;
   const userName = session.data?.user.name ?? "Account";
+  const profilePhotoUrl = session.data?.user.profilePhotoUrl ?? null;
   const selectedOutlet = outlets.find(
     (outlet) => outlet.id === selectedOutletId,
   );
   const visibleNavigation = navigation
     .map((group) => ({
       ...group,
-      items: group.items.filter((item) =>
-        item.requiredAccess === "clock"
-          ? session.data?.user.canAccessClock === true
-          : session.data?.user.canAccessBackoffice === true,
-      ),
+      items: group.items
+        .filter((item) =>
+          item.requiredAccess === "clock"
+            ? session.data?.user.canAccessClock === true
+            : session.data?.user.canAccessBackoffice === true,
+        )
+        .map((item) =>
+          item.href === "/corrections/review"
+            ? { ...item, count: pendingReviewCount }
+            : item,
+        ),
     }))
     .filter((group) => group.items.length > 0);
   const mobileStaffNavigation = visibleNavigation
@@ -133,6 +156,87 @@ export function WorkspaceShell({
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [isMobileNavOpen]);
+
+  useEffect(() => {
+    if (!isAccountMenuOpen) return;
+    function closeOnOutsideClick(event: PointerEvent) {
+      if (
+        event.target instanceof Node &&
+        !accountMenuRef.current?.contains(event.target)
+      ) {
+        setIsAccountMenuOpen(false);
+      }
+    }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setIsAccountMenuOpen(false);
+    }
+    window.addEventListener("pointerdown", closeOnOutsideClick);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("pointerdown", closeOnOutsideClick);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [isAccountMenuOpen]);
+
+  useEffect(() => {
+    if (!canAccessBackoffice) return;
+
+    let active = true;
+    let refreshGeneration = 0;
+    async function refreshReviewCount() {
+      const generation = ++refreshGeneration;
+      try {
+        const [correctionResponse, deviceResponse] = await Promise.all([
+          fetch("/api/corrections?view=review", { cache: "no-store" }),
+          fetch("/api/staff-devices?view=review", { cache: "no-store" }),
+        ]);
+        if (!correctionResponse.ok || !deviceResponse.ok) return;
+
+        const [correctionBody, deviceBody] = await Promise.all([
+          correctionResponse.json() as Promise<{ requests?: unknown }>,
+          deviceResponse.json() as Promise<{ requests?: unknown }>,
+        ]);
+        if (
+          !Array.isArray(correctionBody.requests) ||
+          !Array.isArray(deviceBody.requests)
+        ) {
+          return;
+        }
+
+        if (active && generation === refreshGeneration) {
+          setPendingReviewCount(
+            correctionBody.requests.length + deviceBody.requests.length,
+          );
+        }
+      } catch {
+        // Keep the last known count when a background refresh fails.
+      }
+    }
+
+    function onReviewRequestsChanged() {
+      void refreshReviewCount();
+    }
+
+    function onReviewDecision() {
+      setPendingReviewCount((count) => Math.max(0, count - 1));
+      void refreshReviewCount();
+    }
+
+    void refreshReviewCount();
+    const interval = window.setInterval(onReviewRequestsChanged, 60_000);
+    window.addEventListener("focus", onReviewRequestsChanged);
+    window.addEventListener(REVIEW_REQUESTS_CHANGED_EVENT, onReviewDecision);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onReviewRequestsChanged);
+      window.removeEventListener(
+        REVIEW_REQUESTS_CHANGED_EVENT,
+        onReviewDecision,
+      );
+    };
+  }, [canAccessBackoffice]);
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
@@ -154,6 +258,65 @@ export function WorkspaceShell({
     await installPrompt.prompt();
     await installPrompt.userChoice;
     setInstallPrompt(null);
+  }
+
+  async function updateProfilePhoto(file: File) {
+    setProfilePhotoMessage("");
+    if (file.size > MAX_PROFILE_PHOTO_BYTES) {
+      setProfilePhotoMessage("Profile photos must be 2 MB or smaller.");
+      return;
+    }
+
+    setIsPhotoSaving(true);
+    try {
+      const form = new FormData();
+      form.set("photo", file);
+      const response = await fetch("/api/profile-photo", {
+        method: "POST",
+        body: form,
+      });
+      const body = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(body.error ?? "Could not update profile photo.");
+      }
+      window.dispatchEvent(new Event("shiftline-session-changed"));
+      setIsAccountMenuOpen(false);
+    } catch (error) {
+      setProfilePhotoMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not update profile photo.",
+      );
+    } finally {
+      setIsPhotoSaving(false);
+    }
+  }
+
+  async function removeProfilePhoto() {
+    setProfilePhotoMessage("");
+    setIsPhotoSaving(true);
+    try {
+      const response = await fetch("/api/profile-photo", { method: "DELETE" });
+      const body = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        throw new Error(body.error ?? "Could not remove profile photo.");
+      }
+      window.dispatchEvent(new Event("shiftline-session-changed"));
+      setIsAccountMenuOpen(false);
+    } catch (error) {
+      setProfilePhotoMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not remove profile photo.",
+      );
+    } finally {
+      setIsPhotoSaving(false);
+    }
+  }
+
+  async function signOut() {
+    await authClient.signOut();
+    router.replace("/");
   }
 
   return (
@@ -247,23 +410,83 @@ export function WorkspaceShell({
             <span className="status-dot" />
             Connected workspace
           </div>
-          <button
-            className="profile-button"
-            type="button"
-            onClick={async () => {
-              await authClient.signOut();
-              router.replace("/");
-            }}
-          >
-            <span className="profile-avatar">{initials(userName)}</span>
-            <span className="profile-copy">
-              <strong>{userName}</strong>
-              <small>Sign out</small>
-            </span>
-            <span className="switcher-chevron" aria-hidden="true">
-              ···
-            </span>
-          </button>
+          <div className="profile-account" ref={accountMenuRef}>
+            <button
+              className="profile-button"
+              type="button"
+              aria-expanded={isAccountMenuOpen}
+              aria-controls="profile-account-menu"
+              onClick={() => {
+                setProfilePhotoMessage("");
+                setIsAccountMenuOpen((isOpen) => !isOpen);
+              }}
+            >
+              {profilePhotoUrl ? (
+                <Image
+                  className="profile-avatar profile-avatar-photo"
+                  src={profilePhotoUrl}
+                  alt=""
+                  width={33}
+                  height={33}
+                  unoptimized
+                />
+              ) : (
+                <span className="profile-avatar">{initials(userName)}</span>
+              )}
+              <span className="profile-copy">
+                <strong>{userName}</strong>
+                <small>Manage account</small>
+              </span>
+              <span className="switcher-chevron" aria-hidden="true">
+                ···
+              </span>
+            </button>
+            {isAccountMenuOpen && (
+              <div className="profile-menu" id="profile-account-menu">
+                <input
+                  ref={profilePhotoInputRef}
+                  type="file"
+                  hidden
+                  accept="image/jpeg,image/png,image/webp"
+                  aria-label="Choose a profile photo"
+                  onChange={(event) => {
+                    const file = event.currentTarget.files?.[0];
+                    event.currentTarget.value = "";
+                    if (file) void updateProfilePhoto(file);
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={isPhotoSaving}
+                  onClick={() => profilePhotoInputRef.current?.click()}
+                >
+                  Change photo
+                </button>
+                {profilePhotoUrl && (
+                  <button
+                    type="button"
+                    disabled={isPhotoSaving}
+                    onClick={() => void removeProfilePhoto()}
+                  >
+                    Remove photo
+                  </button>
+                )}
+                {profilePhotoMessage && (
+                  <p className="profile-menu-message" role="status">
+                    {profilePhotoMessage}
+                  </p>
+                )}
+                <button
+                  className="profile-menu-signout"
+                  type="button"
+                  disabled={isPhotoSaving}
+                  onClick={() => void signOut()}
+                >
+                  Sign out
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </aside>
 
@@ -297,7 +520,18 @@ export function WorkspaceShell({
                 Install app
               </button>
             )}
-            <span className="top-avatar">{initials(userName)}</span>
+            {profilePhotoUrl ? (
+              <Image
+                className="top-avatar top-avatar-photo"
+                src={profilePhotoUrl}
+                alt=""
+                width={33}
+                height={33}
+                unoptimized
+              />
+            ) : (
+              <span className="top-avatar">{initials(userName)}</span>
+            )}
           </div>
         </header>
         {children}

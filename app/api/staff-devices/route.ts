@@ -3,10 +3,12 @@ import {
   outletMemberships,
   outlets,
   staffDeviceEnrollments,
+  user,
 } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
+import { getTeamAccess } from "@/lib/team-access";
 import { createOneTimeToken } from "@/lib/one-time-token";
 import {
   getStaffDeviceCookieName,
@@ -30,6 +32,72 @@ export async function GET(request: Request) {
     });
     if (!session) {
       return Response.json({ error: "Sign in required." }, { status: 401 });
+    }
+    const review = new URL(request.url).searchParams.get("view") === "review";
+    if (review) {
+      const access = await getTeamAccess(session.user.id);
+      if (!access?.outletIds.length) {
+        return Response.json(
+          { error: "Device review access is not available." },
+          { status: 403 },
+        );
+      }
+
+      const rows = await getDb()
+        .select({
+          id: staffDeviceEnrollments.id,
+          userId: user.id,
+          employeeName: user.name,
+          employeeEmail: user.email,
+          createdAt: staffDeviceEnrollments.createdAt,
+          outletName: outlets.name,
+        })
+        .from(staffDeviceEnrollments)
+        .innerJoin(user, eq(staffDeviceEnrollments.userId, user.id))
+        .innerJoin(
+          outletMemberships,
+          eq(outletMemberships.userId, staffDeviceEnrollments.userId),
+        )
+        .innerJoin(outlets, eq(outletMemberships.outletId, outlets.id))
+        .where(
+          and(
+            eq(staffDeviceEnrollments.status, "pending"),
+            eq(outletMemberships.role, "staff"),
+            eq(outletMemberships.isActive, true),
+            eq(outlets.isActive, true),
+            inArray(outletMemberships.outletId, access.outletIds),
+          ),
+        )
+        .orderBy(desc(staffDeviceEnrollments.createdAt));
+
+      const requests = new Map<
+        string,
+        {
+          id: string;
+          userId: string;
+          employeeName: string;
+          employeeEmail: string;
+          createdAt: Date;
+          outletNames: string[];
+        }
+      >();
+      for (const row of rows) {
+        const request = requests.get(row.id) ?? {
+          id: row.id,
+          userId: row.userId,
+          employeeName: row.employeeName,
+          employeeEmail: row.employeeEmail,
+          createdAt: row.createdAt,
+          outletNames: [],
+        };
+        if (!request.outletNames.includes(row.outletName)) {
+          request.outletNames.push(row.outletName);
+        }
+        requests.set(row.id, request);
+      }
+      return Response.json({
+        requests: Array.from(requests.values()).slice(0, 100),
+      });
     }
     if (!session.user.canAccessClock) {
       return Response.json(

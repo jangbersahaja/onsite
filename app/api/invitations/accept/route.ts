@@ -11,6 +11,13 @@ import { hasServerConfiguration } from "@/lib/app-config";
 import { getDb } from "@/lib/db";
 import { createOneTimeToken, hashOneTimeToken } from "@/lib/one-time-token";
 import { hashPassword } from "@/lib/password";
+import {
+  deleteProfilePhoto,
+  ProfilePhotoValidationError,
+  uploadProfilePhoto,
+  validateProfilePhotoFile,
+} from "@/lib/profile-photo-storage";
+import { MAX_PROFILE_PHOTO_BYTES } from "@/lib/profile-photo";
 import { getStaffDeviceCookieName } from "@/lib/staff-device";
 import { and, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import { cookies } from "next/headers";
@@ -123,8 +130,33 @@ export async function POST(request: Request) {
   if (!hasServerConfiguration()) return unavailable();
 
   let rawBody: unknown;
+  let profilePhotoFile: File | null = null;
   try {
-    rawBody = await request.json();
+    if (request.headers.get("content-type")?.includes("multipart/form-data")) {
+      const contentLength = Number(request.headers.get("content-length"));
+      if (
+        Number.isFinite(contentLength) &&
+        contentLength > MAX_PROFILE_PHOTO_BYTES + 64 * 1024
+      ) {
+        return Response.json(
+          { error: "Profile photos must be 2 MB or smaller." },
+          { status: 413 },
+        );
+      }
+      const form = await request.formData();
+      rawBody = {
+        token: form.get("token"),
+        name: form.get("name"),
+        username: form.get("username"),
+        password: form.get("password"),
+      };
+      const photo = form.get("profilePhoto");
+      if (photo !== null && typeof photo !== "string" && photo.size > 0) {
+        profilePhotoFile = photo;
+      }
+    } else {
+      rawBody = await request.json();
+    }
   } catch {
     return Response.json(
       { error: "Request body must be valid JSON." },
@@ -141,6 +173,19 @@ export async function POST(request: Request) {
   }
 
   const input = parsed.data;
+  if (profilePhotoFile) {
+    try {
+      await validateProfilePhotoFile(profilePhotoFile);
+    } catch (error) {
+      if (error instanceof ProfilePhotoValidationError) {
+        return Response.json({ error: error.message }, { status: 400 });
+      }
+      return Response.json(
+        { error: "Could not validate profile photo." },
+        { status: 400 },
+      );
+    }
+  }
   const db = getDb();
   const now = new Date();
   let claimedInvitation:
@@ -156,6 +201,7 @@ export async function POST(request: Request) {
       }
     | undefined;
   let createdUserId: string | undefined;
+  let uploadedProfilePhotoPath: string | undefined;
 
   try {
     const tokenHash = hashOneTimeToken(input.token);
@@ -232,6 +278,12 @@ export async function POST(request: Request) {
     createdUserId = randomUUID();
     const passwordHash = await hashPassword(input.password);
     const firstDevice = claimed.role === "staff" ? createOneTimeToken() : null;
+    if (profilePhotoFile) {
+      uploadedProfilePhotoPath = await uploadProfilePhoto(
+        createdUserId,
+        profilePhotoFile,
+      );
+    }
 
     await db.transaction(async (tx) => {
       const [consumed] = await tx
@@ -255,6 +307,7 @@ export async function POST(request: Request) {
         username,
         email: claimed.email,
         passwordHash,
+        profilePhotoPath: uploadedProfilePhotoPath ?? null,
         accountType: claimed.accountType,
         canAccessClock: claimed.canAccessClock,
         canAccessBackoffice: claimed.canAccessBackoffice,
@@ -336,6 +389,9 @@ export async function POST(request: Request) {
 
     return Response.json({ accepted: true }, { status: 201 });
   } catch {
+    if (uploadedProfilePhotoPath) {
+      await deleteProfilePhoto(uploadedProfilePhotoPath).catch(() => undefined);
+    }
     if (createdUserId) {
       await db
         .delete(user)

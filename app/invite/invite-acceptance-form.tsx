@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { MAX_PROFILE_PHOTO_BYTES } from "@/lib/profile-photo";
 import { useEffect, useState } from "react";
 
 type InvitationInfo = {
@@ -59,18 +60,29 @@ export function InviteAcceptanceForm({ token }: { token: string }) {
       setMessage("The passwords do not match.");
       return;
     }
+    const profilePhoto = form.get("profilePhoto");
+    if (
+      profilePhoto instanceof File &&
+      profilePhoto.size > MAX_PROFILE_PHOTO_BYTES
+    ) {
+      setMessage("Profile photos must be 2 MB or smaller.");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
+      const payload = new FormData();
+      payload.set("token", token);
+      for (const field of ["name", "username", "password"] as const) {
+        const value = form.get(field);
+        if (typeof value === "string") payload.set(field, value);
+      }
+      if (profilePhoto instanceof File && profilePhoto.size > 0) {
+        payload.set("profilePhoto", profilePhoto);
+      }
       const response = await fetch("/api/invitations/accept", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          token,
-          name: form.get("name"),
-          username: form.get("username"),
-          password,
-        }),
+        body: payload,
       });
       const body = await response.json();
       if (!response.ok)
@@ -165,6 +177,19 @@ export function InviteAcceptanceForm({ token }: { token: string }) {
                 maxLength={128}
                 required
               />
+              <label htmlFor="invite-profile-photo">
+                Profile photo (optional)
+              </label>
+              <input
+                className="auth-file-input"
+                id="invite-profile-photo"
+                name="profilePhoto"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+              />
+              <small className="auth-field-hint">
+                JPEG, PNG, or WebP · up to 2 MB
+              </small>
               {message && (
                 <p className="form-error" role="alert">
                   {message}

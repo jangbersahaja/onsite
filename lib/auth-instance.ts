@@ -31,6 +31,7 @@ export async function getSession(headers: Headers) {
       name: user.name,
       username: user.username,
       email: user.email,
+      profilePhotoPath: user.profilePhotoPath,
       accountType: user.accountType,
       canAccessClock: user.canAccessClock,
       canAccessBackoffice: user.canAccessBackoffice,
@@ -54,6 +55,9 @@ export async function getSession(headers: Headers) {
       name: record.name,
       username: record.username,
       email: record.email,
+      profilePhotoUrl: record.profilePhotoPath
+        ? `/api/profile-photos/${encodeURIComponent(record.userId)}`
+        : null,
       accountType: record.accountType,
       canAccessClock: record.canAccessClock,
       canAccessBackoffice: record.canAccessBackoffice,

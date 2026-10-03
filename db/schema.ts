@@ -48,6 +48,7 @@ export const user = pgTable(
     username: text("username").notNull(),
     email: text("email").notNull().unique(),
     passwordHash: text("password_hash").notNull(),
+    profilePhotoPath: text("profile_photo_path"),
     accountType: accountTypeEnum("account_type").notNull().default("staff"),
     canAccessClock: boolean("can_access_clock").notNull().default(true),
     canAccessBackoffice: boolean("can_access_backoffice")
