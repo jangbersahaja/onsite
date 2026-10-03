@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   doublePrecision,
   index,
   integer,
@@ -281,6 +282,39 @@ export const workSessions = pgTable(
     index("work_sessions_outlet_clock_in_idx").on(
       table.outletId,
       table.clockInAt,
+    ),
+  ],
+);
+
+export const workBreaks = pgTable(
+  "work_breaks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    workSessionId: uuid("work_session_id")
+      .notNull()
+      .references(() => workSessions.id, { onDelete: "cascade" }),
+    startedAt: timestamp("started_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check(
+      "work_breaks_end_after_start_chk",
+      sql`${table.endedAt} IS NULL OR ${table.endedAt} > ${table.startedAt}`,
+    ),
+    uniqueIndex("work_breaks_one_open_per_session_uq")
+      .on(table.workSessionId)
+      .where(sql`${table.endedAt} IS NULL`),
+    index("work_breaks_session_started_idx").on(
+      table.workSessionId,
+      table.startedAt,
     ),
   ],
 );

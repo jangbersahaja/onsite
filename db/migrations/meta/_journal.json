@@ -50,6 +50,13 @@
       "when": 1791013460481,
       "tag": "0006_amazing_vampiro",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791031728052,
+      "tag": "0007_lonely_alice",
+      "breakpoints": true
     }
   ]
 }

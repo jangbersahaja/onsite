@@ -1,15 +1,20 @@
-import { auditEvents, outlets, workSessions } from "@/db/schema";
+import { auditEvents, outlets, workBreaks, workSessions } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import {
-  serializeCsv,
   formatOutletTimestamp,
   outletDateTimeToISOString,
+  serializeCsv,
 } from "@/lib/outlet-time";
-import { getTimesheetRows, parseTimesheetFilters } from "@/lib/timesheet-data";
 import { getTeamAccess } from "@/lib/team-access";
-import { eq } from "drizzle-orm";
+import { getTimesheetRows, parseTimesheetFilters } from "@/lib/timesheet-data";
+import {
+  getCompletedBreakMinutes,
+  getWorkedMinutes,
+  validateBreakIntervals,
+} from "@/lib/work-breaks";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 function unavailable() {
@@ -84,7 +89,7 @@ export async function GET(request: Request) {
     const rows = await getTimesheetRows(actor.outletIds, parsed.data);
     if (params.get("format") === "csv") {
       const csvRows = rows.map((row) => {
-        const minutes = row.clockOutAt
+        const grossMinutes = row.clockOutAt
           ? Math.max(
               0,
               Math.floor(
@@ -92,6 +97,12 @@ export async function GET(request: Request) {
               ),
             )
           : null;
+        const breakMinutes = getCompletedBreakMinutes(row.breaks);
+        const workedMinutes = getWorkedMinutes(
+          row.clockInAt,
+          row.clockOutAt,
+          row.breaks,
+        );
         return [
           row.employeeName,
           row.employeeEmail,
@@ -100,7 +111,9 @@ export async function GET(request: Request) {
           row.clockOutAt
             ? formatOutletTimestamp(row.clockOutAt, row.timezone)
             : "Open",
-          minutes === null ? "" : (minutes / 60).toFixed(2),
+          grossMinutes === null ? "" : (grossMinutes / 60).toFixed(2),
+          breakMinutes,
+          workedMinutes === null ? "" : (workedMinutes / 60).toFixed(2),
           row.clockInSource === "manual" || row.clockOutSource === "manual"
             ? "Manually adjusted"
             : "GPS verified",
@@ -114,7 +127,9 @@ export async function GET(request: Request) {
             "Outlet",
             "Clock in (outlet time)",
             "Clock out (outlet time)",
-            "Hours",
+            "Gross hours",
+            "Unpaid break minutes",
+            "Worked hours",
             "Punch source / adjustment",
           ],
           csvRows,
@@ -146,7 +161,7 @@ export async function GET(request: Request) {
         clockOutLocal: row.clockOutAt
           ? formatOutletTimestamp(row.clockOutAt, row.timezone)
           : null,
-        durationMinutes: row.clockOutAt
+        grossDurationMinutes: row.clockOutAt
           ? Math.max(
               0,
               Math.floor(
@@ -154,6 +169,12 @@ export async function GET(request: Request) {
               ),
             )
           : null,
+        breakMinutes: getCompletedBreakMinutes(row.breaks),
+        durationMinutes: getWorkedMinutes(
+          row.clockInAt,
+          row.clockOutAt,
+          row.breaks,
+        ),
       })),
     });
   } catch {
@@ -172,6 +193,18 @@ const editSchema = z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/)
       .nullable(),
+    breaks: z
+      .array(
+        z
+          .object({
+            id: z.string().uuid().nullable(),
+            startedAt: z.string().datetime({ offset: true }),
+            endedAt: z.string().datetime({ offset: true }).nullable(),
+          })
+          .strict(),
+      )
+      .max(30)
+      .optional(),
     reason: z.string().trim().min(3).max(500),
   })
   .strict();
@@ -255,7 +288,62 @@ export async function PATCH(request: Request) {
       );
     }
 
-    await db.transaction(async (tx) => {
+    const outcome = await db.transaction(async (tx) => {
+      const [lockedSession] = await tx
+        .select({ id: workSessions.id })
+        .from(workSessions)
+        .where(eq(workSessions.id, current.id))
+        .limit(1)
+        .for("update");
+      if (!lockedSession) return { error: "Timesheet entry not found." };
+
+      const previousBreaks = await tx
+        .select({
+          id: workBreaks.id,
+          startedAt: workBreaks.startedAt,
+          endedAt: workBreaks.endedAt,
+        })
+        .from(workBreaks)
+        .where(eq(workBreaks.workSessionId, current.id))
+        .orderBy(workBreaks.startedAt)
+        .for("update");
+      const nextBreaks = parsed.data.breaks
+        ? parsed.data.breaks.map((breakInterval) => ({
+            id: breakInterval.id,
+            startedAt: new Date(breakInterval.startedAt),
+            endedAt: breakInterval.endedAt
+              ? new Date(breakInterval.endedAt)
+              : null,
+          }))
+        : previousBreaks;
+      const now = new Date();
+      if (
+        !validateBreakIntervals(nextBreaks, clockInAt, clockOutAt) ||
+        nextBreaks.some(
+          (breakInterval) =>
+            breakInterval.startedAt > now ||
+            (breakInterval.endedAt !== null && breakInterval.endedAt > now),
+        )
+      ) {
+        return {
+          error:
+            "Breaks must be ordered, non-overlapping, within the shift, and not in the future.",
+        };
+      }
+
+      const existingIds = new Set(
+        previousBreaks.map((breakInterval) => breakInterval.id),
+      );
+      const submittedIds = nextBreaks
+        .map((breakInterval) => breakInterval.id)
+        .filter((id): id is string => id !== null);
+      if (
+        new Set(submittedIds).size !== submittedIds.length ||
+        submittedIds.some((id) => !existingIds.has(id))
+      ) {
+        return { error: "Break details do not match this shift." };
+      }
+
       await tx
         .update(workSessions)
         .set({
@@ -298,6 +386,62 @@ export async function PATCH(request: Request) {
           updatedAt: new Date(),
         })
         .where(eq(workSessions.id, current.id));
+
+      const savedBreaks: {
+        id: string;
+        startedAt: Date;
+        endedAt: Date | null;
+      }[] = [];
+      if (parsed.data.breaks) {
+        for (const breakInterval of nextBreaks) {
+          if (breakInterval.id) {
+            await tx
+              .update(workBreaks)
+              .set({
+                startedAt: breakInterval.startedAt,
+                endedAt: breakInterval.endedAt,
+                updatedAt: now,
+              })
+              .where(
+                and(
+                  eq(workBreaks.id, breakInterval.id),
+                  eq(workBreaks.workSessionId, current.id),
+                ),
+              );
+            savedBreaks.push({
+              id: breakInterval.id,
+              startedAt: breakInterval.startedAt,
+              endedAt: breakInterval.endedAt,
+            });
+          } else {
+            const [created] = await tx
+              .insert(workBreaks)
+              .values({
+                workSessionId: current.id,
+                startedAt: breakInterval.startedAt,
+                endedAt: breakInterval.endedAt,
+                updatedAt: now,
+              })
+              .returning({ id: workBreaks.id });
+            savedBreaks.push({ ...breakInterval, id: created.id });
+          }
+        }
+        const removedIds = previousBreaks
+          .map((breakInterval) => breakInterval.id)
+          .filter((id) => !submittedIds.includes(id));
+        if (removedIds.length) {
+          await tx
+            .delete(workBreaks)
+            .where(
+              and(
+                eq(workBreaks.workSessionId, current.id),
+                inArray(workBreaks.id, removedIds),
+              ),
+            );
+        }
+      }
+      const auditedBreaks = parsed.data.breaks ? savedBreaks : nextBreaks;
+
       await tx.insert(auditEvents).values({
         actorId: actor.userId,
         action: "timesheet_edit",
@@ -306,14 +450,29 @@ export async function PATCH(request: Request) {
         previousValues: {
           clockInAt: current.clockInAt.toISOString(),
           clockOutAt: current.clockOutAt?.toISOString() ?? null,
+          breaks: previousBreaks.map((breakInterval) => ({
+            id: breakInterval.id,
+            startedAt: breakInterval.startedAt.toISOString(),
+            endedAt: breakInterval.endedAt?.toISOString() ?? null,
+          })),
         },
         newValues: {
           clockInAt: clockInAt.toISOString(),
           clockOutAt: clockOutAt?.toISOString() ?? null,
+          breaks: auditedBreaks.map((breakInterval) => ({
+            id: breakInterval.id,
+            startedAt: breakInterval.startedAt.toISOString(),
+            endedAt: breakInterval.endedAt?.toISOString() ?? null,
+          })),
         },
         reason: parsed.data.reason,
       });
+      return { success: true };
     });
+
+    if ("error" in outcome) {
+      return Response.json({ error: outcome.error }, { status: 400 });
+    }
 
     return Response.json({ success: true });
   } catch {

@@ -1,4 +1,4 @@
-import { outlets, user, workSessions } from "@/db/schema";
+import { outlets, user, workBreaks, workSessions } from "@/db/schema";
 import { getDb } from "@/lib/db";
 import { isDateOnly } from "@/lib/outlet-time";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
@@ -55,7 +55,7 @@ export async function getTimesheetRows(
     );
   }
 
-  return getDb()
+  const rows = await getDb()
     .select({
       id: workSessions.id,
       userId: user.id,
@@ -81,4 +81,26 @@ export async function getTimesheetRows(
     .where(and(...conditions))
     .orderBy(desc(workSessions.clockInAt))
     .limit(500);
+
+  if (!rows.length) return [];
+  const breaks = await getDb()
+    .select({
+      id: workBreaks.id,
+      workSessionId: workBreaks.workSessionId,
+      startedAt: workBreaks.startedAt,
+      endedAt: workBreaks.endedAt,
+    })
+    .from(workBreaks)
+    .where(
+      inArray(
+        workBreaks.workSessionId,
+        rows.map((row) => row.id),
+      ),
+    )
+    .orderBy(workBreaks.startedAt);
+
+  return rows.map((row) => ({
+    ...row,
+    breaks: breaks.filter((breakRow) => breakRow.workSessionId === row.id),
+  }));
 }

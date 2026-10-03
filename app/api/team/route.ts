@@ -157,7 +157,9 @@ export async function GET(request: Request) {
       (invitation) =>
         access.isSuperAdmin ||
         (invitation.outletIds.length > 0 &&
-          invitation.outletIds.every((outletId) => access.outletIds.includes(outletId))),
+          invitation.outletIds.every((outletId) =>
+            access.outletIds.includes(outletId),
+          )),
     );
 
     const staffUserIds = Array.from(
@@ -191,6 +193,7 @@ export async function GET(request: Request) {
       outlets: access.outlets,
       members: members.map((member) => ({
         ...member,
+        canManageAccess: access.isAdmin && member.accountType === "staff",
         canReset:
           access.isAdmin ||
           (member.userId !== session.user.id && member.role !== "manager"),

@@ -10,6 +10,7 @@ import {
 import { authClient } from "@/lib/auth-client";
 import { requestCurrentLocation } from "@/lib/browser-location";
 import { verifyGeofence } from "@/lib/geofence";
+import { getCompletedBreakMinutes } from "@/lib/work-breaks";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -32,6 +33,7 @@ type ClockRecord = {
   timezone: string;
   clockInAt: string;
   clockOutAt: string | null;
+  breaks: { startedAt: string; endedAt: string | null }[];
 };
 
 type CorrectionRequest = {
@@ -68,6 +70,7 @@ type ClockPageData = {
   };
   outlets: ClockOutlet[];
   activeSession: { id: string; outletId: string; clockInAt: string } | null;
+  activeBreak: { id: string; startedAt: string } | null;
   recentSessions: ClockRecord[];
   correctionRequests: CorrectionRequest[];
 };
@@ -113,10 +116,20 @@ async function loadStaffDeviceStatus() {
   return body as StaffDeviceStatus;
 }
 
-function formatDuration(start: string, end: Date | string) {
+function formatDuration(
+  start: string,
+  end: Date | string,
+  breaks: { startedAt: string; endedAt: string | null }[],
+) {
+  const endAt = new Date(end);
+  const adjustedBreaks = breaks.map((breakInterval) => ({
+    ...breakInterval,
+    endedAt: breakInterval.endedAt ?? endAt.toISOString(),
+  }));
   const minutes = Math.max(
     0,
-    Math.floor((new Date(end).getTime() - new Date(start).getTime()) / 60_000),
+    Math.floor((endAt.getTime() - new Date(start).getTime()) / 60_000) -
+      getCompletedBreakMinutes(adjustedBreaks),
   );
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
 }
@@ -164,6 +177,10 @@ export default function Home() {
   } | null>(null);
   const activeSession = clockData?.activeSession ?? null;
   const isClockedIn = Boolean(activeSession);
+  const isOnBreak = Boolean(clockData?.activeBreak);
+  const activeSessionBreaks =
+    clockData?.recentSessions.find((record) => record.id === activeSession?.id)
+      ?.breaks ?? [];
   const clockedInAt = activeSession ? new Date(activeSession.clockInAt) : null;
   const selectedOutlet =
     clockData?.outlets.find((outlet) => outlet.id === selectedOutletId) ??
@@ -400,9 +417,7 @@ export default function Home() {
             radiusMeters: result.radiusMeters,
           });
         }
-        setActionMessage(
-          result.error ?? "Clock action could not be recorded.",
-        );
+        setActionMessage(result.error ?? "Clock action could not be recorded.");
         return;
       }
 
@@ -421,6 +436,33 @@ export default function Home() {
           : stage === "refreshing"
             ? "Clock action recorded, but your shift could not be refreshed. Reload the page to see your current status."
             : "Could not confirm the clock action with the timekeeping service. Reload the page to check your shift before trying again.",
+      );
+    } finally {
+      setIsCheckingLocation(false);
+    }
+  }
+
+  async function handleBreakAction() {
+    if (!selectedOutlet || !activeSession || isCheckingLocation) return;
+    const action = isOnBreak ? "end_break" : "start_break";
+    setIsCheckingLocation(true);
+    setActionMessage(isOnBreak ? "Ending your break…" : "Starting your break…");
+    try {
+      const response = await fetch("/api/clock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(15_000),
+        body: JSON.stringify({ action, outletId: selectedOutlet.id }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "Break action failed.");
+      setClockData(await loadClockData());
+      setActionMessage(
+        isOnBreak ? "Break ended and recorded." : "Break started and recorded.",
+      );
+    } catch (error) {
+      setActionMessage(
+        error instanceof Error ? error.message : "Break action failed.",
       );
     } finally {
       setIsCheckingLocation(false);
@@ -504,7 +546,12 @@ export default function Home() {
             <article className="clock-panel">
               <div className="clock-panel-top">
                 <span className="live-indicator">
-                  <i /> {isClockedIn ? "SHIFT IN PROGRESS" : "READY TO START"}
+                  <i />
+                  {isOnBreak
+                    ? "ON UNPAID BREAK"
+                    : isClockedIn
+                      ? "SHIFT IN PROGRESS"
+                      : "READY TO START"}
                 </span>
                 <span className="clock-date">
                   {currentTime && selectedOutlet
@@ -526,9 +573,6 @@ export default function Home() {
                       })
                     : "--:--"}
                 </span>
-                <span className="clock-timezone">
-                  {selectedOutlet?.timezone ?? "Outlet time"}
-                </span>
               </div>
               <div className="geofence-row">
                 <span className="location-glyph" aria-hidden="true">
@@ -543,20 +587,13 @@ export default function Home() {
                       "Your account has no active outlet assignment."}
                   </small>
                 </div>
-                {selectedOutlet && (
-                  <span className="distance-pill">
-                    {selectedOutlet.radiusMeters} m radius
-                  </span>
-                )}
               </div>
               <button
                 className={`clock-action${isClockedIn ? " is-clocked-in" : ""}`}
                 type="button"
                 onClick={() => void handleClockAction()}
                 disabled={
-                  !selectedOutlet ||
-                  isCheckingLocation ||
-                  isLoadingData
+                  !selectedOutlet || isCheckingLocation || isLoadingData
                 }
               >
                 <span className="clock-action-icon" aria-hidden="true">
@@ -568,25 +605,23 @@ export default function Home() {
                     ? "Clock out"
                     : "Clock in"}
               </button>
+              {isClockedIn && (
+                <button
+                  className="clock-break-action team-secondary-action"
+                  type="button"
+                  onClick={() => void handleBreakAction()}
+                  disabled={isCheckingLocation || isLoadingData}
+                >
+                  {isCheckingLocation
+                    ? "Saving break…"
+                    : isOnBreak
+                      ? "End break"
+                      : "Start break"}
+                </button>
+              )}
               {selectedOutlet?.role === "staff" &&
                 staffDeviceStatus?.required && (
                   <div>
-                    {(staffDeviceStatus.status === "not_enrolled" ||
-                      (staffDeviceStatus.status === "active" &&
-                        !staffDeviceStatus.currentBrowserApproved)) && (
-                      <button
-                        className="reset-link-button"
-                        type="button"
-                        disabled={isRequestingStaffDevice}
-                        onClick={() => void handleRequestStaffDevice()}
-                      >
-                        {isRequestingStaffDevice
-                          ? "Requesting…"
-                          : staffDeviceStatus.status === "active"
-                            ? "Request this browser"
-                            : "Enroll this browser"}
-                      </button>
-                    )}
                     {staffDeviceStatus.status === "pending" && (
                       <p className="clock-hint" role="status">
                         {staffDeviceStatus.currentBrowserHasPendingRequest
@@ -669,17 +704,24 @@ export default function Home() {
                                   : liveGeofence?.allowed
                                     ? `GPS accuracy ±${Math.round(locationFix?.accuracy ?? 0)} m · ${Math.round(liveGeofence.distanceMeters)} m from outlet`
                                     : actionMessage ||
-                                      "Your location is checked before every clock action."}
+                                      "Location is checked for clock in and out; break times use server time."}
                   </span>
                 </div>
-                {isDeviceBlocked ? (
+                {isDeviceBlocked &&
+                (staffDeviceStatus?.status === "not_enrolled" ||
+                  (staffDeviceStatus?.status === "active" &&
+                    !staffDeviceStatus.currentBrowserApproved)) ? (
                   <button
                     className="clock-correction-link"
                     type="button"
                     disabled={isRequestingStaffDevice}
                     onClick={() => void handleRequestStaffDevice()}
                   >
-                    {isRequestingStaffDevice ? "Requesting…" : "Enroll browser"}
+                    {isRequestingStaffDevice
+                      ? "Requesting…"
+                      : staffDeviceStatus.status === "active"
+                        ? "Request this browser"
+                        : "Enroll this browser"}
                   </button>
                 ) : activeLocationError ||
                   clockBlockInfo ||
@@ -716,10 +758,20 @@ export default function Home() {
               <p className="eyebrow">
                 {isClockedIn ? "ACTIVE SHIFT" : "SHIFT STATUS"}
               </p>
-              <h2>{isClockedIn ? "You’re on the clock" : "Not clocked in"}</h2>
+              <h2>
+                {isOnBreak
+                  ? "You’re on an unpaid break"
+                  : isClockedIn
+                    ? "You’re on the clock"
+                    : "Not clocked in"}
+              </h2>
               <strong className="shift-state-duration">
                 {isClockedIn && clockedInAt && currentTime
-                  ? formatDuration(clockedInAt.toISOString(), currentTime)
+                  ? formatDuration(
+                      clockedInAt.toISOString(),
+                      currentTime,
+                      activeSessionBreaks,
+                    )
                   : "Ready when you are"}
               </strong>
               <p>
@@ -796,9 +848,17 @@ export default function Home() {
                 </div>
                 <strong className="clock-recent-duration">
                   {record.clockOutAt
-                    ? formatDuration(record.clockInAt, record.clockOutAt)
+                    ? formatDuration(
+                        record.clockInAt,
+                        record.clockOutAt,
+                        record.breaks,
+                      )
                     : isClockedIn && currentTime
-                      ? formatDuration(record.clockInAt, currentTime)
+                      ? formatDuration(
+                          record.clockInAt,
+                          currentTime,
+                          record.breaks,
+                        )
                       : "—"}
                 </strong>
               </article>

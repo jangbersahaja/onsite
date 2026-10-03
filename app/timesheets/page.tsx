@@ -2,6 +2,10 @@
 
 import { ModalDialog } from "@/app/modal-dialog";
 import { managementNavigation, WorkspaceShell } from "@/app/workspace-shell";
+import {
+  formatOutletDateTime,
+  outletDateTimeToISOString,
+} from "@/lib/outlet-time";
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 
@@ -17,7 +21,10 @@ type TimesheetRow = {
   clockOutAt: string | null;
   clockInLocal: string;
   clockOutLocal: string | null;
+  grossDurationMinutes: number | null;
+  breakMinutes: number;
   durationMinutes: number | null;
+  breaks: { id: string; startedAt: string; endedAt: string | null }[];
   clockInSource: "gps" | "manual";
   clockOutSource: "gps" | "manual" | null;
 };
@@ -26,6 +33,12 @@ type TimesheetData = {
   outlets: { id: string; name: string; address: string }[];
   employees: { id: string; name: string; email: string }[];
   rows: TimesheetRow[];
+};
+
+type EditingBreak = {
+  id: string | null;
+  startedAt: string;
+  endedAt: string;
 };
 
 type Filters = {
@@ -75,6 +88,7 @@ export default function TimesheetsPage() {
   const [editing, setEditing] = useState<TimesheetRow | null>(null);
   const [clockInAt, setClockInAt] = useState("");
   const [clockOutAt, setClockOutAt] = useState("");
+  const [editingBreaks, setEditingBreaks] = useState<EditingBreak[]>([]);
   const [reason, setReason] = useState("");
 
   async function load(nextFilters: Filters) {
@@ -122,6 +136,15 @@ export default function TimesheetsPage() {
     setEditing(row);
     setClockInAt(row.clockInLocal.slice(0, 16).replace(" ", "T"));
     setClockOutAt(row.clockOutLocal?.slice(0, 16).replace(" ", "T") ?? "");
+    setEditingBreaks(
+      row.breaks.map((breakInterval) => ({
+        id: breakInterval.id,
+        startedAt: formatOutletDateTime(breakInterval.startedAt, row.timezone),
+        endedAt: breakInterval.endedAt
+          ? formatOutletDateTime(breakInterval.endedAt, row.timezone)
+          : "",
+      })),
+    );
     setReason("");
   }
 
@@ -138,6 +161,19 @@ export default function TimesheetsPage() {
           id: editing.id,
           clockInAt,
           clockOutAt: clockOutAt || null,
+          breaks: editingBreaks.map((breakInterval) => ({
+            id: breakInterval.id,
+            startedAt: outletDateTimeToISOString(
+              breakInterval.startedAt,
+              editing.timezone,
+            ),
+            endedAt: breakInterval.endedAt
+              ? outletDateTimeToISOString(
+                  breakInterval.endedAt,
+                  editing.timezone,
+                )
+              : null,
+          })),
           reason,
         }),
       });
@@ -261,7 +297,7 @@ export default function TimesheetsPage() {
             <strong>{completedRows.length}</strong>
           </div>
           <div>
-            <span>Recorded hours</span>
+            <span>Worked hours</span>
             <strong>{(totalMinutes / 60).toFixed(1)}</strong>
           </div>
         </div>
@@ -318,6 +354,76 @@ export default function TimesheetsPage() {
                     onChange={(event) => setClockOutAt(event.target.value)}
                   />
                 </label>
+                <div className="timesheet-break-editor">
+                  <div className="timesheet-break-heading">
+                    <strong>Unpaid breaks</strong>
+                    <button
+                      className="team-secondary-action"
+                      type="button"
+                      onClick={() =>
+                        setEditingBreaks((current) => [
+                          ...current,
+                          { id: null, startedAt: "", endedAt: "" },
+                        ])
+                      }
+                    >
+                      Add break
+                    </button>
+                  </div>
+                  {editingBreaks.map((breakInterval, index) => (
+                    <div
+                      className="timesheet-break-fields"
+                      key={breakInterval.id ?? `new-${index}`}
+                    >
+                      <label>
+                        Break starts ({editing.timezone})
+                        <input
+                          type="datetime-local"
+                          required
+                          value={breakInterval.startedAt}
+                          onChange={(event) =>
+                            setEditingBreaks((current) =>
+                              current.map((item, itemIndex) =>
+                                itemIndex === index
+                                  ? { ...item, startedAt: event.target.value }
+                                  : item,
+                              ),
+                            )
+                          }
+                        />
+                      </label>
+                      <label>
+                        Break ends
+                        <input
+                          type="datetime-local"
+                          value={breakInterval.endedAt}
+                          onChange={(event) =>
+                            setEditingBreaks((current) =>
+                              current.map((item, itemIndex) =>
+                                itemIndex === index
+                                  ? { ...item, endedAt: event.target.value }
+                                  : item,
+                              ),
+                            )
+                          }
+                        />
+                      </label>
+                      <button
+                        className="timesheet-edit-button"
+                        type="button"
+                        onClick={() =>
+                          setEditingBreaks((current) =>
+                            current.filter(
+                              (_, itemIndex) => itemIndex !== index,
+                            ),
+                          )
+                        }
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
                 <label className="timesheet-reason">
                   Reason for change
                   <input
@@ -358,7 +464,9 @@ export default function TimesheetsPage() {
                   <th>OUTLET</th>
                   <th>CLOCK IN</th>
                   <th>CLOCK OUT</th>
-                  <th>HOURS</th>
+                  <th>GROSS</th>
+                  <th>UNPAID BREAK</th>
+                  <th>WORKED</th>
                   <th>SOURCE</th>
                   <th>
                     <span className="sr-only">Actions</span>
@@ -375,6 +483,8 @@ export default function TimesheetsPage() {
                     <td>{row.outletName}</td>
                     <td>{row.clockInLocal}</td>
                     <td>{row.clockOutLocal ?? "Open shift"}</td>
+                    <td>{formatDuration(row.grossDurationMinutes)}</td>
+                    <td>{formatDuration(row.breakMinutes)}</td>
                     <td>{formatDuration(row.durationMinutes)}</td>
                     <td>
                       {row.clockInSource === "manual" ||
@@ -399,14 +509,14 @@ export default function TimesheetsPage() {
                 ))}
                 {data && data.rows.length === 0 && (
                   <tr>
-                    <td className="timesheet-empty" colSpan={7}>
+                    <td className="timesheet-empty" colSpan={9}>
                       No shifts match these filters.
                     </td>
                   </tr>
                 )}
                 {!data && isLoading && (
                   <tr>
-                    <td className="timesheet-empty" colSpan={7}>
+                    <td className="timesheet-empty" colSpan={9}>
                       Loading shift records…
                     </td>
                   </tr>

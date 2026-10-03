@@ -3,6 +3,7 @@ import {
   outletMemberships,
   outlets,
   staffDeviceEnrollments,
+  workBreaks,
   workSessions,
 } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
@@ -15,19 +16,42 @@ import {
   isApprovedStaffDevice,
   isStaffDeviceRequired,
 } from "@/lib/staff-device";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { z } from "zod";
 
-const clockActionSchema = z
-  .object({
-    action: z.enum(["clock_in", "clock_out"]),
-    outletId: z.string().uuid(),
-    latitude: z.number().min(-90).max(90),
-    longitude: z.number().min(-180).max(180),
-    accuracy: z.number().min(0).max(100_000),
-  })
-  .strict();
+const clockActionSchema = z.discriminatedUnion("action", [
+  z
+    .object({
+      action: z.literal("clock_in"),
+      outletId: z.string().uuid(),
+      latitude: z.number().min(-90).max(90),
+      longitude: z.number().min(-180).max(180),
+      accuracy: z.number().min(0).max(100_000),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("clock_out"),
+      outletId: z.string().uuid(),
+      latitude: z.number().min(-90).max(90),
+      longitude: z.number().min(-180).max(180),
+      accuracy: z.number().min(0).max(100_000),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("start_break"),
+      outletId: z.string().uuid(),
+    })
+    .strict(),
+  z
+    .object({
+      action: z.literal("end_break"),
+      outletId: z.string().uuid(),
+    })
+    .strict(),
+]);
 
 function unavailable() {
   return Response.json(
@@ -105,6 +129,21 @@ export async function GET(request: Request) {
         ),
       )
       .limit(1);
+    const [activeBreak] = activeSession
+      ? await db
+          .select({
+            id: workBreaks.id,
+            startedAt: workBreaks.startedAt,
+          })
+          .from(workBreaks)
+          .where(
+            and(
+              eq(workBreaks.workSessionId, activeSession.id),
+              isNull(workBreaks.endedAt),
+            ),
+          )
+          .limit(1)
+      : [];
 
     const params = new URL(request.url).searchParams;
     const historyRange = parseDateRange(params.get("from"), params.get("to"));
@@ -157,6 +196,26 @@ export async function GET(request: Request) {
       .offset(pageOffset);
     const hasMoreSessions = sessionRows.length > pageSize;
     const recentSessions = sessionRows.slice(0, pageSize);
+    const breakRows = recentSessions.length
+      ? await db
+          .select({
+            workSessionId: workBreaks.workSessionId,
+            startedAt: workBreaks.startedAt,
+            endedAt: workBreaks.endedAt,
+          })
+          .from(workBreaks)
+          .where(
+            inArray(
+              workBreaks.workSessionId,
+              recentSessions.map((row) => row.id),
+            ),
+          )
+          .orderBy(workBreaks.startedAt)
+      : [];
+    const recentSessionsWithBreaks = recentSessions.map((row) => ({
+      ...row,
+      breaks: breakRows.filter((breakRow) => breakRow.workSessionId === row.id),
+    }));
 
     return Response.json({
       user: {
@@ -166,7 +225,8 @@ export async function GET(request: Request) {
       },
       outlets: assignments,
       activeSession: activeSession ?? null,
-      recentSessions,
+      activeBreak: activeBreak ?? null,
+      recentSessions: recentSessionsWithBreaks,
       historyPage: {
         hasMore: hasMoreSessions,
         nextOffset: hasMoreSessions ? pageOffset + pageSize : null,
@@ -215,6 +275,101 @@ export async function POST(request: Request) {
 
     const input = parsed.data;
     const db = getDb();
+
+    if (input.action === "start_break" || input.action === "end_break") {
+      const now = new Date();
+      const outcome = await db.transaction(async (tx) => {
+        const [openSession] = await tx
+          .select()
+          .from(workSessions)
+          .where(
+            and(
+              eq(workSessions.userId, session.user.id),
+              isNull(workSessions.clockOutAt),
+            ),
+          )
+          .limit(1)
+          .for("update");
+
+        if (!openSession || openSession.outletId !== input.outletId) {
+          return { kind: "no_open_shift" as const };
+        }
+
+        const [openBreak] = await tx
+          .select()
+          .from(workBreaks)
+          .where(
+            and(
+              eq(workBreaks.workSessionId, openSession.id),
+              isNull(workBreaks.endedAt),
+            ),
+          )
+          .limit(1)
+          .for("update");
+
+        if (input.action === "start_break") {
+          if (openBreak) return { kind: "already_on_break" as const };
+          const [created] = await tx
+            .insert(workBreaks)
+            .values({ workSessionId: openSession.id, startedAt: now })
+            .returning();
+          await tx.insert(auditEvents).values({
+            actorId: session.user.id,
+            action: "start_break",
+            entityType: "work_break",
+            entityId: created.id,
+            newValues: {
+              workSessionId: openSession.id,
+              startedAt: now.toISOString(),
+            },
+          });
+          return { kind: "break_started" as const, breakRecord: created };
+        }
+
+        if (!openBreak) return { kind: "not_on_break" as const };
+        const [updated] = await tx
+          .update(workBreaks)
+          .set({ endedAt: now, updatedAt: now })
+          .where(eq(workBreaks.id, openBreak.id))
+          .returning();
+        await tx.insert(auditEvents).values({
+          actorId: session.user.id,
+          action: "end_break",
+          entityType: "work_break",
+          entityId: updated.id,
+          previousValues: { endedAt: null },
+          newValues: { endedAt: now.toISOString() },
+        });
+        return { kind: "break_ended" as const, breakRecord: updated };
+      });
+
+      if (outcome.kind === "no_open_shift") {
+        return Response.json(
+          { error: "No open shift exists at this outlet." },
+          { status: 409 },
+        );
+      }
+      if (outcome.kind === "already_on_break") {
+        return Response.json(
+          { error: "This shift already has an open break." },
+          { status: 409 },
+        );
+      }
+      if (outcome.kind === "not_on_break") {
+        return Response.json(
+          { error: "This shift has no open break to end." },
+          { status: 409 },
+        );
+      }
+      return Response.json({
+        break: {
+          id: outcome.breakRecord.id,
+          startedAt: outcome.breakRecord.startedAt,
+          endedAt: outcome.breakRecord.endedAt,
+        },
+      });
+    }
+
     const [assignment] =
       session.user.accountType === "super_admin"
         ? await db
@@ -368,9 +523,22 @@ export async function POST(request: Request) {
             isNull(workSessions.clockOutAt),
           ),
         )
-        .limit(1);
+        .limit(1)
+        .for("update");
 
       if (!openSession || openSession.outletId !== input.outletId) return null;
+
+      const [openBreak] = await tx
+        .select({ id: workBreaks.id })
+        .from(workBreaks)
+        .where(
+          and(
+            eq(workBreaks.workSessionId, openSession.id),
+            isNull(workBreaks.endedAt),
+          ),
+        )
+        .limit(1);
+      if (openBreak) return { kind: "open_break" as const };
 
       const [updated] = await tx
         .update(workSessions)
@@ -415,6 +583,12 @@ export async function POST(request: Request) {
               ? "You already have an open shift."
               : "No open shift exists at this outlet.",
         },
+        { status: 409 },
+      );
+    }
+    if ("kind" in result) {
+      return Response.json(
+        { error: "End your break before clocking out." },
         { status: 409 },
       );
     }

@@ -7,6 +7,7 @@ import {
   type WorkspaceNavigationGroup,
 } from "@/app/workspace-shell";
 import { authClient } from "@/lib/auth-client";
+import { getCompletedBreakMinutes, getWorkedMinutes } from "@/lib/work-breaks";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -28,6 +29,7 @@ type HistoryShift = {
   timezone: string;
   clockInAt: string;
   clockOutAt: string | null;
+  breaks: { startedAt: string; endedAt: string | null }[];
 };
 
 type HistoryRequest = {
@@ -74,12 +76,18 @@ function formatDate(
   }).format(new Date(value));
 }
 
-function formatDuration(start: string, end: string) {
-  const minutes = Math.max(
-    0,
-    Math.floor((new Date(end).getTime() - new Date(start).getTime()) / 60_000),
-  );
+function formatMinutes(minutes: number) {
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
+}
+
+function getGrossMinutes(clockInAt: string, clockOutAt: string | null) {
+  if (!clockOutAt) return null;
+  return Math.max(
+    0,
+    Math.floor(
+      (new Date(clockOutAt).getTime() - new Date(clockInAt).getTime()) / 60_000,
+    ),
+  );
 }
 
 async function loadHistoryPage(month: string, offset: number) {
@@ -253,16 +261,12 @@ export default function ClockHistoryPage() {
     (request) => !selectedOutletId || request.outletId === selectedOutletId,
   );
   const monthHours = visibleShifts.reduce((total, shift) => {
-    if (!shift.clockOutAt) return total;
-    const minutes = Math.max(
-      0,
-      Math.floor(
-        (new Date(shift.clockOutAt).getTime() -
-          new Date(shift.clockInAt).getTime()) /
-          60_000,
-      ),
+    const minutes = getWorkedMinutes(
+      shift.clockInAt,
+      shift.clockOutAt,
+      shift.breaks,
     );
-    return total + minutes;
+    return total + (minutes ?? 0);
   }, 0);
 
   return (
@@ -347,11 +351,8 @@ export default function ClockHistoryPage() {
           <section className="history-shifts" aria-label="Recorded shifts">
             <div className="history-month-summary">
               <span>{outlet?.name ?? "All outlets"}</span>
-              <strong>
-                {Math.floor(monthHours / 60)}h{" "}
-                {String(monthHours % 60).padStart(2, "0")}m
-              </strong>
-              <small>hours in loaded shifts</small>
+              <strong>{formatMinutes(monthHours)}</strong>
+              <small>worked hours in loaded shifts</small>
             </div>
             {visibleShifts.map((shift) => (
               <article className="history-shift-row" key={shift.id}>
@@ -384,9 +385,29 @@ export default function ClockHistoryPage() {
                   </span>
                 </div>
                 <strong className="history-shift-duration">
-                  {shift.clockOutAt
-                    ? formatDuration(shift.clockInAt, shift.clockOutAt)
+                  {getWorkedMinutes(
+                    shift.clockInAt,
+                    shift.clockOutAt,
+                    shift.breaks,
+                  ) !== null
+                    ? formatMinutes(
+                        getWorkedMinutes(
+                          shift.clockInAt,
+                          shift.clockOutAt,
+                          shift.breaks,
+                        ) ?? 0,
+                      )
                     : "In progress"}
+                  <small>
+                    {shift.clockOutAt
+                      ? `${formatMinutes(
+                          getGrossMinutes(shift.clockInAt, shift.clockOutAt) ??
+                            0,
+                        )} gross · `
+                      : ""}
+                    {formatMinutes(getCompletedBreakMinutes(shift.breaks))}{" "}
+                    unpaid break
+                  </small>
                 </strong>
                 <button
                   className="history-row-action"

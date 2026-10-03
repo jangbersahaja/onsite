@@ -13,6 +13,7 @@ type TeamMember = {
   accountType: "super_admin" | "admin" | "staff";
   canAccessClock: boolean;
   canAccessBackoffice: boolean;
+  canManageAccess: boolean;
   outletId: string;
   outletName: string;
   role: "manager" | "supervisor" | "staff";
@@ -24,6 +25,9 @@ type TeamPerson = {
   name: string;
   email: string;
   assignments: TeamMember[];
+  canAccessClock: boolean;
+  canAccessBackoffice: boolean;
+  canManageAccess: boolean;
   canReset: boolean;
 };
 
@@ -82,6 +86,8 @@ function formatExpiry(value: string) {
   }).format(new Date(value));
 }
 
+const roleOrder = { manager: 0, supervisor: 1, staff: 2 } as const;
+
 export default function TeamPage() {
   const [data, setData] = useState<TeamData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -104,6 +110,7 @@ export default function TeamPage() {
   const [editingOutletId, setEditingOutletId] = useState("");
   const [assignmentKey, setAssignmentKey] = useState("");
   const [deviceActionId, setDeviceActionId] = useState("");
+  const [permissionUserId, setPermissionUserId] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -304,6 +311,43 @@ export default function TeamPage() {
     }
   }
 
+  async function handleAccessChange(
+    person: TeamPerson,
+    permission: "canAccessClock" | "canAccessBackoffice",
+    enabled: boolean,
+  ) {
+    if (permissionUserId) return;
+    setPermissionUserId(person.userId);
+    setMessage("");
+    try {
+      const response = await fetch("/api/team/access", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: person.userId,
+          canAccessClock:
+            permission === "canAccessClock" ? enabled : person.canAccessClock,
+          canAccessBackoffice:
+            permission === "canAccessBackoffice"
+              ? enabled
+              : person.canAccessBackoffice,
+        }),
+      });
+      const body = await response.json();
+      if (!response.ok)
+        throw new Error(body.error ?? "Could not update app access.");
+      setData(await loadTeamData());
+      setMessage(`App access updated for ${person.name}.`);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Could not update app access.",
+      );
+      setData(await loadTeamData());
+    } finally {
+      setPermissionUserId("");
+    }
+  }
+
   async function handleReset(userId: string, memberEmail: string) {
     if (resettingUserId) return;
     setResettingUserId(userId);
@@ -435,17 +479,30 @@ export default function TeamPage() {
     if (person) {
       person.assignments.push(member);
       person.canReset ||= member.canReset;
+      person.canManageAccess ||= member.canManageAccess;
     } else {
       peopleById.set(member.userId, {
         userId: member.userId,
         name: member.name,
         email: member.email,
         assignments: [member],
+        canAccessClock: member.canAccessClock,
+        canAccessBackoffice: member.canAccessBackoffice,
+        canManageAccess: member.canManageAccess,
         canReset: member.canReset,
       });
     }
   }
   const visiblePeople = Array.from(peopleById.values());
+  visiblePeople.sort((left, right) => {
+    const leftRole = Math.min(
+      ...left.assignments.map(({ role }) => roleOrder[role]),
+    );
+    const rightRole = Math.min(
+      ...right.assignments.map(({ role }) => roleOrder[role]),
+    );
+    return leftRole - rightRole || left.name.localeCompare(right.name);
+  });
   const staffMembers = Array.from(
     new Map(
       data.members
@@ -752,9 +809,7 @@ export default function TeamPage() {
             <header className="dialog-header">
               <div>
                 <p className="eyebrow">NEW ACCESS</p>
-                <h2 id="invite-team-title">
-                  Invite a person
-                </h2>
+                <h2 id="invite-team-title">Invite a person</h2>
               </div>
               <button
                 className="dialog-close"
@@ -785,7 +840,8 @@ export default function TeamPage() {
                     <select
                       value={inviteType}
                       onChange={(event) => {
-                        const nextType = event.target.value as typeof inviteType;
+                        const nextType = event.target
+                          .value as typeof inviteType;
                         setInviteType(nextType);
                         setCanAccessClock(nextType === "staff");
                         setCanAccessBackoffice(true);
@@ -802,7 +858,9 @@ export default function TeamPage() {
                     <input
                       type="checkbox"
                       checked={canAccessClock}
-                      onChange={(event) => setCanAccessClock(event.target.checked)}
+                      onChange={(event) =>
+                        setCanAccessClock(event.target.checked)
+                      }
                     />
                     Clock
                   </label>
@@ -810,7 +868,9 @@ export default function TeamPage() {
                     <input
                       type="checkbox"
                       checked={canAccessBackoffice}
-                      onChange={(event) => setCanAccessBackoffice(event.target.checked)}
+                      onChange={(event) =>
+                        setCanAccessBackoffice(event.target.checked)
+                      }
                     />
                     Backoffice
                   </label>
@@ -920,6 +980,7 @@ export default function TeamPage() {
                 <tr>
                   <th>PERSON</th>
                   <th>OUTLET ACCESS</th>
+                  <th>APP ACCESS</th>
                   <th>ACCOUNT</th>
                 </tr>
               </thead>
@@ -944,6 +1005,50 @@ export default function TeamPage() {
                       </div>
                     </td>
                     <td>
+                      <div className="team-permission-options">
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={person.canAccessClock}
+                            disabled={
+                              !person.canManageAccess ||
+                              permissionUserId === person.userId ||
+                              (person.canAccessClock &&
+                                !person.canAccessBackoffice)
+                            }
+                            onChange={(event) =>
+                              void handleAccessChange(
+                                person,
+                                "canAccessClock",
+                                event.target.checked,
+                              )
+                            }
+                          />
+                          Clock
+                        </label>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={person.canAccessBackoffice}
+                            disabled={
+                              !person.canManageAccess ||
+                              permissionUserId === person.userId ||
+                              (person.canAccessBackoffice &&
+                                !person.canAccessClock)
+                            }
+                            onChange={(event) =>
+                              void handleAccessChange(
+                                person,
+                                "canAccessBackoffice",
+                                event.target.checked,
+                              )
+                            }
+                          />
+                          Backoffice
+                        </label>
+                      </div>
+                    </td>
+                    <td>
                       {person.canReset && (
                         <button
                           className="reset-link-button"
@@ -963,7 +1068,7 @@ export default function TeamPage() {
                 ))}
                 {!visiblePeople.length && (
                   <tr>
-                    <td colSpan={3} className="empty-table">
+                    <td colSpan={4} className="empty-table">
                       No team members found.
                     </td>
                   </tr>
@@ -1132,12 +1237,14 @@ export default function TeamPage() {
               <div className="pending-invite-row" key={invitation.id}>
                 <strong>{invitation.email}</strong>
                 <span>
-                  {invitation.accountType} · {[
+                  {invitation.accountType} ·{" "}
+                  {[
                     invitation.canAccessClock && "Clock",
                     invitation.canAccessBackoffice && "Backoffice",
                   ]
                     .filter(Boolean)
-                    .join(" + ")} · {invitation.outletNames.join(", ") || "No outlets yet"}
+                    .join(" + ")}{" "}
+                  · {invitation.outletNames.join(", ") || "No outlets yet"}
                 </span>
                 <small>Expires {formatExpiry(invitation.expiresAt)}</small>
                 <button
