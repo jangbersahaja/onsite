@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -53,8 +54,14 @@ export function SignInForm() {
     <main className="auth-screen">
       <section className="auth-panel" aria-labelledby="sign-in-title">
         <Link className="brand-lockup auth-brand" href="/">
-          <span className="brand-mark">S</span>
-          <span>shiftline</span>
+          <Image
+            className="brand-mark"
+            src="/onsite%20logo.png"
+            alt=""
+            width={128}
+            height={128}
+          />
+          <span>OnSITE</span>
         </Link>
         <p className="eyebrow">TEAM ACCESS</p>
         <h1 id="sign-in-title">Welcome back.</h1>

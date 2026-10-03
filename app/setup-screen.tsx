@@ -1,8 +1,16 @@
+import Image from "next/image";
+
 export function SetupScreen() {
   return (
     <main className="setup-screen">
-      <div className="setup-mark">S</div>
-      <p className="eyebrow">SHIFTLINE SETUP</p>
+      <Image
+        className="setup-mark"
+        src="/onsite%20logo.png"
+        alt=""
+        width={128}
+        height={128}
+      />
+      <p className="eyebrow">OnSITE SETUP</p>
       <h1>Connect your workspace.</h1>
       <p className="setup-copy">
         Add your Postgres database URL to <code>.env.local</code>, then run the

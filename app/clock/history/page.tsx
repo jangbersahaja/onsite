@@ -406,7 +406,7 @@ export default function ClockHistoryPage() {
                         )} gross · `
                       : ""}
                     {formatMinutes(getCompletedBreakMinutes(shift.breaks))}{" "}
-                    unpaid break
+                    break
                   </small>
                 </strong>
                 <button

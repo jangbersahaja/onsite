@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -44,8 +45,14 @@ export function ResetPasswordForm({ token }: { token: string }) {
     <main className="auth-screen">
       <section className="auth-panel" aria-labelledby="reset-title">
         <Link className="brand-lockup auth-brand" href="/">
-          <span className="brand-mark">S</span>
-          <span>shiftline</span>
+          <Image
+            className="brand-mark"
+            src="/onsite%20logo.png"
+            alt=""
+            width={128}
+            height={128}
+          />
+          <span>OnSITE</span>
         </Link>
         <p className="eyebrow">ACCOUNT ACCESS</p>
         <h1 id="reset-title">Set a new password.</h1>

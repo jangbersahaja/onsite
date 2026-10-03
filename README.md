@@ -1,6 +1,6 @@
-# Shiftline
+# OnSITE
 
-Shiftline is a multi-outlet workforce app built with Next.js, Drizzle, and Postgres. The Clock workspace handles shifts, history, and correction requests. The Backoffice workspace handles team access, outlet operations, device approvals, timesheets, and correction reviews. Users can sign in with a username or email address.
+OnSITE is a multi-outlet workforce app built with Next.js, Drizzle, and Postgres. The Clock workspace handles shifts, history, and correction requests. The Backoffice workspace handles team access, outlet operations, device approvals, timesheets, and correction reviews. Users can sign in with a username or email address.
 
 ## Local setup
 

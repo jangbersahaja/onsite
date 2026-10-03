@@ -1,6 +1,7 @@
 "use client";
 
 import { authClient } from "@/lib/auth-client";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
@@ -139,9 +140,15 @@ export function WorkspaceShell({
         className={`side-rail${isMobileNavOpen ? " is-open" : ""}`}
         id="workspace-navigation"
       >
-        <Link className="brand-lockup" href="/" aria-label="Shiftline home">
-          <span className="brand-mark">S</span>
-          <span>shiftline</span>
+        <Link className="brand-lockup" href="/" aria-label="OnSITE home">
+          <Image
+            className="brand-mark"
+            src="/onsite%20logo.png"
+            alt=""
+            width={128}
+            height={128}
+          />
+          <span>OnSITE</span>
         </Link>
 
         <p className="workspace-label">WORKSPACE</p>

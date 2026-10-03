@@ -25,7 +25,7 @@ test("requests a fresh high-accuracy location and returns clock evidence", async
       assert.deepEqual(options, {
         enableHighAccuracy: true,
         maximumAge: 0,
-        timeout: 15_000,
+        timeout: 30_000,
       });
       success(position());
     },

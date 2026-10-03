@@ -128,7 +128,7 @@ export async function GET(request: Request) {
             "Clock in (outlet time)",
             "Clock out (outlet time)",
             "Gross hours",
-            "Unpaid break minutes",
+            "Break minutes",
             "Worked hours",
             "Punch source / adjustment",
           ],

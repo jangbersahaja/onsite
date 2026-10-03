@@ -2,13 +2,13 @@ import type { LocationFix } from "./geofence";
 
 export function requestCurrentLocation(
   geolocation: Pick<Geolocation, "getCurrentPosition">,
-  timeoutMilliseconds = 15_000,
+  timeoutMilliseconds = 30_000,
 ): Promise<LocationFix> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => {
       reject(
         new Error(
-          "Location check timed out. Check your browser's location permission, move near a window, then try again.",
+          "Location check timed out after 30 seconds. Check your browser's location permission, move near a window, then try again.",
         ),
       );
     }, timeoutMilliseconds);

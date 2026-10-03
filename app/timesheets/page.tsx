@@ -356,7 +356,7 @@ export default function TimesheetsPage() {
                 </label>
                 <div className="timesheet-break-editor">
                   <div className="timesheet-break-heading">
-                    <strong>Unpaid breaks</strong>
+                    <strong>Breaks</strong>
                     <button
                       className="team-secondary-action"
                       type="button"
@@ -465,7 +465,7 @@ export default function TimesheetsPage() {
                   <th>CLOCK IN</th>
                   <th>CLOCK OUT</th>
                   <th>GROSS</th>
-                  <th>UNPAID BREAK</th>
+                  <th>BREAK</th>
                   <th>WORKED</th>
                   <th>SOURCE</th>
                   <th>

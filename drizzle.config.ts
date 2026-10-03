@@ -7,6 +7,6 @@ export default defineConfig({
   dbCredentials: {
     url:
       process.env.DATABASE_URL ??
-      "postgresql://user:pass@localhost:5432/shiftline",
+      "postgresql://user:pass@localhost:5432/onsite",
   },
 });

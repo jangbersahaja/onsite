@@ -116,6 +116,17 @@ async function loadStaffDeviceStatus() {
   return body as StaffDeviceStatus;
 }
 
+function formatMinutes(minutes: number) {
+  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
+}
+
+function getElapsedMinutes(start: string, end: Date | string) {
+  return Math.max(
+    0,
+    Math.floor((new Date(end).getTime() - new Date(start).getTime()) / 60_000),
+  );
+}
+
 function formatDuration(
   start: string,
   end: Date | string,
@@ -131,7 +142,7 @@ function formatDuration(
     Math.floor((endAt.getTime() - new Date(start).getTime()) / 60_000) -
       getCompletedBreakMinutes(adjustedBreaks),
   );
-  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
+  return formatMinutes(minutes);
 }
 
 function formatDate(
@@ -177,7 +188,8 @@ export default function Home() {
   } | null>(null);
   const activeSession = clockData?.activeSession ?? null;
   const isClockedIn = Boolean(activeSession);
-  const isOnBreak = Boolean(clockData?.activeBreak);
+  const activeBreak = clockData?.activeBreak ?? null;
+  const isOnBreak = Boolean(activeBreak);
   const activeSessionBreaks =
     clockData?.recentSessions.find((record) => record.id === activeSession?.id)
       ?.breaks ?? [];
@@ -322,7 +334,7 @@ export default function Home() {
   if (isConfigured === null || authSession.isPending) {
     return (
       <main className="loading-screen" aria-live="polite">
-        Loading Shiftline…
+        Loading OnSITE…
       </main>
     );
   }
@@ -458,7 +470,9 @@ export default function Home() {
       if (!response.ok) throw new Error(result.error ?? "Break action failed.");
       setClockData(await loadClockData());
       setActionMessage(
-        isOnBreak ? "Break ended and recorded." : "Break started and recorded.",
+        isOnBreak
+          ? "Break ended and recorded. Your shift has resumed."
+          : "Break started and recorded.",
       );
     } catch (error) {
       setActionMessage(
@@ -548,7 +562,7 @@ export default function Home() {
                 <span className="live-indicator">
                   <i />
                   {isOnBreak
-                    ? "ON UNPAID BREAK"
+                    ? "ON BREAK"
                     : isClockedIn
                       ? "SHIFT IN PROGRESS"
                       : "READY TO START"}
@@ -588,37 +602,42 @@ export default function Home() {
                   </small>
                 </div>
               </div>
-              <button
-                className={`clock-action${isClockedIn ? " is-clocked-in" : ""}`}
-                type="button"
-                onClick={() => void handleClockAction()}
-                disabled={
-                  !selectedOutlet || isCheckingLocation || isLoadingData
-                }
-              >
-                <span className="clock-action-icon" aria-hidden="true">
-                  ↗
-                </span>
-                {isCheckingLocation
-                  ? "Checking location…"
-                  : isClockedIn
-                    ? "Clock out"
-                    : "Clock in"}
-              </button>
-              {isClockedIn && (
+              <div className="clock-actions">
                 <button
-                  className="clock-break-action team-secondary-action"
+                  className={`clock-action${isClockedIn && !isOnBreak ? " is-clocked-in" : ""}`}
                   type="button"
-                  onClick={() => void handleBreakAction()}
-                  disabled={isCheckingLocation || isLoadingData}
+                  onClick={() =>
+                    void (isOnBreak ? handleBreakAction() : handleClockAction())
+                  }
+                  aria-busy={isCheckingLocation}
+                  disabled={
+                    !selectedOutlet || isCheckingLocation || isLoadingData
+                  }
                 >
+                  <span className="clock-action-icon" aria-hidden="true">
+                    {isOnBreak ? "▶" : isClockedIn ? "↗" : "↘"}
+                  </span>
                   {isCheckingLocation
-                    ? "Saving break…"
+                    ? isOnBreak
+                      ? "Resuming shift…"
+                      : "Checking location…"
                     : isOnBreak
-                      ? "End break"
-                      : "Start break"}
+                      ? "Resume shift"
+                      : isClockedIn
+                        ? "Clock out"
+                        : "Clock in"}
                 </button>
-              )}
+                {isClockedIn && !isOnBreak && (
+                  <button
+                    className="clock-break-action team-secondary-action"
+                    type="button"
+                    onClick={() => void handleBreakAction()}
+                    disabled={isCheckingLocation || isLoadingData}
+                  >
+                    {isCheckingLocation ? "Saving break…" : "Start break"}
+                  </button>
+                )}
+              </div>
               {selectedOutlet?.role === "staff" &&
                 staffDeviceStatus?.required && (
                   <div>
@@ -760,7 +779,7 @@ export default function Home() {
               </p>
               <h2>
                 {isOnBreak
-                  ? "You’re on an unpaid break"
+                  ? "You’re on break"
                   : isClockedIn
                     ? "You’re on the clock"
                     : "Not clocked in"}
@@ -774,6 +793,14 @@ export default function Home() {
                     )
                   : "Ready when you are"}
               </strong>
+              {activeBreak && currentTime && (
+                <small className="shift-state-break-duration">
+                  Current break ·{" "}
+                  {formatMinutes(
+                    getElapsedMinutes(activeBreak.startedAt, currentTime),
+                  )}
+                </small>
+              )}
               <p>
                 {isClockedIn && clockedInAt && selectedOutlet
                   ? `Started at ${formatDate(
@@ -860,6 +887,20 @@ export default function Home() {
                           record.breaks,
                         )
                       : "—"}
+                  <small className="clock-recent-break-duration">
+                    {formatMinutes(
+                      getCompletedBreakMinutes(record.breaks) +
+                        (record.id === activeSession?.id &&
+                        activeBreak &&
+                        currentTime
+                          ? getElapsedMinutes(
+                              activeBreak.startedAt,
+                              currentTime,
+                            )
+                          : 0),
+                    )}{" "}
+                    break
+                  </small>
                 </strong>
               </article>
             ))}
