@@ -851,10 +851,10 @@ h2 {
     display: block;
   }
   .side-rail {
-    inset: 0 auto 0 0;
+    inset: 58px auto 0 0;
     z-index: 5;
     width: min(84vw, 310px);
-    height: 100dvh;
+    height: calc(100dvh - 58px);
     transform: translateX(-102%);
     visibility: hidden;
     border-right: 1px solid var(--line);
@@ -869,7 +869,7 @@ h2 {
   }
   .mobile-nav-backdrop {
     position: fixed;
-    inset: 0;
+    inset: 58px 0 0;
     z-index: 4;
     display: block;
     border: 0;
@@ -1954,6 +1954,8 @@ h2 {
 }
 .sr-only {
   position: absolute;
+  top: 0;
+  left: 0;
   width: 1px;
   height: 1px;
   overflow: hidden;
@@ -2349,5 +2351,134 @@ h2 {
   }
   .dialog-actions > button {
     flex: 1;
+  }
+}
+
+@media (max-width: 760px) {
+  .top-bar {
+    padding-right: max(14px, env(safe-area-inset-right));
+    padding-left: max(14px, env(safe-area-inset-left));
+  }
+  .mobile-nav-toggle {
+    width: 44px;
+    height: 44px;
+  }
+  .page-content,
+  .team-page-content {
+    min-width: 0;
+    padding-right: 20px;
+    padding-left: 20px;
+  }
+  .page-heading {
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .page-heading > :first-child {
+    min-width: 0;
+  }
+  .page-heading h1 {
+    overflow-wrap: anywhere;
+  }
+  .subheading {
+    max-width: 100%;
+  }
+  .date-control {
+    min-height: 40px;
+    flex: none;
+  }
+  .nav-item {
+    min-height: 48px;
+  }
+  .team-heading-actions,
+  .timesheet-heading-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .team-heading-actions > *,
+  .timesheet-heading-actions > * {
+    min-height: 44px;
+  }
+  .outlet-list {
+    grid-template-columns: 1fr;
+  }
+  .activity-table-wrap,
+  .team-table-wrap {
+    max-width: 100%;
+    overscroll-behavior-x: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .workspace-dialog {
+    width: calc(100vw - 24px);
+    max-height: calc(
+      100dvh - 24px - env(safe-area-inset-top) - env(safe-area-inset-bottom)
+    );
+  }
+}
+
+@media (max-width: 600px) {
+  .page-content,
+  .team-page-content {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+  .team-heading-actions,
+  .timesheet-heading-actions {
+    width: 100%;
+  }
+  .timesheet-heading-actions {
+    align-items: stretch;
+    flex-direction: row;
+  }
+  .timesheet-heading-actions > * {
+    flex: 1;
+  }
+  .team-heading-actions {
+    justify-content: flex-start;
+  }
+  .clock-time {
+    font-size: 50px;
+  }
+  .shift-details strong {
+    white-space: normal;
+  }
+  .auth-form input,
+  .team-invite-form input,
+  .team-invite-form select,
+  .timesheet-filters input,
+  .timesheet-filters select,
+  .correction-form input,
+  .correction-form select,
+  .correction-form textarea {
+    min-height: 44px;
+  }
+  .workspace-dialog {
+    width: calc(100vw - 20px);
+    max-height: calc(
+      100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom)
+    );
+  }
+}
+
+@media (max-width: 360px) {
+  .top-bar {
+    gap: 8px;
+  }
+  .breadcrumbs {
+    gap: 5px;
+    font-size: 9px;
+  }
+  .top-avatar {
+    width: 28px;
+    height: 28px;
+  }
+  .page-content,
+  .team-page-content {
+    padding-right: 13px;
+    padding-left: 13px;
+  }
+  .clock-panel {
+    padding-right: 13px;
+    padding-left: 13px;
   }
 }
