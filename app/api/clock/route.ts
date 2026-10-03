@@ -31,7 +31,7 @@ const clockActionSchema = z
 
 function unavailable() {
   return Response.json(
-    { error: "Set DATABASE_URL and BETTER_AUTH_SECRET before using clocking." },
+    { error: "Set DATABASE_URL before using clocking." },
     { status: 503 },
   );
 }
@@ -45,9 +45,14 @@ export async function GET(request: Request) {
     });
     if (!session)
       return Response.json({ error: "Sign in required." }, { status: 401 });
+    if (!session.user.canAccessClock)
+      return Response.json(
+        { error: "Clock access is not enabled." },
+        { status: 403 },
+      );
 
     const db = getDb();
-    const assignments = await db
+    const assignedOutlets = await db
       .select({
         id: outlets.id,
         name: outlets.name,
@@ -67,6 +72,24 @@ export async function GET(request: Request) {
           eq(outlets.isActive, true),
         ),
       );
+    const assignments =
+      session.user.accountType === "super_admin"
+        ? await db
+            .select({
+              id: outlets.id,
+              name: outlets.name,
+              address: outlets.address,
+              latitude: outlets.latitude,
+              longitude: outlets.longitude,
+              radiusMeters: outlets.radiusMeters,
+              timezone: outlets.timezone,
+            })
+            .from(outlets)
+            .where(eq(outlets.isActive, true))
+            .then((rows) =>
+              rows.map((outlet) => ({ ...outlet, role: "manager" as const })),
+            )
+        : assignedOutlets;
 
     const [activeSession] = await db
       .select({
@@ -123,7 +146,6 @@ export async function GET(request: Request) {
         id: session.user.id,
         name: session.user.name,
         email: session.user.email,
-        globalRole: session.user.globalRole,
       },
       outlets: assignments,
       activeSession: activeSession ?? null,
@@ -146,6 +168,11 @@ export async function POST(request: Request) {
     });
     if (!session)
       return Response.json({ error: "Sign in required." }, { status: 401 });
+    if (!session.user.canAccessClock)
+      return Response.json(
+        { error: "Clock access is not enabled." },
+        { status: 403 },
+      );
 
     let rawBody: unknown;
     try {
@@ -167,19 +194,31 @@ export async function POST(request: Request) {
 
     const input = parsed.data;
     const db = getDb();
-    const [assignment] = await db
-      .select({ role: outletMemberships.role, timezone: outlets.timezone })
-      .from(outletMemberships)
-      .innerJoin(outlets, eq(outletMemberships.outletId, outlets.id))
-      .where(
-        and(
-          eq(outletMemberships.userId, session.user.id),
-          eq(outletMemberships.outletId, input.outletId),
-          eq(outletMemberships.isActive, true),
-          eq(outlets.isActive, true),
-        ),
-      )
-      .limit(1);
+    const [assignment] =
+      session.user.accountType === "super_admin"
+        ? await db
+            .select({
+              role: sql<string>`'manager'`.as("role"),
+              timezone: outlets.timezone,
+            })
+            .from(outlets)
+            .where(
+              and(eq(outlets.id, input.outletId), eq(outlets.isActive, true)),
+            )
+            .limit(1)
+        : await db
+            .select({ role: outletMemberships.role, timezone: outlets.timezone })
+            .from(outletMemberships)
+            .innerJoin(outlets, eq(outletMemberships.outletId, outlets.id))
+            .where(
+              and(
+                eq(outletMemberships.userId, session.user.id),
+                eq(outletMemberships.outletId, input.outletId),
+                eq(outletMemberships.isActive, true),
+                eq(outlets.isActive, true),
+              ),
+            )
+            .limit(1);
 
     if (!assignment)
       return Response.json(

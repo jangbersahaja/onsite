@@ -1,6 +1,5 @@
 "use client";
 
-import { authClient } from "@/lib/auth-client";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -16,19 +15,38 @@ export function SignInForm() {
     setIsSubmitting(true);
 
     const formData = new FormData(event.currentTarget);
-    const result = await authClient.signIn.email({
-      email: String(formData.get("email")),
-      password: String(formData.get("password")),
-      callbackURL: "/",
-    });
-
-    setIsSubmitting(false);
-    if (result.error) {
-      setErrorMessage("Email or password was not recognized.");
-      return;
+    try {
+      const response = await fetch("/api/auth/sign-in", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          identifier: formData.get("identifier"),
+          password: formData.get("password"),
+        }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error ?? "Sign-in failed.");
+      const authUser = body.user as {
+        canAccessClock: boolean;
+        canAccessBackoffice: boolean;
+      };
+      window.dispatchEvent(new Event("shiftline-session-changed"));
+      router.replace(
+        authUser.canAccessClock
+          ? "/clock"
+          : authUser.canAccessBackoffice
+            ? "/manage"
+            : "/",
+      );
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Username/email or password was not recognized.",
+      );
+    } finally {
+      setIsSubmitting(false);
     }
-
-    router.replace("/");
   }
 
   return (
@@ -44,11 +62,11 @@ export function SignInForm() {
           Sign in to clock in and review your shifts.
         </p>
         <form className="auth-form" onSubmit={handleSubmit}>
-          <label htmlFor="email">Work email</label>
+          <label htmlFor="identifier">Username or email</label>
           <input
-            id="email"
-            name="email"
-            type="email"
+            id="identifier"
+            name="identifier"
+            type="text"
             autoComplete="username"
             required
           />

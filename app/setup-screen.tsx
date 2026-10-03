@@ -5,9 +5,8 @@ export function SetupScreen() {
       <p className="eyebrow">SHIFTLINE SETUP</p>
       <h1>Connect your workspace.</h1>
       <p className="setup-copy">
-        Add your Neon database URL and a 32-character Better Auth secret to
-        <code>.env.local</code>, then run the database migration and create your
-        first admin.
+        Add your Postgres database URL to <code>.env.local</code>, then run the
+        database migration and create your first admin.
       </p>
       <ol className="setup-steps">
         <li>

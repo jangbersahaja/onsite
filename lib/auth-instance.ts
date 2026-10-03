@@ -1,68 +1,106 @@
-import { authSchema } from "@/db/schema";
+import { session, user } from "@/db/schema";
 import { getDb } from "@/lib/db-client";
-import { storeResetPasswordLink } from "@/lib/reset-password-delivery";
-import { drizzleAdapter } from "@better-auth/drizzle-adapter";
-import { betterAuth } from "better-auth";
-import { nextCookies } from "better-auth/next-js";
+import { hashOneTimeToken } from "@/lib/one-time-token";
+import { and, eq, gt, isNull } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 
-function createAuth(allowSignUp: boolean) {
-  const secret = process.env.BETTER_AUTH_SECRET;
-  if (!secret || secret.length < 32) {
-    throw new Error(
-      "BETTER_AUTH_SECRET must be set to at least 32 characters.",
-    );
+export const sessionCookieName = "shiftline_session";
+const sessionLifetimeSeconds = 60 * 60 * 24 * 30;
+
+function readCookie(headers: Headers, name: string) {
+  const cookies = headers.get("cookie")?.split(";") ?? [];
+  for (const cookie of cookies) {
+    const separator = cookie.indexOf("=");
+    if (separator < 0) continue;
+    if (cookie.slice(0, separator).trim() === name) {
+      return decodeURIComponent(cookie.slice(separator + 1).trim());
+    }
   }
-
-  const baseURL = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
-  return betterAuth({
-    appName: "Shiftline",
-    baseURL,
-    secret,
-    trustedOrigins: [baseURL],
-    database: drizzleAdapter(getDb(), {
-      provider: "pg",
-      schema: authSchema,
-    }),
-    emailAndPassword: {
-      enabled: true,
-      autoSignIn: false,
-      disableSignUp: !allowSignUp,
-      revokeSessionsOnPasswordReset: true,
-      resetPasswordTokenExpiresIn: 30 * 60,
-      sendResetPassword: async ({ url }, request) => {
-        const requestId = request?.headers.get("x-shiftline-reset-delivery");
-        if (requestId) storeResetPasswordLink(requestId, url);
-      },
-    },
-    user: {
-      additionalFields: {
-        globalRole: {
-          type: ["member", "admin"],
-          required: true,
-          defaultValue: "member",
-          input: false,
-        },
-      },
-    },
-    plugins: [nextCookies()],
-  });
+  return null;
 }
 
-type AuthInstance = ReturnType<typeof createAuth>;
-const globalForAuth = globalThis as typeof globalThis & {
-  shiftlineAuth?: AuthInstance;
-  shiftlineBootstrapAuth?: AuthInstance;
-};
+export async function getSession(headers: Headers) {
+  const token = readCookie(headers, sessionCookieName);
+  if (!token) return null;
 
-export function getAuth(options: { allowSignUp?: boolean } = {}) {
-  const allowSignUp = options.allowSignUp === true;
-  const cached = allowSignUp
-    ? globalForAuth.shiftlineBootstrapAuth
-    : globalForAuth.shiftlineAuth;
-  if (cached) return cached;
-  const auth = createAuth(allowSignUp);
+  const [record] = await getDb()
+    .select({
+      id: session.id,
+      expiresAt: session.expiresAt,
+      userId: user.id,
+      name: user.name,
+      username: user.username,
+      email: user.email,
+      accountType: user.accountType,
+      canAccessClock: user.canAccessClock,
+      canAccessBackoffice: user.canAccessBackoffice,
+    })
+    .from(session)
+    .innerJoin(user, eq(session.userId, user.id))
+    .where(
+      and(
+        eq(session.tokenHash, hashOneTimeToken(token)),
+        gt(session.expiresAt, new Date()),
+        isNull(session.revokedAt),
+      ),
+    )
+    .limit(1);
 
-  if (allowSignUp) globalForAuth.shiftlineBootstrapAuth = auth;
-  else globalForAuth.shiftlineAuth = auth;
-  return auth;
+  if (!record) return null;
+  return {
+    session: { id: record.id, expiresAt: record.expiresAt },
+    user: {
+      id: record.userId,
+      name: record.name,
+      username: record.username,
+      email: record.email,
+      accountType: record.accountType,
+      canAccessClock: record.canAccessClock,
+      canAccessBackoffice: record.canAccessBackoffice,
+    },
+  };
+}
+
+export function getAuth() {
+  return {
+    api: {
+      getSession: ({ headers }: { headers: Headers }) => getSession(headers),
+    },
+  };
+}
+
+export async function createSession(userId: string) {
+  const token = randomUUID() + randomUUID();
+  const tokenHash = hashOneTimeToken(token);
+  const expiresAt = new Date(Date.now() + sessionLifetimeSeconds * 1000);
+  const id = randomUUID();
+
+  await getDb().insert(session).values({
+    id,
+    token: tokenHash,
+    tokenHash,
+    userId,
+    expiresAt,
+  });
+
+  return { token, expiresAt };
+}
+
+export function sessionCookie(token: string, maxAge = sessionLifetimeSeconds) {
+  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+  return `${sessionCookieName}=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${maxAge}${secure}`;
+}
+
+export async function revokeSession(headers: Headers) {
+  const token = readCookie(headers, sessionCookieName);
+  if (!token) return;
+  await getDb()
+    .update(session)
+    .set({ revokedAt: new Date(), updatedAt: new Date() })
+    .where(
+      and(
+        eq(session.tokenHash, hashOneTimeToken(token)),
+        isNull(session.revokedAt),
+      ),
+    );
 }

@@ -1,4 +1,9 @@
-import { auditEvents, invitations, user } from "@/db/schema";
+import {
+  auditEvents,
+  invitationOutlets,
+  invitations,
+  user,
+} from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
@@ -10,8 +15,10 @@ import { z } from "zod";
 const invitationSchema = z
   .object({
     email: z.email().transform((email) => email.trim().toLowerCase()),
-    role: z.enum(["manager", "supervisor", "staff"]),
-    outletId: z.string().uuid(),
+    accountType: z.enum(["admin", "staff"]),
+    canAccessClock: z.boolean(),
+    canAccessBackoffice: z.boolean(),
+    outletIds: z.array(z.string().uuid()).max(50),
   })
   .strict();
 
@@ -52,19 +59,31 @@ export async function POST(request: Request) {
     const access = await getTeamAccess(session.user.id);
     if (!access)
       return Response.json({ error: "Team access denied." }, { status: 403 });
-    if (!access.outletIds.includes(input.outletId)) {
+    if (!input.canAccessClock && !input.canAccessBackoffice) {
       return Response.json(
-        { error: "You cannot manage this outlet." },
+        { error: "At least one app access grant is required." },
+        { status: 400 },
+      );
+    }
+    if (input.accountType === "admin" && !access.isSuperAdmin) {
+      return Response.json(
+        { error: "Only the super admin can invite admins." },
         { status: 403 },
       );
     }
-    if (access.isAdmin ? input.role !== "manager" : input.role === "manager") {
+    if (input.accountType === "admin" && !input.canAccessBackoffice) {
       return Response.json(
-        {
-          error: access.isAdmin
-            ? "Admins invite managers."
-            : "Managers invite staff or supervisors.",
-        },
+        { error: "Admins must have Backoffice access." },
+        { status: 400 },
+      );
+    }
+    if (
+      input.accountType === "staff" &&
+      (!input.outletIds.length ||
+        input.outletIds.some((outletId) => !access.outletIds.includes(outletId)))
+    ) {
+      return Response.json(
+        { error: "Staff invitations require outlets you can manage." },
         { status: 403 },
       );
     }
@@ -92,7 +111,6 @@ export async function POST(request: Request) {
         .where(
           and(
             eq(invitations.email, input.email),
-            eq(invitations.outletId, input.outletId),
             isNull(invitations.acceptedAt),
             isNull(invitations.revokedAt),
           ),
@@ -102,13 +120,25 @@ export async function POST(request: Request) {
         .insert(invitations)
         .values({
           email: input.email,
-          role: input.role,
-          outletId: input.outletId,
+          accountType: input.accountType,
+          canAccessClock: input.canAccessClock,
+          canAccessBackoffice: input.canAccessBackoffice,
+          role: input.accountType === "admin" ? "manager" : "staff",
+          outletId: input.outletIds[0] ?? null,
           tokenHash,
           invitedBy: session.user.id,
           expiresAt,
         })
         .returning({ id: invitations.id });
+
+      if (input.outletIds.length) {
+        await tx.insert(invitationOutlets).values(
+          input.outletIds.map((outletId) => ({
+            invitationId: created.id,
+            outletId,
+          })),
+        );
+      }
 
       await tx.insert(auditEvents).values({
         actorId: session.user.id,
@@ -117,8 +147,10 @@ export async function POST(request: Request) {
         entityId: created.id,
         newValues: {
           email: input.email,
-          role: input.role,
-          outletId: input.outletId,
+          accountType: input.accountType,
+          canAccessClock: input.canAccessClock,
+          canAccessBackoffice: input.canAccessBackoffice,
+          outletIds: input.outletIds,
           expiresAt: expiresAt.toISOString(),
         },
       });
@@ -126,10 +158,7 @@ export async function POST(request: Request) {
       return created;
     });
 
-    const inviteUrl = new URL(
-      "/invite",
-      process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
-    );
+    const inviteUrl = new URL("/invite", request.url);
     inviteUrl.searchParams.set("token", token);
 
     return Response.json(

@@ -1,8 +1,9 @@
 import { loadEnvConfig } from "@next/env";
-import { eq } from "drizzle-orm";
+import { sql } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
 import { auditEvents, outlets, user } from "../db/schema";
-import { getAuth } from "../lib/auth-instance";
 import { getDb } from "../lib/db-client";
+import { hashPassword } from "../lib/password";
 
 loadEnvConfig(process.cwd());
 
@@ -16,17 +17,45 @@ async function main() {
 
   const name = required("BOOTSTRAP_ADMIN_NAME");
   const email = required("BOOTSTRAP_ADMIN_EMAIL").toLowerCase();
+  const username =
+    process.env.BOOTSTRAP_ADMIN_USERNAME?.trim().toLowerCase() ??
+    email.split("@")[0];
   const password = required("BOOTSTRAP_ADMIN_PASSWORD");
-  const outletName = required("BOOTSTRAP_OUTLET_NAME");
-  const address = required("BOOTSTRAP_OUTLET_ADDRESS");
-  const latitude = Number(required("BOOTSTRAP_OUTLET_LATITUDE"));
-  const longitude = Number(required("BOOTSTRAP_OUTLET_LONGITUDE"));
-  const timezone = required("BOOTSTRAP_OUTLET_TIMEZONE");
+  const outletValues = [
+    process.env.BOOTSTRAP_OUTLET_NAME?.trim(),
+    process.env.BOOTSTRAP_OUTLET_ADDRESS?.trim(),
+    process.env.BOOTSTRAP_OUTLET_LATITUDE?.trim(),
+    process.env.BOOTSTRAP_OUTLET_LONGITUDE?.trim(),
+    process.env.BOOTSTRAP_OUTLET_TIMEZONE?.trim(),
+  ];
+  const hasOutletDetails = outletValues.some(Boolean);
+  if (hasOutletDetails && outletValues.some((value) => !value)) {
+    throw new Error(
+      "Set all BOOTSTRAP_OUTLET_* values or leave them all empty.",
+    );
+  }
 
-  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+  const [outletName, address, latitudeValue, longitudeValue, timezone] =
+    outletValues;
+  const latitude = latitudeValue ? Number(latitudeValue) : undefined;
+  const longitude = longitudeValue ? Number(longitudeValue) : undefined;
+
+  if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
+    throw new Error(
+      "BOOTSTRAP_ADMIN_USERNAME must be 3-32 letters, numbers, dots, dashes, or underscores.",
+    );
+  }
+
+  if (
+    latitude !== undefined &&
+    (!Number.isFinite(latitude) || latitude < -90 || latitude > 90)
+  ) {
     throw new Error("BOOTSTRAP_OUTLET_LATITUDE must be between -90 and 90.");
   }
-  if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+  if (
+    longitude !== undefined &&
+    (!Number.isFinite(longitude) || longitude < -180 || longitude > 180)
+  ) {
     throw new Error("BOOTSTRAP_OUTLET_LONGITUDE must be between -180 and 180.");
   }
   if (password.length < 12) {
@@ -34,48 +63,61 @@ async function main() {
       "BOOTSTRAP_ADMIN_PASSWORD must contain at least 12 characters.",
     );
   }
-  new Intl.DateTimeFormat("en", { timeZone: timezone });
+  if (timezone) new Intl.DateTimeFormat("en", { timeZone: timezone });
 
   const db = getDb();
   const [existingUser] = await db
-    .select({ id: user.id, globalRole: user.globalRole })
+    .select({ id: user.id })
     .from(user)
-    .where(eq(user.email, email))
+    .where(sql`lower(${user.email}) = ${email}`)
     .limit(1);
 
   if (existingUser) {
-    throw new Error(
-      existingUser.globalRole === "admin"
-        ? "This admin account already exists; bootstrap is a one-time setup command."
-        : "This email already belongs to an account; choose a different bootstrap email.",
-    );
+    throw new Error("This email already belongs to an account.");
   }
 
-  const registration = await getAuth({ allowSignUp: true }).api.signUpEmail({
-    body: { name, email, password },
-  });
-  const adminId = registration.user.id;
+  const adminId = randomUUID();
   const now = new Date();
+  const passwordHash = await hashPassword(password);
 
   await db.transaction(async (tx) => {
-    await tx
-      .update(user)
-      .set({ globalRole: "admin", updatedAt: now })
-      .where(eq(user.id, adminId));
-    const [outlet] = await tx
-      .insert(outlets)
-      .values({ name: outletName, address, latitude, longitude, timezone })
-      .returning({ id: outlets.id });
+    await tx.insert(user).values({
+      id: adminId,
+      name,
+      username,
+      email,
+      passwordHash,
+      accountType: "super_admin",
+      canAccessClock: false,
+      canAccessBackoffice: true,
+      updatedAt: now,
+    });
+
+    const [outlet] = hasOutletDetails
+      ? await tx
+          .insert(outlets)
+          .values({
+            name: outletName!,
+            address: address!,
+            latitude: latitude!,
+            longitude: longitude!,
+            timezone: timezone!,
+          })
+          .returning({ id: outlets.id, name: outlets.name })
+      : [undefined];
+
     await tx.insert(auditEvents).values({
       actorId: adminId,
       action: "bootstrap_admin",
-      entityType: "outlet",
-      entityId: outlet.id,
-      newValues: { name, email },
+      entityType: outlet ? "outlet" : "user",
+      entityId: outlet?.id ?? adminId,
+      newValues: { name, username, email, outletName: outlet?.name },
     });
   });
 
-  console.info(`Created super admin ${email} and outlet ${outletName}.`);
+  console.info(
+    `Created super admin ${email}${outletName ? ` and outlet ${outletName}` : ""}.`,
+  );
 }
 
 main().catch((error: unknown) => {

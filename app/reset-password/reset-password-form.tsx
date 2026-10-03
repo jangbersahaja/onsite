@@ -1,6 +1,5 @@
 "use client";
 
-import { authClient } from "@/lib/auth-client";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -20,13 +19,25 @@ export function ResetPasswordForm({ token }: { token: string }) {
     }
 
     setIsSubmitting(true);
-    const result = await authClient.resetPassword({ newPassword, token });
-    setIsSubmitting(false);
-    if (result.error) {
-      setMessage("This reset link is invalid, expired, or already used.");
-      return;
+    try {
+      const response = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: newPassword, token }),
+      });
+      const body = await response.json();
+      if (!response.ok)
+        throw new Error(body.error ?? "This reset link is unavailable.");
+      setCompleted(true);
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "This reset link is invalid, expired, or already used.",
+      );
+    } finally {
+      setIsSubmitting(false);
     }
-    setCompleted(true);
   }
 
   return (

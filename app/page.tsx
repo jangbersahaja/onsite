@@ -7,6 +7,7 @@ import {
   type WorkspaceNavigationGroup,
 } from "@/app/workspace-shell";
 import { authClient } from "@/lib/auth-client";
+import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
 type ClockOutlet = {
@@ -60,7 +61,6 @@ type ClockPageData = {
     id: string;
     name: string;
     email: string;
-    globalRole: "member" | "admin";
   };
   outlets: ClockOutlet[];
   activeSession: { id: string; outletId: string; clockInAt: string } | null;
@@ -167,6 +167,7 @@ function outletTimeToISOString(value: string, timezone: string) {
 
 export default function Home() {
   const authSession = authClient.useSession();
+  const router = useRouter();
   const [isConfigured, setIsConfigured] = useState<boolean | null>(null);
   const [clockData, setClockData] = useState<ClockPageData | null>(null);
   const [staffDeviceStatus, setStaffDeviceStatus] =
@@ -245,6 +246,17 @@ export default function Home() {
   }, [authSession.data?.user.id, isConfigured]);
 
   useEffect(() => {
+    const currentUser = authSession.data?.user;
+    if (
+      currentUser &&
+      !currentUser.canAccessClock &&
+      currentUser.canAccessBackoffice
+    ) {
+      router.replace("/manage");
+    }
+  }, [authSession.data?.user, router]);
+
+  useEffect(() => {
     if (!authSession.data?.user.id || isConfigured !== true) return;
     let active = true;
     loadStaffDeviceStatus()
@@ -275,6 +287,13 @@ export default function Home() {
     );
   }
   if (!authSession.data) return <SignInForm />;
+  if (!authSession.data.user.canAccessClock) {
+    return (
+      <main className="loading-screen" aria-live="polite">
+        Opening Backoffice…
+      </main>
+    );
+  }
   if (isLoadingData && !clockData) {
     return (
       <main className="loading-screen" aria-live="polite">
@@ -444,20 +463,28 @@ export default function Home() {
     }
   }
 
-  const canManage = Boolean(
-    clockData?.user.globalRole === "admin" ||
-    clockData?.outlets.some((outlet) => outlet.role === "manager"),
-  );
+  const canManage = authSession.data.user.canAccessBackoffice;
   const navigation: WorkspaceNavigationGroup[] = [
     {
       label: "MY TIME",
       items: [
-        { href: "/#clock", label: "Clock", glyph: "◷" },
-        { href: "/#history", label: "My history", glyph: "▤" },
         {
-          href: "/#requests",
+          href: "/clock#clock",
+          label: "Clock",
+          glyph: "◷",
+          requiredAccess: "clock",
+        },
+        {
+          href: "/clock#history",
+          label: "My history",
+          glyph: "▤",
+          requiredAccess: "clock",
+        },
+        {
+          href: "/clock#requests",
           label: "My requests",
           glyph: "↗",
+          requiredAccess: "clock",
           count: pendingCorrectionCount,
         },
       ],
@@ -465,15 +492,14 @@ export default function Home() {
     ...(canManage
       ? [
           {
-            label: "MANAGE",
+            label: "WORKSPACE",
             items: [
-              { href: "/timesheets", label: "Timesheets", glyph: "▦" },
               {
-                href: "/corrections/review",
-                label: "Review requests",
-                glyph: "↗",
+                href: "/manage",
+                label: "Backoffice",
+                glyph: "▤",
+                requiredAccess: "backoffice" as const,
               },
-              { href: "/team", label: "Team", glyph: "♙" },
             ],
           },
         ]
@@ -482,7 +508,7 @@ export default function Home() {
 
   return (
     <WorkspaceShell
-      activeHref="/#clock"
+      activeHref="/clock#clock"
       pageTitle="Clock"
       workspaceName={selectedOutlet?.name ?? "Timekeeping"}
       outlets={clockData?.outlets}

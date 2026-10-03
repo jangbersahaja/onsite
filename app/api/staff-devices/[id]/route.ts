@@ -64,7 +64,7 @@ export async function PATCH(
       eq(outletMemberships.isActive, true),
       eq(outlets.isActive, true),
     ];
-    if (!access.isAdmin) {
+    if (!access.isSuperAdmin) {
       if (!access.outletIds.length) {
         return Response.json(
           { error: "You cannot manage this device." },

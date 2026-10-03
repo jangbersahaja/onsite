@@ -2218,7 +2218,7 @@ h2 {
   font-size: 11px;
   font-weight: 650;
 }
-.team-dialog-form input,
+.team-dialog-form input:not([type="checkbox"]),
 .team-dialog-form select {
   width: 100%;
   min-width: 0;
@@ -2230,13 +2230,54 @@ h2 {
   color: var(--ink);
   font: inherit;
 }
-.team-dialog-form input:focus-visible,
+.team-dialog-form input:not([type="checkbox"]):focus-visible,
 .team-dialog-form select:focus-visible {
   border-color: var(--green);
   outline: 2px solid rgba(40, 101, 106, 0.18);
 }
 .invite-dialog-form {
   grid-template-columns: 1fr;
+}
+.dialog-access-options {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 18px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 10px 12px 12px;
+}
+.dialog-access-options legend {
+  padding: 0 5px;
+  color: #465a64;
+  font-size: 11px;
+  font-weight: 650;
+}
+.team-dialog-form .dialog-access-options label {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  cursor: pointer;
+}
+.team-dialog-form .dialog-access-options input[type="checkbox"] {
+  flex: 0 0 16px;
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  min-height: 16px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--green);
+}
+.dialog-outlet-options {
+  align-items: flex-start;
 }
 .dialog-wide-field {
   grid-column: 1 / -1;

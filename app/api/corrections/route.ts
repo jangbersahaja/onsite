@@ -26,8 +26,7 @@ const correctionSchema = z
 function unavailable() {
   return Response.json(
     {
-      error:
-        "Set DATABASE_URL and BETTER_AUTH_SECRET before using corrections.",
+      error: "Set DATABASE_URL before using corrections.",
     },
     { status: 503 },
   );
@@ -44,12 +43,14 @@ export async function GET(request: Request) {
       return Response.json({ error: "Sign in required." }, { status: 401 });
 
     const review = new URL(request.url).searchParams.get("view") === "review";
+    if (!review && !session.user.canAccessClock) {
+      return Response.json(
+        { error: "Clock access is not enabled." },
+        { status: 403 },
+      );
+    }
     const access = review ? await getTeamAccess(session.user.id) : null;
-    const reviewOutletIds = access?.isAdmin
-      ? (await getDb().select({ id: outlets.id }).from(outlets)).map(
-          (outlet) => outlet.id,
-        )
-      : (access?.outletIds ?? []);
+    const reviewOutletIds = access?.outletIds ?? [];
     if (review && !reviewOutletIds.length) {
       return Response.json(
         { error: "Correction review access is not available." },
@@ -120,11 +121,7 @@ export async function PATCH(request: Request) {
         { status: 403 },
       );
     }
-    const reviewOutletIds = access.isAdmin
-      ? (await getDb().select({ id: outlets.id }).from(outlets)).map(
-          (outlet) => outlet.id,
-        )
-      : access.outletIds;
+    const reviewOutletIds = access.outletIds;
     if (!reviewOutletIds.length) {
       return Response.json(
         { error: "Correction review access is not available." },
@@ -386,6 +383,11 @@ export async function POST(request: Request) {
     });
     if (!session)
       return Response.json({ error: "Sign in required." }, { status: 401 });
+    if (!session.user.canAccessClock)
+      return Response.json(
+        { error: "Clock access is not enabled." },
+        { status: 403 },
+      );
 
     let rawBody: unknown;
     try {

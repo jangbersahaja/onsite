@@ -15,7 +15,7 @@ import { z } from "zod";
 function unavailable() {
   return Response.json(
     {
-      error: "Set DATABASE_URL and BETTER_AUTH_SECRET before using timesheets.",
+      error: "Set DATABASE_URL before using timesheets.",
     },
     { status: 503 },
   );
@@ -31,7 +31,7 @@ async function getActor(request: Request) {
       status: 403 as const,
     };
   }
-  const outletsForAccess = access.isAdmin
+  const outletsForAccess = access.isSuperAdmin
     ? await getDb()
         .select({
           id: outlets.id,

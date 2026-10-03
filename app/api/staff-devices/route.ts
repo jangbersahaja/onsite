@@ -31,6 +31,12 @@ export async function GET(request: Request) {
     if (!session) {
       return Response.json({ error: "Sign in required." }, { status: 401 });
     }
+    if (!session.user.canAccessClock) {
+      return Response.json(
+        { error: "Clock access is not enabled." },
+        { status: 403 },
+      );
+    }
 
     const db = getDb();
     const [staffAssignment] = await db
@@ -111,6 +117,12 @@ export async function POST(request: Request) {
     });
     if (!session) {
       return Response.json({ error: "Sign in required." }, { status: 401 });
+    }
+    if (!session.user.canAccessClock) {
+      return Response.json(
+        { error: "Clock access is not enabled." },
+        { status: 403 },
+      );
     }
 
     const db = getDb();

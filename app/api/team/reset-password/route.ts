@@ -1,11 +1,15 @@
-import { auditEvents, outletMemberships, user } from "@/db/schema";
+import {
+  auditEvents,
+  outletMemberships,
+  passwordResetTokens,
+  user,
+} from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { takeResetPasswordLink } from "@/lib/reset-password-delivery";
+import { createOneTimeToken } from "@/lib/one-time-token";
 import { getTeamAccess } from "@/lib/team-access";
-import { and, eq, inArray } from "drizzle-orm";
-import { randomUUID } from "node:crypto";
+import { and, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 
 const resetSchema = z.object({ userId: z.string().min(1).max(200) }).strict();
@@ -76,28 +80,37 @@ export async function POST(request: Request) {
         { status: 403 },
       );
 
-    const requestId = randomUUID();
-    const baseURL = process.env.BETTER_AUTH_URL ?? "http://localhost:3000";
-    await getAuth().api.requestPasswordReset({
-      body: {
-        email: target.email,
-        redirectTo: new URL("/reset-password", baseURL).toString(),
-      },
-      headers: { "x-shiftline-reset-delivery": requestId },
+    const { token, tokenHash } = createOneTimeToken();
+    const expiresAt = new Date(Date.now() + 30 * 60_000);
+    await db.transaction(async (tx) => {
+      await tx
+        .update(passwordResetTokens)
+        .set({ usedAt: new Date() })
+        .where(
+          and(
+            eq(passwordResetTokens.userId, target.id),
+            isNull(passwordResetTokens.usedAt),
+          ),
+        );
+      await tx.insert(passwordResetTokens).values({
+        userId: target.id,
+        tokenHash,
+        expiresAt,
+      });
+      await tx.insert(auditEvents).values({
+        actorId: session.user.id,
+        action: "password_reset_link_issued",
+        entityType: "user",
+        entityId: target.id,
+        newValues: { email: target.email },
+      });
     });
-    const resetUrl = takeResetPasswordLink(requestId);
-    if (!resetUrl) throw new Error("Password reset link was not generated.");
 
-    await db.insert(auditEvents).values({
-      actorId: session.user.id,
-      action: "password_reset_link_issued",
-      entityType: "user",
-      entityId: target.id,
-      newValues: { email: target.email },
-    });
+    const resetUrl = new URL("/reset-password", request.url);
+    resetUrl.searchParams.set("token", token);
 
     return Response.json(
-      { resetUrl },
+      { resetUrl: resetUrl.toString(), expiresAt },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch {

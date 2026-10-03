@@ -9,6 +9,10 @@ type TeamMember = {
   userId: string;
   name: string;
   email: string;
+  username: string;
+  accountType: "super_admin" | "admin" | "staff";
+  canAccessClock: boolean;
+  canAccessBackoffice: boolean;
   outletId: string;
   outletName: string;
   role: "manager" | "supervisor" | "staff";
@@ -26,9 +30,12 @@ type TeamPerson = {
 type TeamInvitation = {
   id: string;
   email: string;
+  accountType: "admin" | "staff";
+  canAccessClock: boolean;
+  canAccessBackoffice: boolean;
   role: "manager" | "supervisor" | "staff";
-  outletId: string;
-  outletName: string;
+  outletIds: string[];
+  outletNames: string[];
   expiresAt: string;
 };
 
@@ -52,6 +59,7 @@ type StaffDevice = {
 
 type TeamData = {
   isAdmin: boolean;
+  isSuperAdmin: boolean;
   outlets: TeamOutlet[];
   members: TeamMember[];
   invitations: TeamInvitation[];
@@ -82,8 +90,10 @@ export default function TeamPage() {
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   const [isOutletDialogOpen, setIsOutletDialogOpen] = useState(false);
   const [email, setEmail] = useState("");
-  const [outletId, setOutletId] = useState("");
-  const [role, setRole] = useState<"manager" | "supervisor" | "staff">("staff");
+  const [inviteType, setInviteType] = useState<"admin" | "staff">("staff");
+  const [outletIds, setOutletIds] = useState<string[]>([]);
+  const [canAccessClock, setCanAccessClock] = useState(true);
+  const [canAccessBackoffice, setCanAccessBackoffice] = useState(false);
   const [issuedInvite, setIssuedInvite] = useState("");
   const [issuedResetLink, setIssuedResetLink] = useState("");
   const [message, setMessage] = useState("");
@@ -101,8 +111,7 @@ export default function TeamPage() {
       .then((team) => {
         if (!active) return;
         setData(team);
-        setOutletId(team.outlets[0]?.id ?? "");
-        setRole(team.isAdmin ? "manager" : "staff");
+        setOutletIds(team.outlets[0] ? [team.outlets[0].id] : []);
       })
       .catch((error: unknown) => {
         if (active)
@@ -122,7 +131,7 @@ export default function TeamPage() {
 
   async function handleInvite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!outletId || isInviting) return;
+    if (isInviting || (inviteType === "staff" && !outletIds.length)) return;
     setIsInviting(true);
     setInviteMessage("");
     setIssuedInvite("");
@@ -130,7 +139,13 @@ export default function TeamPage() {
       const response = await fetch("/api/invitations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, role, outletId }),
+        body: JSON.stringify({
+          email,
+          accountType: inviteType,
+          canAccessClock,
+          canAccessBackoffice,
+          outletIds,
+        }),
       });
       const body = await response.json();
       if (!response.ok)
@@ -175,7 +190,7 @@ export default function TeamPage() {
         throw new Error(body.error ?? "Could not create outlet.");
       const team = await loadTeamData();
       setData(team);
-      setOutletId(body.outlet.id);
+      setOutletIds([body.outlet.id]);
       setMessage(`${body.outlet.name} was added.`);
       setIsOutletDialogOpen(false);
       form.reset();
@@ -453,7 +468,7 @@ export default function TeamPage() {
         <div className="page-heading">
           <div>
             <p className="eyebrow">
-              {data.isAdmin ? "SUPER ADMIN" : "ACCESS CONTROL"}
+              {data.isSuperAdmin ? "SUPER ADMIN" : "BACKOFFICE ACCESS"}
             </p>
             <h1>Team</h1>
             <p className="subheading">
@@ -463,7 +478,7 @@ export default function TeamPage() {
           <button
             className="team-primary-action"
             type="button"
-            disabled={!data.outlets.length}
+            disabled={!data.outlets.length && !data.isSuperAdmin}
             onClick={() => {
               setInviteMessage("");
               setIsInviteDialogOpen(true);
@@ -740,7 +755,7 @@ export default function TeamPage() {
               <div>
                 <p className="eyebrow">NEW ACCESS</p>
                 <h2 id="invite-team-title">
-                  {data.isAdmin ? "Invite a manager" : "Invite a team member"}
+                  Invite an account
                 </h2>
               </div>
               <button
@@ -752,7 +767,7 @@ export default function TeamPage() {
                 ×
               </button>
             </header>
-            {data.outlets.length ? (
+            {data.outlets.length || data.isSuperAdmin ? (
               <form
                 className="team-dialog-form invite-dialog-form"
                 onSubmit={handleInvite}
@@ -766,38 +781,63 @@ export default function TeamPage() {
                     required
                   />
                 </label>
-                <label>
-                  Outlet
-                  <select
-                    value={outletId}
-                    onChange={(event) => setOutletId(event.target.value)}
-                    required
-                  >
+                {data.isSuperAdmin && (
+                  <label>
+                    Account type
+                    <select
+                      value={inviteType}
+                      onChange={(event) => {
+                        const nextType = event.target.value as typeof inviteType;
+                        setInviteType(nextType);
+                        setCanAccessClock(nextType === "staff");
+                        setCanAccessBackoffice(true);
+                      }}
+                    >
+                      <option value="admin">Admin</option>
+                      <option value="staff">Staff</option>
+                    </select>
+                  </label>
+                )}
+                <fieldset className="dialog-access-options">
+                  <legend>App access</legend>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={canAccessClock}
+                      onChange={(event) => setCanAccessClock(event.target.checked)}
+                    />
+                    Clock
+                  </label>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={canAccessBackoffice}
+                      onChange={(event) => setCanAccessBackoffice(event.target.checked)}
+                    />
+                    Backoffice
+                  </label>
+                </fieldset>
+                {data.outlets.length > 0 && (
+                  <fieldset className="dialog-access-options dialog-outlet-options">
+                    <legend>Outlet assignments</legend>
                     {data.outlets.map((outlet) => (
-                      <option key={outlet.id} value={outlet.id}>
+                      <label key={outlet.id}>
+                        <input
+                          type="checkbox"
+                          checked={outletIds.includes(outlet.id)}
+                          onChange={(event) =>
+                            setOutletIds((current) =>
+                              event.target.checked
+                                ? [...current, outlet.id]
+                                : current.filter((id) => id !== outlet.id),
+                            )
+                          }
+                        />
                         {outlet.name}
-                      </option>
+                      </label>
                     ))}
-                  </select>
-                </label>
-                <label>
-                  Role
-                  <select
-                    value={role}
-                    onChange={(event) =>
-                      setRole(event.target.value as typeof role)
-                    }
-                  >
-                    {data.isAdmin ? (
-                      <option value="manager">Manager</option>
-                    ) : (
-                      <>
-                        <option value="staff">Staff</option>
-                        <option value="supervisor">Supervisor</option>
-                      </>
-                    )}
-                  </select>
-                </label>
+                  </fieldset>
+                )}
                 <div className="dialog-actions">
                   <button
                     className="team-secondary-action"
@@ -1078,7 +1118,12 @@ export default function TeamPage() {
               <div className="pending-invite-row" key={invitation.id}>
                 <strong>{invitation.email}</strong>
                 <span>
-                  {invitation.role} · {invitation.outletName}
+                  {invitation.accountType} · {[
+                    invitation.canAccessClock && "Clock",
+                    invitation.canAccessBackoffice && "Backoffice",
+                  ]
+                    .filter(Boolean)
+                    .join(" + ")} · {invitation.outletNames.join(", ") || "No outlets yet"}
                 </span>
                 <small>Expires {formatExpiry(invitation.expiresAt)}</small>
                 <button

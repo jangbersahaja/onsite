@@ -2,12 +2,14 @@
 
 import { authClient } from "@/lib/auth-client";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
 export type WorkspaceNavigationItem = {
   href: string;
   label: string;
   glyph: string;
+  requiredAccess: "clock" | "backoffice";
   count?: number;
 };
 
@@ -19,14 +21,36 @@ export type WorkspaceNavigationGroup = {
 export const managementNavigation: WorkspaceNavigationGroup[] = [
   {
     label: "WORKSPACE",
-    items: [{ href: "/", label: "Clock", glyph: "◷" }],
+    items: [
+      {
+        href: "/clock",
+        label: "Clock",
+        glyph: "◷",
+        requiredAccess: "clock",
+      },
+    ],
   },
   {
     label: "MANAGE",
     items: [
-      { href: "/timesheets", label: "Timesheets", glyph: "▦" },
-      { href: "/corrections/review", label: "Review requests", glyph: "↗" },
-      { href: "/team", label: "Team", glyph: "♙" },
+      {
+        href: "/timesheets",
+        label: "Timesheets",
+        glyph: "▦",
+        requiredAccess: "backoffice",
+      },
+      {
+        href: "/corrections/review",
+        label: "Review requests",
+        glyph: "↗",
+        requiredAccess: "backoffice",
+      },
+      {
+        href: "/team",
+        label: "Team",
+        glyph: "♙",
+        requiredAccess: "backoffice",
+      },
     ],
   },
 ];
@@ -71,12 +95,23 @@ export function WorkspaceShell({
   navigation,
   children,
 }: WorkspaceShellProps) {
+  const router = useRouter();
   const session = authClient.useSession();
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const userName = session.data?.user.name ?? "Account";
   const selectedOutlet = outlets.find(
     (outlet) => outlet.id === selectedOutletId,
   );
+  const visibleNavigation = navigation
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) =>
+        item.requiredAccess === "clock"
+          ? session.data?.user.canAccessClock === true
+          : session.data?.user.canAccessBackoffice === true,
+      ),
+    }))
+    .filter((group) => group.items.length > 0);
 
   useEffect(() => {
     if (!isMobileNavOpen) return;
@@ -143,7 +178,7 @@ export function WorkspaceShell({
         )}
 
         <nav className="primary-nav" aria-label="Main navigation">
-          {navigation.map((group) => (
+          {visibleNavigation.map((group) => (
             <div className="nav-group" key={group.label}>
               <p className="nav-group-label">{group.label}</p>
               {group.items.map((item) => (
@@ -175,7 +210,10 @@ export function WorkspaceShell({
           <button
             className="profile-button"
             type="button"
-            onClick={() => void authClient.signOut()}
+            onClick={async () => {
+              await authClient.signOut();
+              router.replace("/");
+            }}
           >
             <span className="profile-avatar">{initials(userName)}</span>
             <span className="profile-copy">

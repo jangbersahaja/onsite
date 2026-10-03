@@ -13,7 +13,11 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-export const globalRoleEnum = pgEnum("global_role", ["member", "admin"]);
+export const accountTypeEnum = pgEnum("account_type", [
+  "super_admin",
+  "admin",
+  "staff",
+]);
 export const membershipRoleEnum = pgEnum("membership_role", [
   "manager",
   "supervisor",
@@ -35,20 +39,31 @@ export const staffDeviceStatusEnum = pgEnum("staff_device_status", [
   "revoked",
 ]);
 
-export const user = pgTable("user", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  email: text("email").notNull().unique(),
-  emailVerified: boolean("email_verified").notNull().default(false),
-  image: text("image"),
-  globalRole: globalRoleEnum("global_role").notNull().default("member"),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+export const user = pgTable(
+  "user",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    username: text("username").notNull(),
+    email: text("email").notNull().unique(),
+    passwordHash: text("password_hash").notNull(),
+    accountType: accountTypeEnum("account_type").notNull().default("staff"),
+    canAccessClock: boolean("can_access_clock").notNull().default(true),
+    canAccessBackoffice: boolean("can_access_backoffice")
+      .notNull()
+      .default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("user_username_lower_uq").on(sql`lower(${table.username})`),
+    uniqueIndex("user_email_lower_uq").on(sql`lower(${table.email})`),
+  ],
+);
 
 export const session = pgTable(
   "session",
@@ -56,6 +71,7 @@ export const session = pgTable(
     id: text("id").primaryKey(),
     expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
     token: text("token").notNull().unique(),
+    tokenHash: text("token_hash").unique(),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -67,55 +83,9 @@ export const session = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
   },
   (table) => [index("session_user_id_idx").on(table.userId)],
-);
-
-export const account = pgTable(
-  "account",
-  {
-    id: text("id").primaryKey(),
-    accountId: text("account_id").notNull(),
-    providerId: text("provider_id").notNull(),
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-    accessToken: text("access_token"),
-    refreshToken: text("refresh_token"),
-    idToken: text("id_token"),
-    accessTokenExpiresAt: timestamp("access_token_expires_at", {
-      withTimezone: true,
-    }),
-    refreshTokenExpiresAt: timestamp("refresh_token_expires_at", {
-      withTimezone: true,
-    }),
-    scope: text("scope"),
-    password: text("password"),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [index("account_user_id_idx").on(table.userId)],
-);
-
-export const verification = pgTable(
-  "verification",
-  {
-    id: text("id").primaryKey(),
-    identifier: text("identifier").notNull(),
-    value: text("value").notNull(),
-    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    updatedAt: timestamp("updated_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (table) => [index("verification_identifier_idx").on(table.identifier)],
 );
 
 export const staffDeviceEnrollments = pgTable(
@@ -201,10 +171,15 @@ export const invitations = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     email: text("email").notNull(),
-    role: membershipRoleEnum("role").notNull(),
-    outletId: uuid("outlet_id")
+    accountType: accountTypeEnum("account_type").notNull().default("staff"),
+    canAccessClock: boolean("can_access_clock").notNull().default(true),
+    canAccessBackoffice: boolean("can_access_backoffice")
       .notNull()
-      .references(() => outlets.id, { onDelete: "cascade" }),
+      .default(false),
+    role: membershipRoleEnum("role").notNull(),
+    outletId: uuid("outlet_id").references(() => outlets.id, {
+      onDelete: "cascade",
+    }),
     tokenHash: text("token_hash").notNull().unique(),
     invitedBy: text("invited_by")
       .notNull()
@@ -221,6 +196,52 @@ export const invitations = pgTable(
     index("invitations_email_outlet_idx").on(table.email, table.outletId),
   ],
 );
+
+export const invitationOutlets = pgTable(
+  "invitation_outlets",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    invitationId: uuid("invitation_id")
+      .notNull()
+      .references(() => invitations.id, { onDelete: "cascade" }),
+    outletId: uuid("outlet_id")
+      .notNull()
+      .references(() => outlets.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    uniqueIndex("invitation_outlets_invitation_outlet_uq").on(
+      table.invitationId,
+      table.outletId,
+    ),
+    index("invitation_outlets_outlet_idx").on(table.outletId),
+  ],
+);
+
+export const passwordResetTokens = pgTable(
+  "password_reset_tokens",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("password_reset_user_idx").on(table.userId)],
+);
+
+export const authLoginAttempts = pgTable("auth_login_attempts", {
+  key: text("key").primaryKey(),
+  failedAttempts: integer("failed_attempts").notNull().default(0),
+  windowStartedAt: timestamp("window_started_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  blockedUntil: timestamp("blocked_until", { withTimezone: true }),
+});
 
 export const workSessions = pgTable(
   "work_sessions",
@@ -322,5 +343,3 @@ export const auditEvents = pgTable(
     index("audit_events_actor_created_idx").on(table.actorId, table.createdAt),
   ],
 );
-
-export const authSchema = { user, session, account, verification };

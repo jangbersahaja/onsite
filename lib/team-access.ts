@@ -5,15 +5,19 @@ import { and, eq } from "drizzle-orm";
 export async function getTeamAccess(userId: string) {
   const db = getDb();
   const [actor] = await db
-    .select({ globalRole: user.globalRole })
+    .select({
+      accountType: user.accountType,
+      canAccessBackoffice: user.canAccessBackoffice,
+    })
     .from(user)
     .where(eq(user.id, userId))
     .limit(1);
 
-  if (!actor) return null;
+  if (!actor || !actor.canAccessBackoffice) return null;
 
-  const isAdmin = actor.globalRole === "admin";
-  const manageableOutlets = isAdmin
+  const isSuperAdmin = actor.accountType === "super_admin";
+  const isAdmin = actor.accountType === "admin" || isSuperAdmin;
+  const manageableOutlets = isSuperAdmin
     ? await db
         .select({
           id: outlets.id,
@@ -41,7 +45,6 @@ export async function getTeamAccess(userId: string) {
         .where(
           and(
             eq(outletMemberships.userId, userId),
-            eq(outletMemberships.role, "manager"),
             eq(outletMemberships.isActive, true),
             eq(outlets.isActive, true),
           ),
@@ -49,6 +52,7 @@ export async function getTeamAccess(userId: string) {
 
   return {
     isAdmin,
+    isSuperAdmin,
     outlets: manageableOutlets,
     outletIds: manageableOutlets.map((outlet) => outlet.id),
   };

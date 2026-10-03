@@ -1,4 +1,9 @@
-import { auditEvents, outlets, workSessions } from "@/db/schema";
+import {
+  auditEvents,
+  outletMemberships,
+  outlets,
+  workSessions,
+} from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
@@ -78,6 +83,14 @@ export async function POST(request: Request) {
         name: outlets.name,
         address: outlets.address,
       });
+      if (session.user.accountType === "admin") {
+        await tx.insert(outletMemberships).values({
+          userId: session.user.id,
+          outletId: outlet.id,
+          role: "manager",
+          assignedBy: session.user.id,
+        });
+      }
       await tx.insert(auditEvents).values({
         actorId: session.user.id,
         action: "outlet_created",
@@ -117,7 +130,6 @@ export async function PATCH(request: Request) {
         { status: 403 },
       );
     }
-
     let body: unknown;
     try {
       body = await request.json();
@@ -132,6 +144,12 @@ export async function PATCH(request: Request) {
       return Response.json(
         { error: "Outlet details are invalid." },
         { status: 400 },
+      );
+    }
+    if (!access.isSuperAdmin && !access.outletIds.includes(parsed.data.id)) {
+      return Response.json(
+        { error: "You cannot manage this outlet." },
+        { status: 403 },
       );
     }
 
@@ -204,7 +222,6 @@ export async function DELETE(request: Request) {
         { status: 403 },
       );
     }
-
     let body: unknown;
     try {
       body = await request.json();
@@ -219,6 +236,12 @@ export async function DELETE(request: Request) {
       return Response.json(
         { error: "A valid outlet and reason are required." },
         { status: 400 },
+      );
+    }
+    if (!access.isSuperAdmin && !access.outletIds.includes(parsed.data.id)) {
+      return Response.json(
+        { error: "You cannot manage this outlet." },
+        { status: 403 },
       );
     }
 

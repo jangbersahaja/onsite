@@ -28,7 +28,7 @@ export async function PATCH(request: Request) {
     if (!session)
       return Response.json({ error: "Sign in required." }, { status: 401 });
     const access = await getTeamAccess(session.user.id);
-    if (!access?.isAdmin)
+    if (!access?.isSuperAdmin)
       return Response.json(
         { error: "Only admins can assign outlet managers." },
         { status: 403 },
@@ -60,13 +60,11 @@ export async function PATCH(request: Request) {
       .limit(1);
     const [manager] = await db
       .select({ id: user.id })
-      .from(outletMemberships)
-      .innerJoin(user, eq(outletMemberships.userId, user.id))
+      .from(user)
       .where(
         and(
-          eq(outletMemberships.userId, parsed.data.managerId),
-          eq(outletMemberships.role, "manager"),
-          eq(user.globalRole, "member"),
+          eq(user.id, parsed.data.managerId),
+          eq(user.accountType, "admin"),
         ),
       )
       .limit(1);

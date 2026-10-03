@@ -5,8 +5,11 @@ import { useEffect, useState } from "react";
 
 type InvitationInfo = {
   email: string;
+  accountType: "admin" | "staff";
+  canAccessClock: boolean;
+  canAccessBackoffice: boolean;
   role: "manager" | "supervisor" | "staff";
-  outletName: string;
+  outletNames: string[];
   expiresAt: string;
 };
 
@@ -64,6 +67,7 @@ export function InviteAcceptanceForm({ token }: { token: string }) {
         body: JSON.stringify({
           token,
           name: form.get("name"),
+          username: form.get("username"),
           password,
         }),
       });
@@ -105,7 +109,14 @@ export function InviteAcceptanceForm({ token }: { token: string }) {
         ) : invitation ? (
           <>
             <p className="auth-description">
-              {invitation.email} · {invitation.role} · {invitation.outletName}
+              {invitation.email} · {invitation.accountType} ·{" "}
+              {[
+                invitation.canAccessClock && "Clock",
+                invitation.canAccessBackoffice && "Backoffice",
+              ]
+                .filter(Boolean)
+                .join(" + ")}{" "}
+              · {invitation.outletNames.join(", ") || "No outlets yet"}
             </p>
             <form className="auth-form" onSubmit={handleSubmit}>
               <label htmlFor="invite-name">Your name</label>
@@ -115,6 +126,16 @@ export function InviteAcceptanceForm({ token }: { token: string }) {
                 autoComplete="name"
                 minLength={2}
                 maxLength={120}
+                required
+              />
+              <label htmlFor="invite-username">Username</label>
+              <input
+                id="invite-username"
+                name="username"
+                autoComplete="username"
+                minLength={3}
+                maxLength={32}
+                pattern="[A-Za-z0-9._-]+"
                 required
               />
               <label htmlFor="invite-password">Create password</label>

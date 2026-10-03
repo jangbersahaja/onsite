@@ -1,4 +1,4 @@
-import { auditEvents, invitations } from "@/db/schema";
+import { auditEvents, invitationOutlets, invitations } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
@@ -34,7 +34,23 @@ export async function DELETE(
       .from(invitations)
       .where(eq(invitations.id, id))
       .limit(1);
-    if (!invitation || !access.outletIds.includes(invitation.outletId)) {
+    const linkedOutlets = invitation
+      ? await db
+          .select({ outletId: invitationOutlets.outletId })
+          .from(invitationOutlets)
+          .where(eq(invitationOutlets.invitationId, invitation.id))
+      : [];
+    const outletIds = Array.from(
+      new Set([
+        ...linkedOutlets.map((outlet) => outlet.outletId),
+        ...(invitation?.outletId ? [invitation.outletId] : []),
+      ]),
+    );
+    if (
+      !invitation ||
+      (!access.isSuperAdmin &&
+        (!outletIds.length || !outletIds.every((outletId) => access.outletIds.includes(outletId))))
+    ) {
       return Response.json({ error: "Invitation not found." }, { status: 404 });
     }
 

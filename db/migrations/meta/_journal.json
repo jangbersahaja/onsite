@@ -36,6 +36,20 @@
       "when": 1790968740084,
       "tag": "0004_tiny_zombie",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791012145375,
+      "tag": "0005_outgoing_speed",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791013460481,
+      "tag": "0006_amazing_vampiro",
+      "breakpoints": true
     }
   ]
 }

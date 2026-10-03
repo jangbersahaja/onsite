@@ -1,21 +1,32 @@
 import {
   auditEvents,
+  invitationOutlets,
   invitations,
   outletMemberships,
   outlets,
+  staffDeviceEnrollments,
   user,
 } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
-import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { hashOneTimeToken } from "@/lib/one-time-token";
+import { createOneTimeToken, hashOneTimeToken } from "@/lib/one-time-token";
+import { hashPassword } from "@/lib/password";
+import { getStaffDeviceCookieName } from "@/lib/staff-device";
 import { and, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
+import { cookies } from "next/headers";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 const acceptSchema = z
   .object({
     token: z.string().min(32).max(128),
     name: z.string().trim().min(2).max(120),
+    username: z
+      .string()
+      .trim()
+      .min(3)
+      .max(32)
+      .regex(/^[a-zA-Z0-9._-]+$/),
     password: z.string().min(12).max(128),
   })
   .strict();
@@ -54,13 +65,16 @@ export async function GET(request: Request) {
     const now = new Date();
     const [invitation] = await getDb()
       .select({
+        id: invitations.id,
         email: invitations.email,
         role: invitations.role,
-        outletName: outlets.name,
+        accountType: invitations.accountType,
+        canAccessClock: invitations.canAccessClock,
+        canAccessBackoffice: invitations.canAccessBackoffice,
+        outletId: invitations.outletId,
         expiresAt: invitations.expiresAt,
       })
       .from(invitations)
-      .innerJoin(outlets, eq(invitations.outletId, outlets.id))
       .where(
         and(
           eq(invitations.tokenHash, hashOneTimeToken(token)),
@@ -76,9 +90,27 @@ export async function GET(request: Request) {
       );
     }
 
-    return Response.json(invitation, {
-      headers: { "Cache-Control": "no-store" },
-    });
+    const linkedOutlets = await getDb()
+      .select({ name: outlets.name })
+      .from(invitationOutlets)
+      .innerJoin(outlets, eq(invitationOutlets.outletId, outlets.id))
+      .where(eq(invitationOutlets.invitationId, invitation.id));
+    const outletNames = linkedOutlets.length
+      ? linkedOutlets.map((outlet) => outlet.name)
+      : invitation.outletId
+        ? await getDb()
+            .select({ name: outlets.name })
+            .from(outlets)
+            .where(eq(outlets.id, invitation.outletId))
+            .then((rows) => rows.map((outlet) => outlet.name))
+        : [];
+
+    return Response.json(
+      { ...invitation, outletNames },
+      {
+        headers: { "Cache-Control": "no-store" },
+      },
+    );
   } catch {
     return Response.json(
       { error: "Could not verify this invitation." },
@@ -103,7 +135,7 @@ export async function POST(request: Request) {
   const parsed = acceptSchema.safeParse(rawBody);
   if (!parsed.success) {
     return Response.json(
-      { error: "Name, password, and invitation token are required." },
+      { error: "Name, username, password, and invitation token are required." },
       { status: 400 },
     );
   }
@@ -116,8 +148,11 @@ export async function POST(request: Request) {
         id: string;
         email: string;
         role: "manager" | "supervisor" | "staff";
-        outletId: string;
+        outletId: string | null;
         invitedBy: string;
+        accountType: "super_admin" | "admin" | "staff";
+        canAccessClock: boolean;
+        canAccessBackoffice: boolean;
       }
     | undefined;
   let createdUserId: string | undefined;
@@ -152,6 +187,19 @@ export async function POST(request: Request) {
       );
     }
 
+    const username = input.username.toLowerCase();
+    const [existingUsername] = await db
+      .select({ id: user.id })
+      .from(user)
+      .where(sql`lower(${user.username}) = ${username}`)
+      .limit(1);
+    if (existingUsername) {
+      return Response.json(
+        { error: "This username is already taken." },
+        { status: 409 },
+      );
+    }
+
     const [claimed] = await db
       .update(invitations)
       .set({ claimedAt: now })
@@ -168,6 +216,9 @@ export async function POST(request: Request) {
         role: invitations.role,
         outletId: invitations.outletId,
         invitedBy: invitations.invitedBy,
+        accountType: invitations.accountType,
+        canAccessClock: invitations.canAccessClock,
+        canAccessBackoffice: invitations.canAccessBackoffice,
       });
 
     if (!claimed) {
@@ -178,14 +229,9 @@ export async function POST(request: Request) {
     }
     claimedInvitation = claimed;
 
-    const registration = await getAuth({ allowSignUp: true }).api.signUpEmail({
-      body: {
-        name: input.name,
-        email: claimed.email,
-        password: input.password,
-      },
-    });
-    createdUserId = registration.user.id;
+    createdUserId = randomUUID();
+    const passwordHash = await hashPassword(input.password);
+    const firstDevice = claimed.role === "staff" ? createOneTimeToken() : null;
 
     await db.transaction(async (tx) => {
       const [consumed] = await tx
@@ -203,25 +249,90 @@ export async function POST(request: Request) {
       if (!consumed)
         throw new Error("Invitation was revoked before acceptance completed.");
 
-      await tx.insert(outletMemberships).values({
-        userId: registration.user.id,
-        outletId: claimed.outletId,
-        role: claimed.role,
-        assignedBy: claimed.invitedBy,
+      await tx.insert(user).values({
+        id: createdUserId!,
+        name: input.name,
+        username,
+        email: claimed.email,
+        passwordHash,
+        accountType: claimed.accountType,
+        canAccessClock: claimed.canAccessClock,
+        canAccessBackoffice: claimed.canAccessBackoffice,
       });
 
+      const linkedOutlets = await tx
+        .select({ outletId: invitationOutlets.outletId })
+        .from(invitationOutlets)
+        .where(eq(invitationOutlets.invitationId, claimed.id));
+      const assignedOutletIds = Array.from(
+        new Set([
+          ...linkedOutlets.map((outlet) => outlet.outletId),
+          ...(claimed.outletId ? [claimed.outletId] : []),
+        ]),
+      );
+      if (assignedOutletIds.length) {
+        await tx.insert(outletMemberships).values(
+          assignedOutletIds.map((outletId) => ({
+            userId: createdUserId!,
+            outletId,
+            role:
+              claimed.accountType === "admin"
+                ? ("manager" as const)
+                : claimed.role,
+            assignedBy: claimed.invitedBy,
+          })),
+        );
+      }
+
+      if (firstDevice) {
+        const [enrollment] = await tx
+          .insert(staffDeviceEnrollments)
+          .values({
+            userId: createdUserId!,
+            tokenHash: firstDevice.tokenHash,
+            status: "active",
+            approvedAt: now,
+          })
+          .returning({ id: staffDeviceEnrollments.id });
+
+        await tx.insert(auditEvents).values({
+          actorId: createdUserId!,
+          action: "staff_device_first_registration_enrolled",
+          entityType: "staff_device_enrollment",
+          entityId: enrollment.id,
+          newValues: { userId: createdUserId, automatic: true },
+        });
+      }
+
       await tx.insert(auditEvents).values({
-        actorId: registration.user.id,
+        actorId: createdUserId!,
         action: "invitation_accepted",
         entityType: "invitation",
         entityId: claimed.id,
         newValues: {
           email: claimed.email,
+          username,
           role: claimed.role,
-          outletId: claimed.outletId,
+          accountType: claimed.accountType,
+          outletIds: assignedOutletIds,
         },
       });
     });
+
+    if (firstDevice) {
+      const cookieStore = await cookies();
+      cookieStore.set(
+        getStaffDeviceCookieName(createdUserId),
+        firstDevice.token,
+        {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          sameSite: "lax",
+          path: "/",
+          maxAge: 60 * 60 * 24 * 365,
+        },
+      );
+    }
 
     return Response.json({ accepted: true }, { status: 201 });
   } catch {

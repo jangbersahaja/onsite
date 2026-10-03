@@ -1,4 +1,5 @@
 import {
+  invitationOutlets,
   invitations,
   outletMemberships,
   outlets,
@@ -14,7 +15,7 @@ import { and, desc, eq, gt, inArray, isNull } from "drizzle-orm";
 function unavailable() {
   return Response.json(
     {
-      error: "Set DATABASE_URL and BETTER_AUTH_SECRET before managing a team.",
+      error: "Set DATABASE_URL before managing a team.",
     },
     { status: 503 },
   );
@@ -34,26 +35,18 @@ export async function GET(request: Request) {
     if (!access)
       return Response.json({ error: "Team access denied." }, { status: 403 });
 
-    if (access.outletIds.length === 0) {
-      return Response.json({
-        isAdmin: access.isAdmin,
-        outlets: [],
-        members: [],
-        invitations: [],
-        managers: [],
-        managerAssignments: [],
-        staffDevices: [],
-      });
-    }
-
     const db = getDb();
-    const [members, pendingInvitations, managers, managerAssignments] =
+    const [members, invitationRows, managers, managerAssignments] =
       await Promise.all([
         db
           .select({
             userId: user.id,
             name: user.name,
             email: user.email,
+            username: user.username,
+            accountType: user.accountType,
+            canAccessClock: user.canAccessClock,
+            canAccessBackoffice: user.canAccessBackoffice,
             outletId: outlets.id,
             outletName: outlets.name,
             role: outletMemberships.role,
@@ -74,41 +67,41 @@ export async function GET(request: Request) {
           .select({
             id: invitations.id,
             email: invitations.email,
+            accountType: invitations.accountType,
+            canAccessClock: invitations.canAccessClock,
+            canAccessBackoffice: invitations.canAccessBackoffice,
             role: invitations.role,
-            outletId: outlets.id,
+            outletId: invitationOutlets.outletId,
             outletName: outlets.name,
             expiresAt: invitations.expiresAt,
           })
           .from(invitations)
-          .innerJoin(outlets, eq(invitations.outletId, outlets.id))
+          .leftJoin(
+            invitationOutlets,
+            eq(invitationOutlets.invitationId, invitations.id),
+          )
+          .leftJoin(outlets, eq(invitationOutlets.outletId, outlets.id))
           .where(
             and(
-              inArray(invitations.outletId, access.outletIds),
               isNull(invitations.acceptedAt),
               isNull(invitations.revokedAt),
               gt(invitations.expiresAt, new Date()),
             ),
           )
           .orderBy(desc(invitations.createdAt))
-          .limit(50),
-        access.isAdmin
+          .limit(300),
+        access.isSuperAdmin
           ? db
               .selectDistinct({
                 id: user.id,
                 name: user.name,
                 email: user.email,
               })
-              .from(outletMemberships)
-              .innerJoin(user, eq(outletMemberships.userId, user.id))
-              .where(
-                and(
-                  eq(outletMemberships.role, "manager"),
-                  eq(user.globalRole, "member"),
-                ),
-              )
+              .from(user)
+              .where(eq(user.accountType, "admin"))
               .orderBy(user.name)
           : Promise.resolve([]),
-        access.isAdmin
+        access.isSuperAdmin
           ? db
               .select({
                 userId: user.id,
@@ -121,12 +114,51 @@ export async function GET(request: Request) {
               .where(
                 and(
                   eq(outletMemberships.role, "manager"),
-                  eq(user.globalRole, "member"),
+                  eq(user.accountType, "admin"),
                   inArray(outlets.id, access.outletIds),
                 ),
               )
           : Promise.resolve([]),
       ]);
+
+    const invitationMap = new Map<
+      string,
+      {
+        id: string;
+        email: string;
+        accountType: "super_admin" | "admin" | "staff";
+        canAccessClock: boolean;
+        canAccessBackoffice: boolean;
+        role: "manager" | "supervisor" | "staff";
+        outletIds: string[];
+        outletNames: string[];
+        expiresAt: Date;
+      }
+    >();
+    for (const row of invitationRows) {
+      const invitation = invitationMap.get(row.id) ?? {
+        id: row.id,
+        email: row.email,
+        accountType: row.accountType,
+        canAccessClock: row.canAccessClock,
+        canAccessBackoffice: row.canAccessBackoffice,
+        role: row.role,
+        outletIds: [],
+        outletNames: [],
+        expiresAt: row.expiresAt,
+      };
+      if (row.outletId && !invitation.outletIds.includes(row.outletId)) {
+        invitation.outletIds.push(row.outletId);
+        if (row.outletName) invitation.outletNames.push(row.outletName);
+      }
+      invitationMap.set(row.id, invitation);
+    }
+    const pendingInvitations = Array.from(invitationMap.values()).filter(
+      (invitation) =>
+        access.isSuperAdmin ||
+        (invitation.outletIds.length > 0 &&
+          invitation.outletIds.every((outletId) => access.outletIds.includes(outletId))),
+    );
 
     const staffUserIds = Array.from(
       new Set(
@@ -155,6 +187,7 @@ export async function GET(request: Request) {
 
     return Response.json({
       isAdmin: access.isAdmin,
+      isSuperAdmin: access.isSuperAdmin,
       outlets: access.outlets,
       members: members.map((member) => ({
         ...member,
