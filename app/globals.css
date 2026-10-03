@@ -505,8 +505,9 @@ a:focus-visible {
   outline-offset: 3px;
 }
 .clock-action.is-clocked-in {
-  background: #f4dfc2;
-  color: #613f1f;
+  border: 1px solid #f0c6c2;
+  background: #fff1ef;
+  color: var(--danger);
 }
 .clock-action-icon {
   font-size: 16px;
@@ -3068,7 +3069,11 @@ small,
     transform 140ms ease;
 }
 .clock-actions > .clock-action:hover:not(:disabled) {
-  box-shadow: 0 8px 18px rgba(24, 45, 54, 0.16);
+  box-shadow: var(--shadow-card);
+}
+.clock-actions > .clock-action.is-clocked-in:hover:not(:disabled) {
+  background: #fce0dc;
+  box-shadow: 0 8px 18px rgba(180, 35, 24, 0.12);
 }
 .clock-actions > .clock-action:active:not(:disabled) {
   transform: scale(0.98);
