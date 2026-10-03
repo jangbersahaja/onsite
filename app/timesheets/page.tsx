@@ -1,5 +1,6 @@
 "use client";
 
+import { ModalDialog } from "@/app/modal-dialog";
 import { managementNavigation, WorkspaceShell } from "@/app/workspace-shell";
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
@@ -272,53 +273,80 @@ export default function TimesheetsPage() {
         )}
 
         {editing && (
-          <form className="timesheet-edit-form" onSubmit={saveEdit}>
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">{editing.outletName}</p>
-                <h2>Edit shift · {editing.employeeName}</h2>
-              </div>
-              <button
-                className="timesheet-cancel"
-                type="button"
-                onClick={() => setEditing(null)}
+          <ModalDialog
+            open
+            onOpenChange={(open) => {
+              if (!open) setEditing(null);
+            }}
+            labelledBy="timesheet-edit-title"
+          >
+            <div className="dialog-panel timesheet-edit-dialog-panel">
+              <header className="dialog-header">
+                <div>
+                  <p className="eyebrow">{editing.outletName}</p>
+                  <h2 id="timesheet-edit-title">
+                    Edit shift · {editing.employeeName}
+                  </h2>
+                </div>
+                <button
+                  className="dialog-close"
+                  type="button"
+                  aria-label="Close shift editor"
+                  onClick={() => setEditing(null)}
+                >
+                  ×
+                </button>
+              </header>
+              <form
+                className="timesheet-edit-fields timesheet-edit-modal-fields"
+                onSubmit={saveEdit}
               >
-                Cancel
-              </button>
+                <label>
+                  Clock in ({editing.timezone})
+                  <input
+                    type="datetime-local"
+                    required
+                    value={clockInAt}
+                    onChange={(event) => setClockInAt(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Clock out ({editing.timezone})
+                  <input
+                    type="datetime-local"
+                    value={clockOutAt}
+                    onChange={(event) => setClockOutAt(event.target.value)}
+                  />
+                </label>
+                <label className="timesheet-reason">
+                  Reason for change
+                  <input
+                    required
+                    minLength={3}
+                    maxLength={500}
+                    value={reason}
+                    onChange={(event) => setReason(event.target.value)}
+                  />
+                </label>
+                <div className="dialog-actions">
+                  <button
+                    className="team-secondary-action"
+                    type="button"
+                    onClick={() => setEditing(null)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="auth-submit"
+                    type="submit"
+                    disabled={isSaving}
+                  >
+                    {isSaving ? "Saving…" : "Save audited edit"}
+                  </button>
+                </div>
+              </form>
             </div>
-            <div className="timesheet-edit-fields">
-              <label>
-                Clock in ({editing.timezone})
-                <input
-                  type="datetime-local"
-                  required
-                  value={clockInAt}
-                  onChange={(event) => setClockInAt(event.target.value)}
-                />
-              </label>
-              <label>
-                Clock out ({editing.timezone})
-                <input
-                  type="datetime-local"
-                  value={clockOutAt}
-                  onChange={(event) => setClockOutAt(event.target.value)}
-                />
-              </label>
-              <label className="timesheet-reason">
-                Reason for change
-                <input
-                  required
-                  minLength={3}
-                  maxLength={500}
-                  value={reason}
-                  onChange={(event) => setReason(event.target.value)}
-                />
-              </label>
-              <button className="auth-submit" type="submit" disabled={isSaving}>
-                {isSaving ? "Saving…" : "Save audited edit"}
-              </button>
-            </div>
-          </form>
+          </ModalDialog>
         )}
 
         <section className="timesheet-table-section" aria-label="Shift records">

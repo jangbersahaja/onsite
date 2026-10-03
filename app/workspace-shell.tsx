@@ -112,6 +112,9 @@ export function WorkspaceShell({
       ),
     }))
     .filter((group) => group.items.length > 0);
+  const mobileStaffNavigation = visibleNavigation
+    .flatMap((group) => group.items)
+    .filter((item) => item.requiredAccess === "clock");
 
   useEffect(() => {
     if (!isMobileNavOpen) return;
@@ -252,6 +255,28 @@ export function WorkspaceShell({
           </div>
         </header>
         {children}
+        {mobileStaffNavigation.some(
+          (item) => item.href === "/clock/history",
+        ) && (
+          <nav className="mobile-staff-tabs" aria-label="Staff navigation">
+            {mobileStaffNavigation.map((item) => (
+              <Link
+                className={`mobile-staff-tab${item.href === activeHref ? " is-active" : ""}`}
+                href={item.href}
+                key={item.href}
+                aria-current={item.href === activeHref ? "page" : undefined}
+              >
+                <span className="mobile-staff-tab-glyph" aria-hidden="true">
+                  {item.glyph}
+                </span>
+                <span>{item.label}</span>
+                {Boolean(item.count) && (
+                  <span className="mobile-staff-tab-count">{item.count}</span>
+                )}
+              </Link>
+            ))}
+          </nav>
+        )}
       </section>
     </div>
   );

@@ -108,9 +108,23 @@ export async function GET(request: Request) {
 
     const params = new URL(request.url).searchParams;
     const historyRange = parseDateRange(params.get("from"), params.get("to"));
+    const pageSize = Number(params.get("limit") ?? 100);
+    const pageOffset = Number(params.get("offset") ?? 0);
     if (!historyRange) {
       return Response.json(
         { error: "History date filters are invalid." },
+        { status: 400 },
+      );
+    }
+    if (
+      !Number.isInteger(pageSize) ||
+      pageSize < 1 ||
+      pageSize > 100 ||
+      !Number.isInteger(pageOffset) ||
+      pageOffset < 0
+    ) {
+      return Response.json(
+        { error: "History pagination is invalid." },
         { status: 400 },
       );
     }
@@ -126,7 +140,7 @@ export async function GET(request: Request) {
       );
     }
 
-    const recentSessions = await db
+    const sessionRows = await db
       .select({
         id: workSessions.id,
         outletId: workSessions.outletId,
@@ -139,7 +153,10 @@ export async function GET(request: Request) {
       .innerJoin(outlets, eq(workSessions.outletId, outlets.id))
       .where(and(...historyConditions))
       .orderBy(desc(workSessions.clockInAt))
-      .limit(100);
+      .limit(pageSize + 1)
+      .offset(pageOffset);
+    const hasMoreSessions = sessionRows.length > pageSize;
+    const recentSessions = sessionRows.slice(0, pageSize);
 
     return Response.json({
       user: {
@@ -150,6 +167,10 @@ export async function GET(request: Request) {
       outlets: assignments,
       activeSession: activeSession ?? null,
       recentSessions,
+      historyPage: {
+        hasMore: hasMoreSessions,
+        nextOffset: hasMoreSessions ? pageOffset + pageSize : null,
+      },
     });
   } catch {
     return Response.json(
@@ -207,7 +228,10 @@ export async function POST(request: Request) {
             )
             .limit(1)
         : await db
-            .select({ role: outletMemberships.role, timezone: outlets.timezone })
+            .select({
+              role: outletMemberships.role,
+              timezone: outlets.timezone,
+            })
             .from(outletMemberships)
             .innerJoin(outlets, eq(outletMemberships.outletId, outlets.id))
             .where(
@@ -290,7 +314,16 @@ export async function POST(request: Request) {
         location.reason === "poor_accuracy"
           ? "Location accuracy is too low. Request a manual time correction from your outlet lead."
           : "You could not be verified within this outlet's clocking radius. Request a manual time correction if needed.";
-      return Response.json({ error, reason: location.reason }, { status: 422 });
+      return Response.json(
+        {
+          error,
+          reason: location.reason,
+          distanceMeters: Math.round(location.distanceMeters),
+          accuracyMeters: Math.round(input.accuracy),
+          radiusMeters: outlet.radiusMeters,
+        },
+        { status: 422 },
+      );
     }
 
     const now = new Date();

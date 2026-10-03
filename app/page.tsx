@@ -1,5 +1,6 @@
 "use client";
 
+import { CorrectionDialog } from "@/app/clock/correction-dialog";
 import { SetupScreen } from "@/app/setup-screen";
 import { SignInForm } from "@/app/sign-in-form";
 import {
@@ -7,8 +8,11 @@ import {
   type WorkspaceNavigationGroup,
 } from "@/app/workspace-shell";
 import { authClient } from "@/lib/auth-client";
+import { requestCurrentLocation } from "@/lib/browser-location";
+import { verifyGeofence } from "@/lib/geofence";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 
 type ClockOutlet = {
   id: string;
@@ -74,8 +78,14 @@ async function loadClockData(history?: { from: string; to: string }) {
   if (history?.to) params.set("to", history.to);
   const query = params.toString();
   const [clockResponse, correctionResponse] = await Promise.all([
-    fetch(`/api/clock${query ? `?${query}` : ""}`, { cache: "no-store" }),
-    fetch("/api/corrections", { cache: "no-store" }),
+    fetch(`/api/clock${query ? `?${query}` : ""}`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    }),
+    fetch("/api/corrections", {
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    }),
   ]);
   const [clockBody, correctionBody] = await Promise.all([
     clockResponse.json(),
@@ -122,49 +132,6 @@ function formatDate(
   }).format(new Date(value));
 }
 
-function outletTimeToISOString(value: string, timezone: string) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
-  if (!match) throw new Error("Enter a valid requested time.");
-  const target = match.slice(1).map(Number);
-  const targetUtc = Date.UTC(
-    target[0],
-    target[1] - 1,
-    target[2],
-    target[3],
-    target[4],
-  );
-  let candidate = targetUtc;
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  });
-
-  for (let attempt = 0; attempt < 3; attempt += 1) {
-    const parts = Object.fromEntries(
-      formatter
-        .formatToParts(new Date(candidate))
-        .map((part) => [part.type, part.value]),
-    );
-    const observedUtc = Date.UTC(
-      Number(parts.year),
-      Number(parts.month) - 1,
-      Number(parts.day),
-      Number(parts.hour),
-      Number(parts.minute),
-    );
-    const difference = targetUtc - observedUtc;
-    if (difference === 0) return new Date(candidate).toISOString();
-    candidate += difference;
-  }
-
-  throw new Error("That local time does not exist in the outlet timezone.");
-}
-
 export default function Home() {
   const authSession = authClient.useSession();
   const router = useRouter();
@@ -175,22 +142,26 @@ export default function Home() {
   const [isRequestingStaffDevice, setIsRequestingStaffDevice] = useState(false);
   const [selectedOutletId, setSelectedOutletId] = useState("");
   const [isLoadingData, setIsLoadingData] = useState(true);
-  const [historyFrom, setHistoryFrom] = useState("");
-  const [historyTo, setHistoryTo] = useState("");
-  const [historyMessage, setHistoryMessage] = useState("");
-  const [isFilteringHistory, setIsFilteringHistory] = useState(false);
   const [isCheckingLocation, setIsCheckingLocation] = useState(false);
+  const [locationFix, setLocationFix] = useState<{
+    outletId: string;
+    latitude: number;
+    longitude: number;
+    accuracy: number;
+  } | null>(null);
+  const [locationError, setLocationError] = useState<{
+    outletId: string;
+    reason: "permission_denied" | "unavailable";
+  } | null>(null);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [actionMessage, setActionMessage] = useState("");
-  const [showCorrectionForm, setShowCorrectionForm] = useState(false);
-  const [correctionEvent, setCorrectionEvent] = useState<
-    "clock_in" | "clock_out"
-  >("clock_in");
-  const [correctionTime, setCorrectionTime] = useState("");
-  const [correctionReason, setCorrectionReason] = useState("");
-  const [correctionSessionId, setCorrectionSessionId] = useState("");
-  const [correctionMessage, setCorrectionMessage] = useState("");
-  const [isSubmittingCorrection, setIsSubmittingCorrection] = useState(false);
+  const [isCorrectionDialogOpen, setIsCorrectionDialogOpen] = useState(false);
+  const [clockBlockInfo, setClockBlockInfo] = useState<{
+    reason: "poor_accuracy" | "outside_radius";
+    distanceMeters: number;
+    accuracyMeters: number;
+    radiusMeters: number;
+  } | null>(null);
   const activeSession = clockData?.activeSession ?? null;
   const isClockedIn = Boolean(activeSession);
   const clockedInAt = activeSession ? new Date(activeSession.clockInAt) : null;
@@ -202,6 +173,58 @@ export default function Home() {
     clockData?.correctionRequests.filter(
       (request) => request.status === "pending",
     ).length ?? 0;
+  const liveGeofence =
+    selectedOutlet && locationFix?.outletId === selectedOutlet.id
+      ? verifyGeofence(locationFix, selectedOutlet, selectedOutlet.radiusMeters)
+      : null;
+  const activeLocationError =
+    locationError && locationError.outletId === selectedOutlet?.id
+      ? locationError.reason
+      : null;
+  const isDeviceBlocked = Boolean(
+    selectedOutlet?.role === "staff" &&
+    staffDeviceStatus?.required &&
+    !staffDeviceStatus.currentBrowserApproved,
+  );
+
+  useEffect(() => {
+    const outletId = selectedOutlet?.id;
+    if (!outletId) return;
+    if (!navigator.geolocation) {
+      const timer = window.setTimeout(
+        () => setLocationError({ outletId, reason: "unavailable" }),
+        0,
+      );
+      return () => window.clearTimeout(timer);
+    }
+
+    const watchId = navigator.geolocation.watchPosition(
+      (position) => {
+        setLocationFix({
+          outletId,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+        });
+        setLocationError((current) =>
+          current?.outletId === outletId ? null : current,
+        );
+        setClockBlockInfo(null);
+      },
+      (error) => {
+        setLocationError({
+          outletId,
+          reason:
+            error.code === error.PERMISSION_DENIED
+              ? "permission_denied"
+              : "unavailable",
+        });
+      },
+      { enableHighAccuracy: true, maximumAge: 10_000, timeout: 15_000 },
+    );
+
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [selectedOutlet?.id]);
 
   useEffect(() => {
     let active = true;
@@ -328,8 +351,14 @@ export default function Home() {
     }
   }
 
-  function handleClockAction() {
+  async function handleClockAction() {
     if (!selectedOutlet || isCheckingLocation) return;
+    if (isDeviceBlocked) {
+      setActionMessage(
+        "This browser is not approved for clock actions. Enroll this browser and ask your manager to approve it.",
+      );
+      return;
+    }
     if (!navigator.geolocation) {
       setActionMessage(
         "Location is unavailable. Ask your outlet lead to review your time.",
@@ -338,128 +367,63 @@ export default function Home() {
     }
 
     setIsCheckingLocation(true);
+    setClockBlockInfo(null);
     setActionMessage("Checking your location…");
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        void (async () => {
-          try {
-            const response = await fetch("/api/clock", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                action: isClockedIn ? "clock_out" : "clock_in",
-                outletId: selectedOutlet.id,
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-                accuracy: position.coords.accuracy,
-              }),
-            });
-            const result = await response.json();
-            if (!response.ok) {
-              setActionMessage(
-                result.error ?? "Clock action could not be recorded.",
-              );
-              return;
-            }
-
-            setClockData(await loadClockData());
-            setActionMessage(
-              "Clock action recorded with server time and location evidence.",
-            );
-          } catch {
-            setActionMessage(
-              "Could not reach the timekeeping service. Try again.",
-            );
-          } finally {
-            setIsCheckingLocation(false);
-          }
-        })();
-      },
-      (error) => {
-        const message =
-          error.code === error.PERMISSION_DENIED
-            ? "Location permission was denied. Ask your outlet lead to review your time."
-            : "We could not get a reliable location. Ask your outlet lead to review your time.";
-        setActionMessage(message);
-        setIsCheckingLocation(false);
-      },
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 },
-    );
-  }
-
-  async function handleCorrectionSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selectedOutlet || isSubmittingCorrection) return;
-
-    setIsSubmittingCorrection(true);
-    setCorrectionMessage("");
+    let stage: "location" | "recording" | "refreshing" = "location";
     try {
-      const requestedAt = outletTimeToISOString(
-        correctionTime,
-        selectedOutlet.timezone,
-      );
-      const response = await fetch("/api/corrections", {
+      const fix = await requestCurrentLocation(navigator.geolocation);
+      setLocationFix({ ...fix, outletId: selectedOutlet.id });
+      setLocationError(null);
+      stage = "recording";
+      setActionMessage("Recording your clock action…");
+      const response = await fetch("/api/clock", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(15_000),
         body: JSON.stringify({
+          action: isClockedIn ? "clock_out" : "clock_in",
           outletId: selectedOutlet.id,
-          workSessionId: correctionSessionId || null,
-          event: correctionEvent,
-          requestedAt,
-          reason: correctionReason,
+          ...fix,
         }),
       });
       const result = await response.json();
-      if (!response.ok)
-        throw new Error(result.error ?? "Could not submit the request.");
+      if (!response.ok) {
+        if (
+          response.status === 422 &&
+          (result.reason === "poor_accuracy" ||
+            result.reason === "outside_radius")
+        ) {
+          setClockBlockInfo({
+            reason: result.reason,
+            distanceMeters: result.distanceMeters,
+            accuracyMeters: result.accuracyMeters,
+            radiusMeters: result.radiusMeters,
+          });
+        }
+        setActionMessage(
+          result.error ?? "Clock action could not be recorded.",
+        );
+        return;
+      }
 
+      stage = "refreshing";
+      setActionMessage("Clock action recorded. Refreshing your shift…");
       setClockData(await loadClockData());
-      setCorrectionTime("");
-      setCorrectionReason("");
-      setCorrectionSessionId("");
-      setCorrectionMessage("Request submitted for outlet review.");
+      setActionMessage(
+        "Clock action recorded with server time and location evidence.",
+      );
     } catch (error) {
-      setCorrectionMessage(
-        error instanceof Error
-          ? error.message
-          : "Could not submit the request.",
+      setActionMessage(
+        stage === "location"
+          ? error instanceof Error
+            ? error.message
+            : "Could not check your location. Try again."
+          : stage === "refreshing"
+            ? "Clock action recorded, but your shift could not be refreshed. Reload the page to see your current status."
+            : "Could not confirm the clock action with the timekeeping service. Reload the page to check your shift before trying again.",
       );
     } finally {
-      setIsSubmittingCorrection(false);
-    }
-  }
-
-  async function handleHistoryFilter(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (isFilteringHistory) return;
-    setIsFilteringHistory(true);
-    setHistoryMessage("");
-    try {
-      const data = await loadClockData({ from: historyFrom, to: historyTo });
-      setClockData(data);
-    } catch (error) {
-      setHistoryMessage(
-        error instanceof Error
-          ? error.message
-          : "Could not load shift history.",
-      );
-    } finally {
-      setIsFilteringHistory(false);
-    }
-  }
-
-  async function clearHistoryFilter() {
-    setHistoryFrom("");
-    setHistoryTo("");
-    setHistoryMessage("");
-    try {
-      setClockData(await loadClockData());
-    } catch (error) {
-      setHistoryMessage(
-        error instanceof Error
-          ? error.message
-          : "Could not load shift history.",
-      );
+      setIsCheckingLocation(false);
     }
   }
 
@@ -469,21 +433,15 @@ export default function Home() {
       label: "MY TIME",
       items: [
         {
-          href: "/clock#clock",
+          href: "/clock",
           label: "Clock",
           glyph: "◷",
           requiredAccess: "clock",
         },
         {
-          href: "/clock#history",
-          label: "My history",
+          href: "/clock/history",
+          label: "History",
           glyph: "▤",
-          requiredAccess: "clock",
-        },
-        {
-          href: "/clock#requests",
-          label: "My requests",
-          glyph: "↗",
           requiredAccess: "clock",
           count: pendingCorrectionCount,
         },
@@ -508,7 +466,7 @@ export default function Home() {
 
   return (
     <WorkspaceShell
-      activeHref="/clock#clock"
+      activeHref="/clock"
       pageTitle="Clock"
       workspaceName={selectedOutlet?.name ?? "Timekeeping"}
       outlets={clockData?.outlets}
@@ -539,12 +497,6 @@ export default function Home() {
               Your time, place, and shift at a glance.
             </p>
           </div>
-          <button className="date-control" type="button">
-            <span aria-hidden="true">▦</span> Today{" "}
-            <span className="switcher-chevron" aria-hidden="true">
-              ⌄
-            </span>
-          </button>
         </div>
 
         <section className="clock-layout" aria-label="Clock and shift details">
@@ -600,9 +552,11 @@ export default function Home() {
               <button
                 className={`clock-action${isClockedIn ? " is-clocked-in" : ""}`}
                 type="button"
-                onClick={handleClockAction}
+                onClick={() => void handleClockAction()}
                 disabled={
-                  !selectedOutlet || isCheckingLocation || isLoadingData
+                  !selectedOutlet ||
+                  isCheckingLocation ||
+                  isLoadingData
                 }
               >
                 <span className="clock-action-icon" aria-hidden="true">
@@ -657,118 +611,142 @@ export default function Home() {
                       )}
                   </div>
                 )}
-              <p className="clock-hint" aria-live="polite">
-                {actionMessage ||
-                  "Every clock action is checked against your assigned outlet."}
-              </p>
-            </article>
-
-            <article className="shift-strip">
-              <div className="strip-heading">
-                <div>
-                  <p className="eyebrow">OUTLET ASSIGNMENT</p>
-                  <h2>{selectedOutlet?.name ?? "No outlet assigned"}</h2>
-                </div>
-                <span className="shift-status">
-                  {selectedOutlet?.role ?? "Unassigned"}
+              <div
+                className={`clock-location-status${!selectedOutlet || isDeviceBlocked || activeLocationError || clockBlockInfo || (liveGeofence && !liveGeofence.allowed) ? " is-blocked" : liveGeofence?.allowed ? " is-ready" : ""}`}
+                role="status"
+                aria-live="polite"
+              >
+                <span className="clock-location-status-icon" aria-hidden="true">
+                  {!selectedOutlet ||
+                  isDeviceBlocked ||
+                  activeLocationError ||
+                  clockBlockInfo ||
+                  (liveGeofence && !liveGeofence.allowed)
+                    ? "!"
+                    : liveGeofence?.allowed
+                      ? "✓"
+                      : "⌖"}
                 </span>
-              </div>
-              <div className="shift-details">
                 <div>
-                  <span className="detail-label">CLOCKING RADIUS</span>
                   <strong>
-                    {selectedOutlet
-                      ? `${selectedOutlet.radiusMeters} metres`
-                      : "Not set"}
+                    {!selectedOutlet
+                      ? "No outlet is assigned to your account"
+                      : isDeviceBlocked
+                        ? "This browser isn’t approved for clock actions"
+                        : clockBlockInfo?.reason === "poor_accuracy"
+                          ? "GPS accuracy is too low to clock in"
+                          : clockBlockInfo
+                            ? "You’re outside the clocking area"
+                            : activeLocationError === "permission_denied"
+                              ? "Location access is turned off"
+                              : activeLocationError === "unavailable"
+                                ? "We can’t get a reliable location"
+                                : liveGeofence && !liveGeofence.allowed
+                                  ? liveGeofence.reason === "poor_accuracy"
+                                    ? "GPS accuracy is too low to clock in"
+                                    : "You’re outside the clocking area"
+                                  : liveGeofence?.allowed
+                                    ? "You’re within the clocking area"
+                                    : "Checking your location"}
                   </strong>
+                  <span>
+                    {!selectedOutlet
+                      ? "Ask your manager to add you to an active outlet before clocking."
+                      : isDeviceBlocked
+                        ? "Enroll this browser or ask your manager to approve it before clocking."
+                        : clockBlockInfo?.reason === "poor_accuracy"
+                          ? `Server measured accuracy at ±${clockBlockInfo.accuracyMeters} m; it must be 50 m or better.`
+                          : clockBlockInfo
+                            ? `${clockBlockInfo.distanceMeters} m from the outlet; the limit is ${clockBlockInfo.radiusMeters} m. GPS accuracy ±${clockBlockInfo.accuracyMeters} m.`
+                            : activeLocationError === "permission_denied"
+                              ? "Enable location access in your browser settings, then try again."
+                              : activeLocationError === "unavailable"
+                                ? "Move near a window or retry when your phone has a clear GPS signal."
+                                : liveGeofence && !liveGeofence.allowed
+                                  ? liveGeofence.reason === "poor_accuracy"
+                                    ? `Accuracy is ±${Math.round(locationFix?.accuracy ?? 0)} m; it must be 50 m or better.`
+                                    : `About ${Math.max(0, Math.round(liveGeofence.distanceMeters - selectedOutlet!.radiusMeters))} m beyond the ${selectedOutlet?.radiusMeters} m outlet radius. GPS accuracy ±${Math.round(locationFix?.accuracy ?? 0)} m.`
+                                  : liveGeofence?.allowed
+                                    ? `GPS accuracy ±${Math.round(locationFix?.accuracy ?? 0)} m · ${Math.round(liveGeofence.distanceMeters)} m from outlet`
+                                    : actionMessage ||
+                                      "Your location is checked before every clock action."}
+                  </span>
                 </div>
-                <div>
-                  <span className="detail-label">TIMEZONE</span>
-                  <strong>{selectedOutlet?.timezone ?? "Not set"}</strong>
-                </div>
-                <div>
-                  <span className="detail-label">ADDRESS</span>
-                  <strong>{selectedOutlet?.address ?? "Not set"}</strong>
-                </div>
+                {isDeviceBlocked ? (
+                  <button
+                    className="clock-correction-link"
+                    type="button"
+                    disabled={isRequestingStaffDevice}
+                    onClick={() => void handleRequestStaffDevice()}
+                  >
+                    {isRequestingStaffDevice ? "Requesting…" : "Enroll browser"}
+                  </button>
+                ) : activeLocationError ||
+                  clockBlockInfo ||
+                  (liveGeofence && !liveGeofence.allowed) ? (
+                  <button
+                    className="clock-correction-link"
+                    type="button"
+                    onClick={() => setIsCorrectionDialogOpen(true)}
+                  >
+                    Request correction
+                  </button>
+                ) : null}
               </div>
+              {actionMessage && (
+                <p
+                  className={`clock-action-feedback${isCheckingLocation || actionMessage.includes("recorded") || actionMessage.startsWith("Device request sent") || actionMessage.startsWith("This browser is already approved") ? "" : " is-blocked"}`}
+                  role={
+                    isCheckingLocation ||
+                    actionMessage.includes("recorded") ||
+                    actionMessage.startsWith("Device request sent") ||
+                    actionMessage.startsWith("This browser is already approved")
+                      ? "status"
+                      : "alert"
+                  }
+                >
+                  {actionMessage}
+                </p>
+              )}
             </article>
           </div>
 
           <aside className="day-column">
-            <div className="day-summary">
-              <div className="section-heading">
-                <div>
-                  <p className="eyebrow">LIVE STATUS</p>
-                  <h2>Your day</h2>
-                </div>
-                <span className="small-menu" aria-hidden="true">
-                  ···
-                </span>
-              </div>
-              <div className="day-total">
-                <strong>
-                  {isClockedIn && clockedInAt && currentTime
-                    ? formatDuration(clockedInAt.toISOString(), currentTime)
-                    : "0h 00m"}
-                </strong>
-                <span>hours worked</span>
-              </div>
-              <div className="progress-track">
-                <span />
-              </div>
-              <div className="progress-caption">
-                <span>{isClockedIn ? "Current shift" : "No active shift"}</span>
-                <span>{selectedOutlet?.name ?? ""}</span>
-              </div>
-              <div className="timeline">
-                <div className="timeline-entry">
-                  <span
-                    className={`timeline-marker${isClockedIn ? " completed" : " upcoming"}`}
-                  />
-                  <div>
-                    <strong>Clock in</strong>
-                    <small>
-                      {isClockedIn ? "Clock recorded" : "Not started"}
-                    </small>
-                  </div>
-                  <time>
-                    {clockedInAt && selectedOutlet
-                      ? formatDate(clockedInAt, selectedOutlet.timezone, {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })
-                      : "—"}
-                  </time>
-                </div>
-                <div className="timeline-entry">
-                  <span className="timeline-marker muted" />
-                  <div>
-                    <strong>Clock out</strong>
-                    <small>
-                      {isClockedIn
-                        ? "When your shift ends"
-                        : "After your shift"}
-                    </small>
-                  </div>
-                  <time>—</time>
-                </div>
-              </div>
-            </div>
+            <article className="shift-state-summary">
+              <p className="eyebrow">
+                {isClockedIn ? "ACTIVE SHIFT" : "SHIFT STATUS"}
+              </p>
+              <h2>{isClockedIn ? "You’re on the clock" : "Not clocked in"}</h2>
+              <strong className="shift-state-duration">
+                {isClockedIn && clockedInAt && currentTime
+                  ? formatDuration(clockedInAt.toISOString(), currentTime)
+                  : "Ready when you are"}
+              </strong>
+              <p>
+                {isClockedIn && clockedInAt && selectedOutlet
+                  ? `Started at ${formatDate(
+                      clockedInAt,
+                      selectedOutlet.timezone,
+                      {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      },
+                    )} · ${selectedOutlet.name}`
+                  : selectedOutlet
+                    ? `Clock in at ${selectedOutlet.name} when you’re within range.`
+                    : "Ask your manager to assign an outlet before clocking."}
+              </p>
+            </article>
 
             <button
               className="help-row"
               type="button"
-              aria-expanded={showCorrectionForm}
-              onClick={() => setShowCorrectionForm((isOpen) => !isOpen)}
+              onClick={() => setIsCorrectionDialogOpen(true)}
             >
               <span className="help-mark">?</span>
               <div>
                 <strong>Something not right?</strong>
-                <small>
-                  {showCorrectionForm
-                    ? "Close request form"
-                    : "Request a time correction"}
-                </small>
+                <small>Request a time correction</small>
               </div>
               <span className="help-arrow">→</span>
             </button>
@@ -778,257 +756,72 @@ export default function Home() {
         <section className="recent-section" id="history">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">RECENT ACTIVITY</p>
+              <p className="eyebrow">SHIFT HISTORY</p>
               <h2>Recent shifts</h2>
             </div>
-            <form className="history-filter" onSubmit={handleHistoryFilter}>
-              <label>
-                <span>From</span>
-                <input
-                  type="date"
-                  value={historyFrom}
-                  onChange={(event) => setHistoryFrom(event.target.value)}
-                />
-              </label>
-              <label>
-                <span>To</span>
-                <input
-                  type="date"
-                  value={historyTo}
-                  onChange={(event) => setHistoryTo(event.target.value)}
-                />
-              </label>
-              <button type="submit" disabled={isFilteringHistory}>
-                {isFilteringHistory ? "Loading…" : "Filter"}
-              </button>
-              {(historyFrom || historyTo) && (
-                <button
-                  className="history-filter-clear"
-                  type="button"
-                  onClick={() => void clearHistoryFilter()}
-                >
-                  Clear
-                </button>
-              )}
-            </form>
+            <Link className="text-link" href="/clock/history">
+              View all shifts <span aria-hidden="true">→</span>
+            </Link>
           </div>
-          {historyMessage && (
-            <p className="team-message" role="status">
-              {historyMessage}
-            </p>
-          )}
-          <div className="activity-table-wrap">
-            <table className="activity-table">
-              <thead>
-                <tr>
-                  <th>DATE</th>
-                  <th>OUTLET</th>
-                  <th>CLOCK IN</th>
-                  <th>CLOCK OUT</th>
-                  <th>HOURS</th>
-                  <th>STATUS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {clockData?.recentSessions.map((record) => (
-                  <tr key={record.id}>
-                    <td>
-                      <strong>
-                        {formatDate(record.clockInAt, record.timezone, {
-                          weekday: "short",
-                          day: "numeric",
-                          month: "short",
-                        })}
-                      </strong>
-                      <small>{record.outletName}</small>
-                    </td>
-                    <td>
-                      <span className="table-outlet">
-                        {record.outletName.slice(0, 1)}
-                      </span>
-                      {record.outletName}
-                    </td>
-                    <td>
-                      {formatDate(record.clockInAt, record.timezone, {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </td>
-                    <td>
-                      {record.clockOutAt
-                        ? formatDate(record.clockOutAt, record.timezone, {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })
-                        : "—"}
-                    </td>
-                    <td>
-                      <strong>
-                        {record.clockOutAt
-                          ? formatDuration(record.clockInAt, record.clockOutAt)
-                          : isClockedIn && currentTime
-                            ? formatDuration(record.clockInAt, currentTime)
-                            : "—"}
-                      </strong>
-                    </td>
-                    <td>
-                      <span
-                        className={`record-status${record.clockOutAt ? " approved" : " review"}`}
-                      >
-                        <i />
-                        {record.clockOutAt ? "Recorded" : "In progress"}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-                {!clockData?.recentSessions.length && (
-                  <tr>
-                    <td colSpan={6} className="empty-table">
-                      No clock records yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          <div className="clock-recent-list">
+            {clockData?.recentSessions.slice(0, 3).map((record) => (
+              <article className="clock-recent-row" key={record.id}>
+                <div className="clock-recent-outlet">
+                  <strong>
+                    {formatDate(record.clockInAt, record.timezone, {
+                      weekday: "short",
+                      day: "numeric",
+                      month: "short",
+                    })}
+                  </strong>
+                  <span>{record.outletName}</span>
+                </div>
+                <div className="clock-recent-times">
+                  <span>
+                    <small>In</small>
+                    {formatDate(record.clockInAt, record.timezone, {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
+                  </span>
+                  <span>
+                    <small>Out</small>
+                    {record.clockOutAt
+                      ? formatDate(record.clockOutAt, record.timezone, {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })
+                      : "In progress"}
+                  </span>
+                </div>
+                <strong className="clock-recent-duration">
+                  {record.clockOutAt
+                    ? formatDuration(record.clockInAt, record.clockOutAt)
+                    : isClockedIn && currentTime
+                      ? formatDuration(record.clockInAt, currentTime)
+                      : "—"}
+                </strong>
+              </article>
+            ))}
+            {!clockData?.recentSessions.length && (
+              <p className="empty-table">No clock records yet.</p>
+            )}
           </div>
         </section>
         <section className="correction-section" id="requests">
-          {showCorrectionForm && (
-            <form className="correction-form" onSubmit={handleCorrectionSubmit}>
-              <div className="correction-form-heading">
-                <div>
-                  <p className="eyebrow">TIME ADJUSTMENT</p>
-                  <h2>Request a correction</h2>
-                </div>
-                <span>{selectedOutlet?.timezone ?? "Outlet time"}</span>
-              </div>
-              <label>
-                Outlet
-                <select
-                  value={selectedOutlet?.id ?? ""}
-                  onChange={(event) => setSelectedOutletId(event.target.value)}
-                  required
-                >
-                  {clockData?.outlets.map((outlet) => (
-                    <option key={outlet.id} value={outlet.id}>
-                      {outlet.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div className="correction-form-row">
-                <label>
-                  Event
-                  <select
-                    value={correctionEvent}
-                    onChange={(event) =>
-                      setCorrectionEvent(
-                        event.target.value as "clock_in" | "clock_out",
-                      )
-                    }
-                  >
-                    <option value="clock_in">Clock in</option>
-                    <option value="clock_out">Clock out</option>
-                  </select>
-                </label>
-                <label>
-                  Requested time
-                  <input
-                    type="datetime-local"
-                    value={correctionTime}
-                    onChange={(event) => setCorrectionTime(event.target.value)}
-                    required
-                  />
-                </label>
-              </div>
-              <label>
-                Related shift
-                <select
-                  value={correctionSessionId}
-                  onChange={(event) =>
-                    setCorrectionSessionId(event.target.value)
-                  }
-                >
-                  <option value="" disabled={correctionEvent === "clock_out"}>
-                    Missing clock-in event
-                  </option>
-                  {clockData?.recentSessions
-                    .filter((record) => record.outletId === selectedOutlet?.id)
-                    .map((record) => (
-                      <option key={record.id} value={record.id}>
-                        {record.outletName} ·{" "}
-                        {formatDate(record.clockInAt, record.timezone, {
-                          day: "numeric",
-                          month: "short",
-                        })}
-                      </option>
-                    ))}
-                </select>
-              </label>
-              <label>
-                Reason
-                <textarea
-                  value={correctionReason}
-                  onChange={(event) => setCorrectionReason(event.target.value)}
-                  minLength={5}
-                  maxLength={1000}
-                  rows={3}
-                  placeholder="Tell your outlet lead what happened."
-                  required
-                />
-              </label>
-              <div className="correction-form-footer">
-                <p className="correction-message" aria-live="polite">
-                  {correctionMessage}
-                </p>
-                <button
-                  className="auth-submit"
-                  type="submit"
-                  disabled={isSubmittingCorrection || !selectedOutlet}
-                >
-                  {isSubmittingCorrection ? "Submitting…" : "Submit request"}
-                </button>
-              </div>
-            </form>
+          {isCorrectionDialogOpen && (
+            <CorrectionDialog
+              open
+              outlets={clockData?.outlets ?? []}
+              shifts={clockData?.recentSessions ?? []}
+              initialOutletId={selectedOutlet?.id}
+              initialEvent={isClockedIn ? "clock_out" : "clock_in"}
+              onOpenChange={setIsCorrectionDialogOpen}
+              onSubmitted={async () => {
+                setClockData(await loadClockData());
+              }}
+            />
           )}
-          {clockData?.correctionRequests.length ? (
-            <div className="correction-list">
-              <div className="section-heading">
-                <div>
-                  <p className="eyebrow">YOUR REQUESTS</p>
-                  <h2>Correction history</h2>
-                </div>
-              </div>
-              {clockData.correctionRequests.map((request) => (
-                <article className="correction-item" key={request.id}>
-                  <div>
-                    <strong>
-                      {request.event === "clock_in" ? "Clock-in" : "Clock-out"}{" "}
-                      · {request.outletName}
-                    </strong>
-                    <small>
-                      {formatDate(request.requestedAt, request.timezone, {
-                        weekday: "short",
-                        day: "numeric",
-                        month: "short",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}{" "}
-                      · {request.reason}
-                    </small>
-                    {request.reviewReason && (
-                      <small className="review-reason">
-                        Review: {request.reviewReason}
-                      </small>
-                    )}
-                  </div>
-                  <span className={`correction-status ${request.status}`}>
-                    {request.status}
-                  </span>
-                </article>
-              ))}
-            </div>
-          ) : null}
         </section>
         <p className="preview-note">
           <span>i</span> Clock records use server time and location evidence.
