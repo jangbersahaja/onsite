@@ -966,9 +966,7 @@ export default function Home() {
                       <div className="clock-pin-copy">
                         <p className="clock-pin-eyebrow">QUICK SIGN-IN</p>
                         <h3>Sign in with a PIN</h3>
-                        <p>
-                          Skip your password next time on this browser.
-                        </p>
+                        <p>Skip your password next time on this browser.</p>
                       </div>
                       <span
                         className={`clock-pin-status${staffDeviceStatus.currentBrowserPinEnabled ? " is-enabled" : ""}`}
