@@ -34,6 +34,7 @@ OnSITE is a multi-outlet workforce app built with Next.js, Drizzle, and Postgres
 ## Environment variables
 
 - `DATABASE_URL`: Postgres connection string.
+- `PIN_PEPPER`: Optional server-only secret of at least 32 bytes for staff PIN sign-in. Generate one with `openssl rand -base64 32`, keep it stable, and do not commit it. Changing it disables existing PINs until staff set them again; password sign-in continues to work.
 - `BOOTSTRAP_ADMIN_*`: Name, username, email, and password for the initial super admin.
 - `BOOTSTRAP_OUTLET_*`: Optional name, address, coordinates, and timezone for one outlet.
 

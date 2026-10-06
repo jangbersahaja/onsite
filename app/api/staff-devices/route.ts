@@ -8,13 +8,14 @@ import {
 import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { getTeamAccess } from "@/lib/team-access";
 import { createOneTimeToken } from "@/lib/one-time-token";
+import { getPinPepper } from "@/lib/pin";
 import {
   getStaffDeviceCookieName,
   isApprovedStaffDevice,
   matchesStaffDeviceToken,
 } from "@/lib/staff-device";
+import { getTeamAccess } from "@/lib/team-access";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { cookies } from "next/headers";
 
@@ -129,6 +130,7 @@ export async function GET(request: Request) {
       .select({
         status: staffDeviceEnrollments.status,
         tokenHash: staffDeviceEnrollments.tokenHash,
+        pinHash: staffDeviceEnrollments.pinHash,
         createdAt: staffDeviceEnrollments.createdAt,
       })
       .from(staffDeviceEnrollments)
@@ -160,6 +162,14 @@ export async function GET(request: Request) {
         : false,
       currentBrowserHasPendingRequest: pending
         ? matchesStaffDeviceToken(currentToken, pending.tokenHash)
+        : false,
+      pinConfigured: Boolean(getPinPepper()),
+      currentBrowserPinEnabled: active
+        ? isApprovedStaffDevice(
+            currentToken,
+            active.status,
+            active.tokenHash,
+          ) && Boolean(active.pinHash)
         : false,
       pendingRequestedAt: pending?.createdAt ?? null,
     });

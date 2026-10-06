@@ -1,8 +1,10 @@
 "use client";
 
 import { CorrectionDialog } from "@/app/clock/correction-dialog";
+import { ModalDialog } from "@/app/modal-dialog";
 import { SetupScreen } from "@/app/setup-screen";
 import { SignInForm } from "@/app/sign-in-form";
+import { SixDigitPinInput } from "@/app/six-digit-pin-input";
 import {
   WorkspaceShell,
   type WorkspaceNavigationGroup,
@@ -10,6 +12,7 @@ import {
 import { authClient } from "@/lib/auth-client";
 import { requestCurrentLocation } from "@/lib/browser-location";
 import { verifyGeofence } from "@/lib/geofence";
+import { forgetPinUser, rememberPinUser } from "@/lib/pin-client";
 import { getCompletedBreakMinutes } from "@/lib/work-breaks";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -60,6 +63,8 @@ type StaffDeviceStatus = {
   hasActiveDevice: boolean;
   currentBrowserApproved: boolean;
   currentBrowserHasPendingRequest: boolean;
+  pinConfigured: boolean;
+  currentBrowserPinEnabled: boolean;
 };
 
 type ClockPageData = {
@@ -159,11 +164,20 @@ function formatDate(
 export default function Home() {
   const authSession = authClient.useSession();
   const router = useRouter();
+  const authUserId = authSession.data?.user.id;
   const [isConfigured, setIsConfigured] = useState<boolean | null>(null);
   const [clockData, setClockData] = useState<ClockPageData | null>(null);
   const [staffDeviceStatus, setStaffDeviceStatus] =
     useState<StaffDeviceStatus | null>(null);
   const [isRequestingStaffDevice, setIsRequestingStaffDevice] = useState(false);
+  const [isSavingPin, setIsSavingPin] = useState(false);
+  const [isPinSetupOpen, setIsPinSetupOpen] = useState(false);
+  const [pinSetupValue, setPinSetupValue] = useState("");
+  const [pinSetupConfirmation, setPinSetupConfirmation] = useState("");
+  const [pinSetupError, setPinSetupError] = useState("");
+  const [pinFormMode, setPinFormMode] = useState<"remove" | null>(null);
+  const [pinMessage, setPinMessage] = useState("");
+  const [pinMessageIsError, setPinMessageIsError] = useState(false);
   const [selectedOutletId, setSelectedOutletId] = useState("");
   const [isLoadingData, setIsLoadingData] = useState(true);
   const [isCheckingLocation, setIsCheckingLocation] = useState(false);
@@ -271,7 +285,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!authSession.data?.user.id || isConfigured !== true) return;
+    if (!authUserId || isConfigured !== true) return;
     let active = true;
     loadClockData()
       .then((data) => {
@@ -295,7 +309,7 @@ export default function Home() {
     return () => {
       active = false;
     };
-  }, [authSession.data?.user.id, isConfigured]);
+  }, [authUserId, isConfigured]);
 
   useEffect(() => {
     const currentUser = authSession.data?.user;
@@ -309,11 +323,33 @@ export default function Home() {
   }, [authSession.data?.user, router]);
 
   useEffect(() => {
-    if (!authSession.data?.user.id || isConfigured !== true) return;
+    if (!authUserId || isConfigured !== true) return;
     let active = true;
     loadStaffDeviceStatus()
       .then((status) => {
-        if (active) setStaffDeviceStatus(status);
+        if (active) {
+          setStaffDeviceStatus(status);
+          const promptUserId = window.sessionStorage.getItem(
+            "onsite-pin-setup-prompt",
+          );
+          if (promptUserId) {
+            window.sessionStorage.removeItem("onsite-pin-setup-prompt");
+            if (
+              promptUserId === authUserId &&
+              status.required &&
+              status.pinConfigured &&
+              status.currentBrowserApproved &&
+              !status.currentBrowserPinEnabled
+            ) {
+              setIsPinSetupOpen(true);
+            }
+          }
+          if (status.currentBrowserPinEnabled) {
+            rememberPinUser(authUserId);
+          } else {
+            forgetPinUser();
+          }
+        }
       })
       .catch(() => {
         if (active) setStaffDeviceStatus(null);
@@ -321,7 +357,7 @@ export default function Home() {
     return () => {
       active = false;
     };
-  }, [authSession.data?.user.id, isConfigured]);
+  }, [authUserId, isConfigured]);
 
   useEffect(() => {
     const updateTime = () => setCurrentTime(new Date());
@@ -378,6 +414,108 @@ export default function Home() {
     } finally {
       setIsRequestingStaffDevice(false);
     }
+  }
+
+  async function handlePinAction(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isSavingPin) return;
+    setIsSavingPin(true);
+    setPinMessage("");
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+    try {
+      const response = await fetch("/api/staff-devices/pin", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentPassword: formData.get("currentPassword"),
+        }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        throw new Error(body.error ?? "Could not update PIN sign-in.");
+      }
+
+      forgetPinUser();
+      form.reset();
+      setPinFormMode(null);
+      setStaffDeviceStatus(await loadStaffDeviceStatus());
+      setPinMessage("PIN sign-in has been removed from this browser.");
+      setPinMessageIsError(false);
+    } catch (error) {
+      setPinMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not update PIN sign-in.",
+      );
+      setPinMessageIsError(true);
+    } finally {
+      setIsSavingPin(false);
+    }
+  }
+
+  async function handlePinSetupSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (isSavingPin || !authUserId) return;
+    setPinSetupError("");
+    if (!/^\d{6}$/.test(pinSetupValue)) {
+      setPinSetupError("Enter all six digits for your PIN.");
+      return;
+    }
+    if (pinSetupValue !== pinSetupConfirmation) {
+      setPinSetupError("Those PINs don’t match.");
+      return;
+    }
+
+    setIsSavingPin(true);
+    try {
+      const response = await fetch("/api/staff-devices/pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: pinSetupValue }),
+      });
+      const body = await response.json();
+      if (!response.ok) {
+        throw new Error(body.error ?? "Could not set up PIN sign-in.");
+      }
+
+      rememberPinUser(authUserId);
+      setStaffDeviceStatus((current) =>
+        current ? { ...current, currentBrowserPinEnabled: true } : current,
+      );
+      setPinSetupValue("");
+      setPinSetupConfirmation("");
+      setIsPinSetupOpen(false);
+      setPinMessage("PIN sign-in is enabled on this browser.");
+      setPinMessageIsError(false);
+    } catch (error) {
+      setPinSetupError(
+        error instanceof Error
+          ? error.message
+          : "Could not set up PIN sign-in.",
+      );
+    } finally {
+      setIsSavingPin(false);
+    }
+  }
+
+  function openPinSetup() {
+    setPinSetupValue("");
+    setPinSetupConfirmation("");
+    setPinSetupError("");
+    setIsPinSetupOpen(true);
+  }
+
+  function closePinSetup(open: boolean) {
+    if (open) {
+      setIsPinSetupOpen(true);
+      return;
+    }
+    if (isSavingPin) return;
+    setIsPinSetupOpen(false);
+    setPinSetupValue("");
+    setPinSetupConfirmation("");
+    setPinSetupError("");
   }
 
   async function handleClockAction() {
@@ -817,6 +955,107 @@ export default function Home() {
               </p>
             </article>
 
+            {staffDeviceStatus?.required &&
+              staffDeviceStatus.currentBrowserApproved && (
+                <article className="clock-pin-card">
+                  <section
+                    className="clock-pin-controls"
+                    aria-label="PIN sign-in"
+                  >
+                    <div className="clock-pin-summary">
+                      <div className="clock-pin-copy">
+                        <p className="clock-pin-eyebrow">QUICK SIGN-IN</p>
+                        <h3>Sign in with a PIN</h3>
+                        <p>
+                          Skip your password next time on this browser.
+                        </p>
+                      </div>
+                      <span
+                        className={`clock-pin-status${staffDeviceStatus.currentBrowserPinEnabled ? " is-enabled" : ""}`}
+                      >
+                        {staffDeviceStatus.currentBrowserPinEnabled
+                          ? "Enabled"
+                          : "Not set up"}
+                      </span>
+                    </div>
+                    {!staffDeviceStatus.pinConfigured ? (
+                      <p className="clock-pin-note" role="status">
+                        PIN sign-in isn’t available right now.
+                      </p>
+                    ) : pinFormMode === "remove" ? (
+                      <form
+                        className="clock-pin-form"
+                        onSubmit={(event) => void handlePinAction(event)}
+                      >
+                        <label className="clock-pin-password-label">
+                          Current password
+                          <input
+                            name="currentPassword"
+                            type="password"
+                            autoComplete="current-password"
+                            maxLength={128}
+                            required
+                          />
+                        </label>
+                        <div className="clock-pin-actions">
+                          <button
+                            className="clock-pin-button is-danger"
+                            type="submit"
+                            disabled={isSavingPin}
+                          >
+                            {isSavingPin ? "Removing…" : "Remove PIN"}
+                          </button>
+                          <button
+                            className="clock-pin-button"
+                            type="button"
+                            onClick={() => setPinFormMode(null)}
+                            disabled={isSavingPin}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="clock-pin-actions">
+                        <button
+                          className="clock-pin-button is-primary"
+                          type="button"
+                          onClick={openPinSetup}
+                        >
+                          {staffDeviceStatus.currentBrowserPinEnabled
+                            ? "Change PIN"
+                            : "Set up PIN"}
+                        </button>
+                        {staffDeviceStatus.currentBrowserPinEnabled && (
+                          <button
+                            className="clock-pin-button is-danger-quiet"
+                            type="button"
+                            onClick={() => {
+                              setPinMessage("");
+                              setPinFormMode("remove");
+                            }}
+                          >
+                            Remove PIN
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {pinMessage && (
+                      <p
+                        className={
+                          pinMessageIsError
+                            ? "form-error"
+                            : "clock-pin-feedback"
+                        }
+                        role={pinMessageIsError ? "alert" : "status"}
+                      >
+                        {pinMessage}
+                      </p>
+                    )}
+                  </section>
+                </article>
+              )}
+
             <button
               className="help-row"
               type="button"
@@ -928,6 +1167,83 @@ export default function Home() {
           <span>i</span> Clock records use server time and location evidence.
           Browser GPS can be spoofed.
         </p>
+        <ModalDialog
+          open={isPinSetupOpen}
+          onOpenChange={closePinSetup}
+          labelledBy="pin-setup-title"
+        >
+          <div className="dialog-panel pin-setup-panel">
+            <header className="dialog-header pin-setup-header">
+              <div>
+                <p className="pin-setup-kicker">
+                  <span aria-hidden="true" /> APPROVED BROWSER
+                </p>
+                <h2 id="pin-setup-title">Sign in faster with a PIN</h2>
+                <p className="pin-setup-description">
+                  Create a six-digit PIN for this browser. Next time, sign in
+                  without typing your password. Your password still works
+                  whenever you need it.
+                </p>
+              </div>
+              <button
+                className="dialog-close"
+                type="button"
+                aria-label="Close PIN setup"
+                onClick={() => closePinSetup(false)}
+              >
+                ×
+              </button>
+            </header>
+            <form className="pin-setup-form" onSubmit={handlePinSetupSubmit}>
+              <div className="pin-setup-fields">
+                <div className="pin-setup-field">
+                  <SixDigitPinInput
+                    idPrefix="pin-setup-new"
+                    label="New six-digit PIN"
+                    name="pin"
+                    value={pinSetupValue}
+                    onChange={setPinSetupValue}
+                  />
+                </div>
+                <div className="pin-setup-field">
+                  <SixDigitPinInput
+                    idPrefix="pin-setup-confirm"
+                    label="Confirm six-digit PIN"
+                    name="confirmPin"
+                    value={pinSetupConfirmation}
+                    onChange={setPinSetupConfirmation}
+                  />
+                </div>
+              </div>
+              {pinSetupError && (
+                <p className="form-error" role="alert">
+                  {pinSetupError}
+                </p>
+              )}
+              <div className="pin-setup-actions">
+                <button
+                  className="pin-setup-later"
+                  type="button"
+                  onClick={() => closePinSetup(false)}
+                  disabled={isSavingPin}
+                >
+                  Maybe later
+                </button>
+                <button
+                  className="auth-submit"
+                  type="submit"
+                  disabled={
+                    isSavingPin ||
+                    pinSetupValue.length !== 6 ||
+                    pinSetupConfirmation.length !== 6
+                  }
+                >
+                  {isSavingPin ? "Saving PIN…" : "Set up PIN"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </ModalDialog>
       </main>
     </WorkspaceShell>
   );

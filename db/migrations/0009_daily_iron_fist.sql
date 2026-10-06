@@ -1,0 +1,1 @@
+ALTER TABLE "staff_device_enrollments" ADD COLUMN "pin_hash" text;

@@ -98,6 +98,7 @@ export const staffDeviceEnrollments = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     tokenHash: text("token_hash").notNull().unique(),
+    pinHash: text("pin_hash"),
     status: staffDeviceStatusEnum("status").notNull().default("pending"),
     approvedBy: text("approved_by").references(() => user.id, {
       onDelete: "set null",

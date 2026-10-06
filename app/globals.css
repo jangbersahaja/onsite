@@ -577,6 +577,152 @@ a:focus-visible {
   line-height: 1.4;
   text-align: center;
 }
+.clock-pin-card {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  padding: 16px;
+  box-shadow: var(--shadow-card);
+}
+.clock-pin-controls {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+.clock-pin-summary {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+}
+.clock-pin-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.clock-pin-eyebrow {
+  margin: 0;
+  color: var(--green-dark);
+  font-size: 9px;
+  font-weight: 750;
+}
+.clock-pin-copy h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.35;
+}
+.clock-pin-copy > p:last-child {
+  max-width: 240px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.clock-pin-status {
+  flex: none;
+  border: 1px solid #d9e0e3;
+  border-radius: 4px;
+  background: #f4f6f7;
+  padding: 5px 8px;
+  color: #59676c;
+  font-size: 10px;
+  font-weight: 700;
+}
+.clock-pin-status.is-enabled {
+  border-color: #b7d9c5;
+  background: #edf7f0;
+  color: #286b48;
+}
+.clock-pin-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.clock-pin-actions .is-primary {
+  flex: 1;
+}
+.clock-pin-button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--surface);
+  padding: 0 13px;
+  color: var(--ink);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+}
+.clock-pin-button.is-primary {
+  border-color: var(--green);
+  background: var(--green);
+  color: #fff;
+}
+.clock-pin-button.is-primary:hover {
+  background: var(--green-dark);
+}
+.clock-pin-button.is-danger-quiet,
+.clock-pin-button.is-danger {
+  color: #963d36;
+}
+.clock-pin-button.is-danger {
+  border-color: #dbaaa5;
+  background: #fff7f6;
+}
+.clock-pin-button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+.clock-pin-form {
+  display: grid;
+  gap: 12px;
+}
+.clock-pin-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.clock-pin-form label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  text-align: left;
+}
+.clock-pin-password-label {
+  max-width: 360px;
+}
+.clock-pin-form input {
+  width: 100%;
+  min-height: 42px;
+  border: 1px solid #d5dfe3;
+  border-radius: 4px;
+  background: #fff;
+  padding: 0 11px;
+  color: var(--ink);
+  font: inherit;
+}
+.clock-pin-form input:focus {
+  border-color: var(--green);
+  outline: 2px solid rgba(99, 91, 255, 0.18);
+}
+.clock-pin-note,
+.clock-pin-feedback {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.clock-pin-feedback {
+  color: var(--success);
+}
+.clock-pin-feedback.is-error {
+  color: var(--danger);
+}
 .shift-strip,
 .day-summary {
   border: 1px solid var(--line);
@@ -1162,7 +1308,31 @@ h2 {
 }
 .auth-form input:focus {
   border-color: var(--green);
-  outline: 2px solid rgba(40, 101, 106, 0.18);
+  outline: 2px solid rgba(99, 91, 255, 0.18);
+}
+.auth-form.is-pin-form {
+  gap: 12px;
+  margin-top: 30px;
+}
+.auth-form.is-pin-form label {
+  margin-top: 0;
+  color: var(--ink);
+  font-size: 12px;
+}
+.auth-form .auth-pin-input {
+  height: 64px;
+  border-color: #c8c7f4;
+  background: #f8f7ff;
+  text-align: center;
+  font-size: 25px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.auth-form .auth-pin-input:focus {
+  background: #fff;
+}
+.auth-form.is-pin-form .auth-submit {
+  margin-top: 3px;
 }
 .auth-submit {
   min-height: 42px;
@@ -1180,6 +1350,17 @@ h2 {
 .auth-submit:disabled {
   cursor: wait;
   opacity: 0.65;
+}
+.auth-mode-toggle {
+  display: block;
+  margin: 14px auto 0;
+  border: 0;
+  background: transparent;
+  color: var(--green-dark);
+  font-size: 12px;
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .auth-footnote,
 .setup-footnote {
@@ -2636,7 +2817,12 @@ h2 {
     white-space: normal;
   }
   .auth-form input,
-  .team-invite-form input,
+  .team-invite-form input {
+    min-height: 44px;
+  }
+  .clock-pin-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .team-invite-form select,
   .timesheet-filters input,
   .timesheet-filters select,
@@ -3776,4 +3962,146 @@ small,
   margin-top: -5px;
   color: var(--muted);
   font-size: 10px;
+}
+.pin-input-label {
+  display: block;
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+.auth-form.is-pin-form .pin-input-label {
+  margin: 0 0 8px;
+  color: var(--ink);
+  font-size: 12px;
+}
+.pin-digit-group {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  padding: 0px 80px;
+}
+.pin-digit-group input {
+  width: 100%;
+  min-width: 0;
+  height: 54px;
+  border: 1px solid #c8c7f4;
+  border-radius: 5px;
+  background: #f8f7ff;
+  padding: 0;
+  color: var(--ink);
+  font: 700 21px/1 var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.pin-digit-group input:focus-visible {
+  border-color: var(--green);
+  outline: 2px solid rgba(99, 91, 255, 0.2);
+  outline-offset: 1px;
+  background: #fff;
+}
+.workspace-dialog:has(.pin-setup-panel) {
+  width: min(520px, calc(100vw - 28px));
+}
+.pin-setup-panel {
+  padding: 28px;
+}
+.pin-setup-header {
+  margin-bottom: 22px;
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.pin-setup-kicker {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 10px;
+  color: var(--green-dark);
+  font-size: 9px;
+  font-weight: 750;
+}
+.pin-setup-kicker span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #31a36b;
+  box-shadow: 0 0 0 3px rgba(49, 163, 107, 0.13);
+}
+.pin-setup-header h2 {
+  max-width: 380px;
+  margin: 0 0 8px;
+  font-size: 25px;
+  line-height: 1.2;
+}
+.pin-setup-description {
+  max-width: 420px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.pin-setup-form {
+  display: grid;
+  gap: 18px;
+}
+.pin-setup-fields {
+  display: grid;
+  gap: 16px;
+}
+.pin-setup-field {
+  min-width: 0;
+}
+.pin-setup-field .pin-digit-group input {
+  height: 48px;
+}
+.pin-setup-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+.pin-setup-actions .auth-submit {
+  min-width: 130px;
+  min-height: 44px;
+  margin: 0;
+  padding: 0 16px;
+  font-size: 12px;
+}
+.pin-setup-later {
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+  padding: 0 15px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+.pin-setup-later:hover {
+  background: #f6f7fa;
+}
+@media (max-width: 600px) {
+  .pin-setup-panel {
+    padding: 20px;
+  }
+  .pin-setup-header {
+    gap: 10px;
+  }
+  .pin-setup-header h2 {
+    font-size: 22px;
+  }
+  .pin-setup-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+  .pin-setup-actions > button {
+    width: 100%;
+  }
+  .pin-digit-group {
+    gap: 6px;
+  }
+  .pin-digit-group input {
+    height: 48px;
+    font-size: 19px;
+  }
 }
