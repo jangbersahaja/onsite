@@ -1,6 +1,10 @@
 "use client";
 
 import { REVIEW_REQUESTS_CHANGED_EVENT } from "@/app/workspace-shell";
+import {
+  formatOutletDateTime,
+  outletDateTimeToISOString,
+} from "@/lib/outlet-time";
 import { useEffect, useState, type FormEvent } from "react";
 
 type ReviewRequest = {
@@ -11,9 +15,12 @@ type ReviewRequest = {
   outletId: string;
   outletName: string;
   timezone: string;
+  workSessionId: string | null;
   event: "clock_in" | "clock_out";
   requestedAt: string;
   reason: string;
+  status: "pending" | "reconciliation";
+  appliedAt: string | null;
   createdAt: string;
 };
 
@@ -77,6 +84,12 @@ export default function CorrectionReviewPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
   const [message, setMessage] = useState("");
+  const pendingRequests = requests.filter(
+    (request) => request.status === "pending",
+  );
+  const reconciliationRequests = requests.filter(
+    (request) => request.status === "reconciliation",
+  );
 
   async function refresh() {
     setIsLoading(true);
@@ -128,7 +141,30 @@ export default function CorrectionReviewPage() {
     const submitter = (event.nativeEvent as SubmitEvent).submitter;
     const decision =
       submitter instanceof HTMLButtonElement ? submitter.value : "";
-    if (decision !== "approve" && decision !== "reject") return;
+    if (
+      decision !== "approve" &&
+      decision !== "reject" &&
+      decision !== "confirm" &&
+      decision !== "adjust"
+    )
+      return;
+
+    let requestedAt: string | undefined;
+    if (decision === "adjust") {
+      const localTime = String(formData.get("requestedAt") ?? "");
+      try {
+        requestedAt = outletDateTimeToISOString(
+          localTime,
+          requests.find((request) => request.id === requestId)?.timezone ??
+            "UTC",
+        );
+      } catch (error) {
+        setMessage(
+          error instanceof Error ? error.message : "Enter a valid punch time.",
+        );
+        return;
+      }
+    }
 
     const busyKey = `correction:${requestId}`;
     setBusyId(busyKey);
@@ -137,13 +173,19 @@ export default function CorrectionReviewPage() {
       const response = await fetch("/api/corrections", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requestId, decision, reason }),
+        body: JSON.stringify({ requestId, decision, reason, requestedAt }),
       });
       const body = await response.json();
       if (!response.ok)
         throw new Error(body.error ?? "Could not record this decision.");
       setMessage(
-        `Request ${decision === "approve" ? "approved" : "rejected"}.`,
+        decision === "approve"
+          ? "Request approved."
+          : decision === "reject"
+            ? "Request rejected."
+            : decision === "adjust"
+              ? "Punch adjusted and reconciled."
+              : "Punch reconciled.",
       );
       window.dispatchEvent(new Event(REVIEW_REQUESTS_CHANGED_EVENT));
       setRequests((current) =>
@@ -221,13 +263,13 @@ export default function CorrectionReviewPage() {
       )}
       <section
         className="correction-review-list"
-        aria-label="Clock corrections"
+        aria-label="Pending clock corrections"
       >
         <header className="correction-review-section-heading">
-          <h2>Clock corrections</h2>
-          <span>{requests.length}</span>
+          <h2>Pending approval</h2>
+          <span>{pendingRequests.length}</span>
         </header>
-        {requests.map((request) => (
+        {pendingRequests.map((request) => (
           <article className="correction-review-item" key={request.id}>
             <div className="correction-review-details">
               <p className="eyebrow">
@@ -282,9 +324,96 @@ export default function CorrectionReviewPage() {
             </form>
           </article>
         ))}
-        {!isLoading && requests.length === 0 && (
+        {!isLoading && pendingRequests.length === 0 && (
           <p className="correction-review-empty">
             No pending clock correction requests.
+          </p>
+        )}
+      </section>
+      <section
+        className="correction-review-list"
+        aria-label="Applied punches awaiting reconciliation"
+      >
+        <header className="correction-review-section-heading">
+          <h2>Needs reconciliation</h2>
+          <span>{reconciliationRequests.length}</span>
+        </header>
+        {reconciliationRequests.map((request) => (
+          <article className="correction-review-item" key={request.id}>
+            <div className="correction-review-details">
+              <p className="eyebrow">
+                {request.outletName} · {request.event.replace("_", " ")}
+              </p>
+              <h2>{request.requesterName}</h2>
+              <p className="correction-review-email">
+                {request.requesterEmail}
+              </p>
+              <strong className="correction-requested-time">
+                {formatRequestedTime(request.requestedAt, request.timezone)}
+              </strong>
+              <p className="correction-request-reason">{request.reason}</p>
+              <small>
+                Applied
+                {request.appliedAt
+                  ? ` ${formatRequestedTime(request.appliedAt, request.timezone)}`
+                  : " immediately"}
+              </small>
+            </div>
+            <form
+              className="correction-decision-form"
+              onSubmit={(event) => void decide(event, request.id)}
+            >
+              <label>
+                Manager note
+                <textarea
+                  name="reason"
+                  minLength={3}
+                  maxLength={500}
+                  rows={2}
+                  required
+                  placeholder="Add a reconciliation note."
+                />
+              </label>
+              <label>
+                Adjust punch time
+                <input
+                  name="requestedAt"
+                  type="datetime-local"
+                  required
+                  defaultValue={formatOutletDateTime(
+                    request.requestedAt,
+                    request.timezone,
+                  )}
+                />
+              </label>
+              <div className="correction-decision-actions">
+                <button
+                  className="team-secondary-action"
+                  type="submit"
+                  name="decision"
+                  value="adjust"
+                  disabled={Boolean(busyId)}
+                >
+                  {busyId === `correction:${request.id}` ? "Saving…" : "Adjust"}
+                </button>
+                <button
+                  className="auth-submit"
+                  type="submit"
+                  name="decision"
+                  value="confirm"
+                  disabled={Boolean(busyId)}
+                >
+                  {busyId === `correction:${request.id}`
+                    ? "Saving…"
+                    : "Confirm"}
+                </button>
+              </div>
+            </form>
+          </article>
+        ))}
+        {!isLoading && reconciliationRequests.length === 0 && (
+          <p className="correction-review-empty">
+            No applied punches need reconciliation.
           </p>
         )}
       </section>

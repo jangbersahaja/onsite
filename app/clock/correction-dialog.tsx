@@ -1,7 +1,10 @@
 "use client";
 
 import { ModalDialog } from "@/app/modal-dialog";
-import { outletDateTimeToISOString } from "@/lib/outlet-time";
+import {
+  formatOutletDateTime,
+  outletDateTimeToISOString,
+} from "@/lib/outlet-time";
 import { useState, type FormEvent } from "react";
 
 type CorrectionOutlet = {
@@ -49,7 +52,10 @@ export function CorrectionDialog({
 }: CorrectionDialogProps) {
   const [outletId, setOutletId] = useState(initialOutletId ?? "");
   const [event, setEvent] = useState<"clock_in" | "clock_out">(initialEvent);
-  const [requestedTime, setRequestedTime] = useState("");
+  const [requestedTime, setRequestedTime] = useState(() => {
+    const outlet = outlets.find((item) => item.id === initialOutletId);
+    return outlet ? formatOutletDateTime(new Date(), outlet.timezone) : "";
+  });
   const [shiftId, setShiftId] = useState(initialShiftId ?? "");
   const [reason, setReason] = useState("");
   const [message, setMessage] = useState("");
@@ -105,7 +111,8 @@ export function CorrectionDialog({
             <p className="eyebrow">TIME ADJUSTMENT</p>
             <h2 id="correction-dialog-title">Request a correction</h2>
             <p className="correction-dialog-description">
-              Your outlet lead will review the requested time.
+              This punch takes effect right away. A manager will reconcile it
+              later.
             </p>
           </div>
           <button
@@ -122,7 +129,18 @@ export function CorrectionDialog({
             Outlet
             <select
               value={outletId}
-              onChange={(inputEvent) => setOutletId(inputEvent.target.value)}
+              onChange={(inputEvent) => {
+                const nextOutletId = inputEvent.target.value;
+                setOutletId(nextOutletId);
+                const nextOutlet = outlets.find(
+                  (outlet) => outlet.id === nextOutletId,
+                );
+                if (nextOutlet) {
+                  setRequestedTime(
+                    formatOutletDateTime(new Date(), nextOutlet.timezone),
+                  );
+                }
+              }}
               required
             >
               {outlets.map((outlet) => (

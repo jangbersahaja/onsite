@@ -40,7 +40,7 @@ type HistoryRequest = {
   event: "clock_in" | "clock_out";
   requestedAt: string;
   reason: string;
-  status: "pending" | "approved" | "rejected";
+  status: "pending" | "reconciliation" | "approved" | "rejected";
   reviewReason: string | null;
   createdAt: string;
 };
@@ -203,12 +203,11 @@ export default function ClockHistoryPage() {
     }
   }
 
-  async function refreshRequests() {
-    const response = await fetch("/api/corrections", { cache: "no-store" });
-    const result = await response.json();
-    if (!response.ok)
-      throw new Error(result.error ?? "Could not refresh correction requests.");
-    setRequests(result.requests as HistoryRequest[]);
+  async function refreshHistory() {
+    const result = await loadHistoryPage(month, 0);
+    setData(result);
+    setRequests(result.correctionRequests);
+    setNextOffset(result.historyPage.nextOffset);
   }
 
   if (authSession.isPending) {
@@ -221,7 +220,8 @@ export default function ClockHistoryPage() {
 
   const canManage = authSession.data.user.canAccessBackoffice;
   const pendingCount = requests.filter(
-    (request) => request.status === "pending",
+    (request) =>
+      request.status === "pending" || request.status === "reconciliation",
   ).length;
   const navigation: WorkspaceNavigationGroup[] = [
     {
@@ -469,7 +469,11 @@ export default function ClockHistoryPage() {
                   )}
                 </div>
                 <span className={`correction-status ${request.status}`}>
-                  {request.status}
+                  {request.status === "reconciliation"
+                    ? "Needs reconciliation"
+                    : request.status === "pending"
+                      ? "Pending approval"
+                      : request.status}
                 </span>
               </article>
             ))}
@@ -489,7 +493,7 @@ export default function ClockHistoryPage() {
             initialShiftId={correctionDefaults.shiftId}
             initialEvent={correctionDefaults.event}
             onOpenChange={setIsCorrectionDialogOpen}
-            onSubmitted={refreshRequests}
+            onSubmitted={refreshHistory}
           />
         )}
       </main>

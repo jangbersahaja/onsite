@@ -3,14 +3,34 @@ import {
   correctionRequests,
   outletMemberships,
   outlets,
+  staffDeviceEnrollments,
   user,
+  workBreaks,
   workSessions,
 } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
+import { getCorrectionTimeError } from "@/lib/correction-time";
 import { getDb } from "@/lib/db";
+import {
+  getStaffDeviceCookieName,
+  isApprovedStaffDevice,
+  isStaffDeviceRequired,
+} from "@/lib/staff-device";
 import { getTeamAccess } from "@/lib/team-access";
-import { and, desc, eq, gt, inArray, isNull, lte, or } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNull,
+  lte,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
+import { cookies } from "next/headers";
 import { z } from "zod";
 
 const correctionSchema = z
@@ -67,10 +87,13 @@ export async function GET(request: Request) {
         outletId: correctionRequests.outletId,
         outletName: outlets.name,
         timezone: correctionRequests.timezone,
+        workSessionId: correctionRequests.workSessionId,
         event: correctionRequests.event,
         requestedAt: correctionRequests.requestedAt,
         reason: correctionRequests.reason,
         status: correctionRequests.status,
+        appliedAt: correctionRequests.appliedAt,
+        reconciledAt: correctionRequests.reconciledAt,
         reviewReason: correctionRequests.reviewReason,
         createdAt: correctionRequests.createdAt,
       })
@@ -81,7 +104,7 @@ export async function GET(request: Request) {
         review && access
           ? and(
               inArray(correctionRequests.outletId, reviewOutletIds),
-              eq(correctionRequests.status, "pending"),
+              inArray(correctionRequests.status, ["pending", "reconciliation"]),
             )
           : eq(correctionRequests.requestedBy, session.user.id),
       )
@@ -100,10 +123,15 @@ export async function GET(request: Request) {
 const reviewSchema = z
   .object({
     requestId: z.string().uuid(),
-    decision: z.enum(["approve", "reject"]),
+    decision: z.enum(["approve", "reject", "confirm", "adjust"]),
     reason: z.string().trim().min(3).max(500),
+    requestedAt: z.string().datetime({ offset: true }).optional(),
   })
-  .strict();
+  .strict()
+  .refine((value) => value.decision !== "adjust" || value.requestedAt, {
+    path: ["requestedAt"],
+    message: "An adjusted punch time is required.",
+  });
 
 export async function PATCH(request: Request) {
   if (!hasServerConfiguration()) return unavailable();
@@ -155,7 +183,7 @@ export async function PATCH(request: Request) {
           and(
             eq(correctionRequests.id, parsed.data.requestId),
             inArray(correctionRequests.outletId, reviewOutletIds),
-            eq(correctionRequests.status, "pending"),
+            inArray(correctionRequests.status, ["pending", "reconciliation"]),
           ),
         )
         .limit(1)
@@ -176,8 +204,203 @@ export async function PATCH(request: Request) {
         newValues: Record<string, unknown>;
       } | null = null;
 
+      if (correction.status === "reconciliation") {
+        if (
+          parsed.data.decision !== "confirm" &&
+          parsed.data.decision !== "adjust"
+        ) {
+          return {
+            ok: false as const,
+            status: 400,
+            error: "Applied corrections can only be confirmed or adjusted.",
+          };
+        }
+        if (!correction.workSessionId) {
+          return {
+            ok: false as const,
+            status: 409,
+            error: "The related shift no longer exists.",
+          };
+        }
+
+        const [workSession] = await tx
+          .select()
+          .from(workSessions)
+          .where(
+            and(
+              eq(workSessions.id, correction.workSessionId),
+              eq(workSessions.userId, correction.requestedBy),
+              eq(workSessions.outletId, correction.outletId),
+            ),
+          )
+          .limit(1)
+          .for("update");
+        if (!workSession) {
+          return {
+            ok: false as const,
+            status: 409,
+            error: "The related shift no longer exists.",
+          };
+        }
+
+        let reconciledTime = correction.requestedAt;
+        if (parsed.data.decision === "adjust") {
+          reconciledTime = new Date(parsed.data.requestedAt!);
+          const timeError = getCorrectionTimeError(
+            correction.event,
+            reconciledTime,
+            workSession,
+            reviewedAt,
+          );
+          if (timeError === "future") {
+            return {
+              ok: false as const,
+              status: 400,
+              error: "A future time cannot be reconciled.",
+            };
+          }
+          if (timeError === "out_of_order") {
+            return {
+              ok: false as const,
+              status: 400,
+              error: "The adjusted punch would put the shift out of order.",
+            };
+          }
+          if (correction.event === "clock_in") {
+            const [overlappingSession] = await tx
+              .select({ id: workSessions.id })
+              .from(workSessions)
+              .where(
+                and(
+                  eq(workSessions.userId, correction.requestedBy),
+                  ne(workSessions.id, workSession.id),
+                  lte(workSessions.clockInAt, reconciledTime),
+                  or(
+                    isNull(workSessions.clockOutAt),
+                    gt(workSessions.clockOutAt, reconciledTime),
+                  ),
+                ),
+              )
+              .limit(1);
+            if (overlappingSession) {
+              return {
+                ok: false as const,
+                status: 409,
+                error: "The adjusted clock-in overlaps another shift.",
+              };
+            }
+          }
+
+          const previousValues =
+            correction.event === "clock_in"
+              ? {
+                  clockInAt: workSession.clockInAt.toISOString(),
+                  clockInSource: workSession.clockInSource,
+                }
+              : {
+                  clockOutAt: workSession.clockOutAt?.toISOString() ?? null,
+                  clockOutSource: workSession.clockOutSource,
+                };
+          const newValues =
+            correction.event === "clock_in"
+              ? {
+                  clockInAt: reconciledTime.toISOString(),
+                  clockInSource: "manual",
+                }
+              : {
+                  clockOutAt: reconciledTime.toISOString(),
+                  clockOutSource: "manual",
+                };
+          await tx
+            .update(workSessions)
+            .set(
+              correction.event === "clock_in"
+                ? {
+                    clockInAt: reconciledTime,
+                    clockInLatitude: null,
+                    clockInLongitude: null,
+                    clockInAccuracy: null,
+                    clockInSource: "manual",
+                    updatedAt: reviewedAt,
+                  }
+                : {
+                    clockOutAt: reconciledTime,
+                    clockOutLatitude: null,
+                    clockOutLongitude: null,
+                    clockOutAccuracy: null,
+                    clockOutSource: "manual",
+                    updatedAt: reviewedAt,
+                  },
+            )
+            .where(eq(workSessions.id, workSession.id));
+          updatedPunch = { id: workSession.id, previousValues, newValues };
+        }
+
+        await tx
+          .update(correctionRequests)
+          .set({
+            status: "approved",
+            requestedAt: reconciledTime,
+            reviewedBy: session.user.id,
+            reviewedAt,
+            reviewReason: parsed.data.reason,
+            reconciledBy: session.user.id,
+            reconciledAt: reviewedAt,
+          })
+          .where(eq(correctionRequests.id, correction.id));
+        await tx.insert(auditEvents).values({
+          actorId: session.user.id,
+          action:
+            parsed.data.decision === "adjust"
+              ? "correction_adjusted"
+              : "correction_reconciled",
+          entityType: "correction_request",
+          entityId: correction.id,
+          previousValues: {
+            status: "reconciliation",
+            requestedAt: correction.requestedAt.toISOString(),
+          },
+          newValues: {
+            status: "approved",
+            requestedAt: reconciledTime.toISOString(),
+            reconciledAt: reviewedAt.toISOString(),
+          },
+          reason: parsed.data.reason,
+        });
+        if (updatedPunch) {
+          await tx.insert(auditEvents).values({
+            actorId: session.user.id,
+            action: "correction_punch_adjusted",
+            entityType: "work_session",
+            entityId: updatedPunch.id,
+            previousValues: updatedPunch.previousValues,
+            newValues: updatedPunch.newValues,
+            reason: parsed.data.reason,
+          });
+        }
+        return { ok: true as const };
+      }
+
+      if (
+        parsed.data.decision !== "approve" &&
+        parsed.data.decision !== "reject"
+      ) {
+        return {
+          ok: false as const,
+          status: 400,
+          error: "Pending legacy requests must be approved or rejected.",
+        };
+      }
+
       if (parsed.data.decision === "approve") {
-        if (correction.requestedAt > reviewedAt) {
+        if (
+          getCorrectionTimeError(
+            correction.event,
+            correction.requestedAt,
+            null,
+            reviewedAt,
+          ) === "future"
+        ) {
           return {
             ok: false as const,
             status: 400,
@@ -415,7 +638,15 @@ export async function POST(request: Request) {
       );
     }
     const requestedAt = new Date(input.requestedAt);
-    if (requestedAt.getTime() > Date.now() + 5 * 60_000) {
+    if (
+      getCorrectionTimeError(
+        input.event,
+        requestedAt,
+        null,
+        new Date(),
+        5 * 60_000,
+      ) === "future"
+    ) {
       return Response.json(
         { error: "Requested time cannot be in the future." },
         { status: 400 },
@@ -423,22 +654,34 @@ export async function POST(request: Request) {
     }
 
     const db = getDb();
-    const [assignment] = await db
-      .select({
-        outletId: outletMemberships.outletId,
-        timezone: outlets.timezone,
-      })
-      .from(outletMemberships)
-      .innerJoin(outlets, eq(outletMemberships.outletId, outlets.id))
-      .where(
-        and(
-          eq(outletMemberships.userId, session.user.id),
-          eq(outletMemberships.outletId, input.outletId),
-          eq(outletMemberships.isActive, true),
-          eq(outlets.isActive, true),
-        ),
-      )
-      .limit(1);
+    const [assignment] =
+      session.user.accountType === "super_admin"
+        ? await db
+            .select({
+              role: sql<string>`'manager'`.as("role"),
+              timezone: outlets.timezone,
+            })
+            .from(outlets)
+            .where(
+              and(eq(outlets.id, input.outletId), eq(outlets.isActive, true)),
+            )
+            .limit(1)
+        : await db
+            .select({
+              role: outletMemberships.role,
+              timezone: outlets.timezone,
+            })
+            .from(outletMemberships)
+            .innerJoin(outlets, eq(outletMemberships.outletId, outlets.id))
+            .where(
+              and(
+                eq(outletMemberships.userId, session.user.id),
+                eq(outletMemberships.outletId, input.outletId),
+                eq(outletMemberships.isActive, true),
+                eq(outlets.isActive, true),
+              ),
+            )
+            .limit(1);
 
     if (!assignment) {
       return Response.json(
@@ -447,60 +690,270 @@ export async function POST(request: Request) {
       );
     }
 
-    if (input.workSessionId) {
-      const [workSession] = await db
-        .select({ id: workSessions.id })
-        .from(workSessions)
+    if (isStaffDeviceRequired(assignment.role)) {
+      const cookieStore = await cookies();
+      const deviceToken = cookieStore.get(
+        getStaffDeviceCookieName(session.user.id),
+      )?.value;
+      const [activeDevice] = await db
+        .select({
+          status: staffDeviceEnrollments.status,
+          tokenHash: staffDeviceEnrollments.tokenHash,
+        })
+        .from(staffDeviceEnrollments)
         .where(
           and(
-            eq(workSessions.id, input.workSessionId),
-            eq(workSessions.userId, session.user.id),
-            eq(workSessions.outletId, input.outletId),
+            eq(staffDeviceEnrollments.userId, session.user.id),
+            eq(staffDeviceEnrollments.status, "active"),
           ),
         )
         .limit(1);
 
-      if (!workSession) {
+      if (
+        !isApprovedStaffDevice(
+          deviceToken,
+          activeDevice?.status,
+          activeDevice?.tokenHash,
+        )
+      ) {
         return Response.json(
-          { error: "That shift does not belong to your account." },
+          {
+            error: "This browser is not approved for staff clock actions.",
+            code: "staff_device_not_approved",
+          },
           { status: 403 },
         );
       }
     }
 
-    const created = await db.transaction(async (tx) => {
+    const now = new Date();
+    const outcome = await db.transaction(async (tx) => {
+      let workSession = null;
+      if (input.workSessionId) {
+        [workSession] = await tx
+          .select()
+          .from(workSessions)
+          .where(
+            and(
+              eq(workSessions.id, input.workSessionId),
+              eq(workSessions.userId, session.user.id),
+              eq(workSessions.outletId, input.outletId),
+            ),
+          )
+          .limit(1)
+          .for("update");
+        if (!workSession) {
+          return {
+            kind: "error" as const,
+            status: 403,
+            error: "That shift does not belong to your account.",
+          };
+        }
+      } else if (input.event === "clock_out") {
+        return {
+          kind: "error" as const,
+          status: 400,
+          error: "Choose the shift that needs a clock-out correction.",
+        };
+      } else {
+        const [openSession] = await tx
+          .select({ id: workSessions.id })
+          .from(workSessions)
+          .where(
+            and(
+              eq(workSessions.userId, session.user.id),
+              isNull(workSessions.clockOutAt),
+            ),
+          )
+          .limit(1)
+          .for("update");
+        if (openSession) {
+          return {
+            kind: "error" as const,
+            status: 409,
+            error: "You already have an open shift.",
+          };
+        }
+      }
+
+      if (
+        workSession &&
+        getCorrectionTimeError(input.event, requestedAt, workSession, now) ===
+          "out_of_order"
+      ) {
+        return {
+          kind: "error" as const,
+          status: 400,
+          error: "The requested punch would put the shift out of order.",
+        };
+      }
+
+      if (input.event === "clock_in") {
+        const overlapConditions = [
+          eq(workSessions.userId, session.user.id),
+          lte(workSessions.clockInAt, requestedAt),
+          or(
+            isNull(workSessions.clockOutAt),
+            gt(workSessions.clockOutAt, requestedAt),
+          ),
+        ];
+        if (workSession)
+          overlapConditions.push(ne(workSessions.id, workSession.id));
+        const [overlappingSession] = await tx
+          .select({ id: workSessions.id })
+          .from(workSessions)
+          .where(and(...overlapConditions))
+          .limit(1);
+        if (overlappingSession) {
+          return {
+            kind: "error" as const,
+            status: 409,
+            error: "The requested clock-in overlaps another shift.",
+          };
+        }
+      }
+
+      if (input.event === "clock_out" && workSession) {
+        const [openBreak] = await tx
+          .select({ id: workBreaks.id })
+          .from(workBreaks)
+          .where(
+            and(
+              eq(workBreaks.workSessionId, workSession.id),
+              isNull(workBreaks.endedAt),
+            ),
+          )
+          .limit(1);
+        if (openBreak) {
+          return {
+            kind: "error" as const,
+            status: 409,
+            error: "End your break before clocking out.",
+          };
+        }
+      }
+
+      const previousValues = workSession
+        ? input.event === "clock_in"
+          ? {
+              clockInAt: workSession.clockInAt.toISOString(),
+              clockInSource: workSession.clockInSource,
+            }
+          : {
+              clockOutAt: workSession.clockOutAt?.toISOString() ?? null,
+              clockOutSource: workSession.clockOutSource,
+            }
+        : {};
+      let updatedSession;
+      if (workSession) {
+        [updatedSession] = await tx
+          .update(workSessions)
+          .set(
+            input.event === "clock_in"
+              ? {
+                  clockInAt: requestedAt,
+                  clockInLatitude: null,
+                  clockInLongitude: null,
+                  clockInAccuracy: null,
+                  clockInSource: "manual",
+                  updatedAt: now,
+                }
+              : {
+                  clockOutAt: requestedAt,
+                  clockOutLatitude: null,
+                  clockOutLongitude: null,
+                  clockOutAccuracy: null,
+                  clockOutSource: "manual",
+                  updatedAt: now,
+                },
+          )
+          .where(eq(workSessions.id, workSession.id))
+          .returning();
+      } else {
+        [updatedSession] = await tx
+          .insert(workSessions)
+          .values({
+            userId: session.user.id,
+            outletId: input.outletId,
+            timezone: assignment.timezone,
+            clockInAt: requestedAt,
+            clockInSource: "manual",
+            updatedAt: now,
+          })
+          .returning();
+      }
+      if (!updatedSession) {
+        return {
+          kind: "error" as const,
+          status: 409,
+          error: "The shift could not be updated.",
+        };
+      }
+
       const [correction] = await tx
         .insert(correctionRequests)
         .values({
           requestedBy: session.user.id,
           outletId: input.outletId,
           timezone: assignment.timezone,
-          workSessionId: input.workSessionId,
+          workSessionId: updatedSession.id,
           event: input.event,
           requestedAt,
           reason: input.reason,
+          status: "reconciliation",
+          appliedAt: now,
         })
         .returning();
 
-      await tx.insert(auditEvents).values({
-        actorId: session.user.id,
-        action: "correction_requested",
-        entityType: "correction_request",
-        entityId: correction.id,
-        newValues: {
-          outletId: input.outletId,
-          workSessionId: input.workSessionId,
-          event: input.event,
-          requestedAt: requestedAt.toISOString(),
-          status: "pending",
+      const newValues =
+        input.event === "clock_in"
+          ? {
+              clockInAt: requestedAt.toISOString(),
+              clockInSource: "manual",
+            }
+          : {
+              clockOutAt: requestedAt.toISOString(),
+              clockOutSource: "manual",
+            };
+      await tx.insert(auditEvents).values([
+        {
+          actorId: session.user.id,
+          action: "correction_applied",
+          entityType: "correction_request",
+          entityId: correction.id,
+          newValues: {
+            workSessionId: updatedSession.id,
+            event: input.event,
+            requestedAt: requestedAt.toISOString(),
+            status: "reconciliation",
+            appliedAt: now.toISOString(),
+          },
+          reason: input.reason,
         },
-        reason: input.reason,
-      });
+        {
+          actorId: session.user.id,
+          action: "correction_punch_applied",
+          entityType: "work_session",
+          entityId: updatedSession.id,
+          previousValues,
+          newValues,
+          reason: input.reason,
+        },
+      ]);
 
-      return correction;
+      return { kind: "applied" as const, correction, session: updatedSession };
     });
 
-    return Response.json({ request: created }, { status: 201 });
+    if (outcome.kind === "error") {
+      return Response.json(
+        { error: outcome.error },
+        { status: outcome.status },
+      );
+    }
+    return Response.json(
+      { request: outcome.correction, session: outcome.session },
+      { status: 201 },
+    );
   } catch {
     return Response.json(
       { error: "Could not submit the correction request." },

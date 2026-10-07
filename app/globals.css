@@ -443,6 +443,9 @@ h1 span {
   padding: 23px 25px 17px;
   box-shadow: 0 8px 24px rgba(24, 45, 54, 0.04);
 }
+.clock-panel.is-device-blocked {
+  border-color: #dfaaa6;
+}
 .clock-panel-top {
   display: flex;
   align-items: center;
@@ -1556,6 +1559,11 @@ h2 {
 .correction-status.pending {
   background: #f8f0df;
   color: #8b6828;
+}
+.correction-status.reconciliation {
+  background: #fff1dc;
+  color: #835319;
+  text-transform: none;
 }
 .correction-status.approved {
   background: #e9f3e8;
@@ -3408,6 +3416,14 @@ small,
 .clock-actions > .clock-action.is-clocked-in:hover:not(:disabled) {
   background: #fce0dc;
   box-shadow: 0 8px 18px rgba(180, 35, 24, 0.12);
+}
+.clock-actions > .clock-action.is-manual:not(:disabled) {
+  border: 1px solid #9a6820;
+  background: #9a6820;
+  color: #fff;
+}
+.clock-actions > .clock-action.is-manual:hover:not(:disabled) {
+  background: #805416;
 }
 .clock-actions > .clock-action:active:not(:disabled) {
   transform: scale(0.98);
