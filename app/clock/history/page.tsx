@@ -1,11 +1,11 @@
 "use client";
 
-import { CorrectionDialog } from "@/app/clock/correction-dialog";
-import { SignInForm } from "@/app/sign-in-form";
 import {
   WorkspaceShell,
   type WorkspaceNavigationGroup,
-} from "@/app/workspace-shell";
+} from "@/app/_components/workspace-shell";
+import { CorrectionDialog } from "@/app/clock/_components/correction-dialog";
+import { SignInForm } from "@/app/clock/_components/sign-in-form";
 import { authClient } from "@/lib/auth-client";
 import { getCompletedBreakMinutes, getWorkedMinutes } from "@/lib/work-breaks";
 import { useRouter } from "next/navigation";

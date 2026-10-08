@@ -283,7 +283,6 @@ export default function ManagePage() {
             <section className="dashboard-outlet" key={outlet.id}>
               <header className="dashboard-outlet-heading">
                 <div>
-                  <p className="eyebrow">{outlet.timezone}</p>
                   <h2>{outlet.name}</h2>
                   <p>{outlet.address}</p>
                 </div>

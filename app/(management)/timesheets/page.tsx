@@ -1,10 +1,10 @@
 "use client";
 
-import { ModalDialog } from "@/app/modal-dialog";
 import {
-  formatOutletDateTime,
-  outletDateTimeToISOString,
-} from "@/lib/outlet-time";
+  TimesheetEditDialog,
+  type TimesheetEditValues,
+} from "@/app/(management)/timesheets/_components/timesheet-edit-dialog";
+import { outletDateTimeToISOString } from "@/lib/outlet-time";
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 
@@ -35,12 +35,6 @@ type TimesheetData = {
   rows: TimesheetRow[];
   storeHubStatus: "not_configured" | "available" | "unavailable";
   storeHubFetchedAt: string | null;
-};
-
-type EditingBreak = {
-  id: string | null;
-  startedAt: string;
-  endedAt: string;
 };
 
 type Filters = {
@@ -88,10 +82,6 @@ export default function TimesheetsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [editing, setEditing] = useState<TimesheetRow | null>(null);
-  const [clockInAt, setClockInAt] = useState("");
-  const [clockOutAt, setClockOutAt] = useState("");
-  const [editingBreaks, setEditingBreaks] = useState<EditingBreak[]>([]);
-  const [reason, setReason] = useState("");
 
   async function load(nextFilters: Filters) {
     setIsLoading(true);
@@ -137,22 +127,9 @@ export default function TimesheetsPage() {
   function startEdit(row: TimesheetRow) {
     if (row.source !== "onsite") return;
     setEditing(row);
-    setClockInAt(row.clockInLocal.slice(0, 16).replace(" ", "T"));
-    setClockOutAt(row.clockOutLocal?.slice(0, 16).replace(" ", "T") ?? "");
-    setEditingBreaks(
-      row.breaks.map((breakInterval) => ({
-        id: breakInterval.id,
-        startedAt: formatOutletDateTime(breakInterval.startedAt, row.timezone),
-        endedAt: breakInterval.endedAt
-          ? formatOutletDateTime(breakInterval.endedAt, row.timezone)
-          : "",
-      })),
-    );
-    setReason("");
   }
 
-  async function saveEdit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function saveEdit(values: TimesheetEditValues) {
     if (!editing || isSaving) return;
     setIsSaving(true);
     setMessage("");
@@ -162,9 +139,9 @@ export default function TimesheetsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: editing.id,
-          clockInAt,
-          clockOutAt: clockOutAt || null,
-          breaks: editingBreaks.map((breakInterval) => ({
+          clockInAt: values.clockInAt,
+          clockOutAt: values.clockOutAt || null,
+          breaks: values.breaks.map((breakInterval) => ({
             id: breakInterval.id,
             startedAt: outletDateTimeToISOString(
               breakInterval.startedAt,
@@ -177,7 +154,7 @@ export default function TimesheetsPage() {
                 )
               : null,
           })),
-          reason,
+          reason: values.reason,
         }),
       });
       const body = await response.json();
@@ -309,148 +286,15 @@ export default function TimesheetsPage() {
       )}
 
       {editing && (
-        <ModalDialog
-          open
+        <TimesheetEditDialog
+          key={editing.id}
+          row={editing}
+          isSaving={isSaving}
           onOpenChange={(open) => {
             if (!open) setEditing(null);
           }}
-          labelledBy="timesheet-edit-title"
-        >
-          <div className="dialog-panel timesheet-edit-dialog-panel">
-            <header className="dialog-header">
-              <div>
-                <p className="eyebrow">{editing.outletName}</p>
-                <h2 id="timesheet-edit-title">
-                  Edit shift · {editing.employeeName}
-                </h2>
-              </div>
-              <button
-                className="dialog-close"
-                type="button"
-                aria-label="Close shift editor"
-                onClick={() => setEditing(null)}
-              >
-                ×
-              </button>
-            </header>
-            <form
-              className="timesheet-edit-fields timesheet-edit-modal-fields"
-              onSubmit={saveEdit}
-            >
-              <label>
-                Clock in ({editing.timezone})
-                <input
-                  type="datetime-local"
-                  required
-                  value={clockInAt}
-                  onChange={(event) => setClockInAt(event.target.value)}
-                />
-              </label>
-              <label>
-                Clock out ({editing.timezone})
-                <input
-                  type="datetime-local"
-                  value={clockOutAt}
-                  onChange={(event) => setClockOutAt(event.target.value)}
-                />
-              </label>
-              <div className="timesheet-break-editor">
-                <div className="timesheet-break-heading">
-                  <strong>Breaks</strong>
-                  <button
-                    className="team-secondary-action"
-                    type="button"
-                    onClick={() =>
-                      setEditingBreaks((current) => [
-                        ...current,
-                        { id: null, startedAt: "", endedAt: "" },
-                      ])
-                    }
-                  >
-                    Add break
-                  </button>
-                </div>
-                {editingBreaks.map((breakInterval, index) => (
-                  <div
-                    className="timesheet-break-fields"
-                    key={breakInterval.id ?? `new-${index}`}
-                  >
-                    <label>
-                      Break starts ({editing.timezone})
-                      <input
-                        type="datetime-local"
-                        required
-                        value={breakInterval.startedAt}
-                        onChange={(event) =>
-                          setEditingBreaks((current) =>
-                            current.map((item, itemIndex) =>
-                              itemIndex === index
-                                ? { ...item, startedAt: event.target.value }
-                                : item,
-                            ),
-                          )
-                        }
-                      />
-                    </label>
-                    <label>
-                      Break ends
-                      <input
-                        type="datetime-local"
-                        value={breakInterval.endedAt}
-                        onChange={(event) =>
-                          setEditingBreaks((current) =>
-                            current.map((item, itemIndex) =>
-                              itemIndex === index
-                                ? { ...item, endedAt: event.target.value }
-                                : item,
-                            ),
-                          )
-                        }
-                      />
-                    </label>
-                    <button
-                      className="timesheet-edit-button"
-                      type="button"
-                      onClick={() =>
-                        setEditingBreaks((current) =>
-                          current.filter((_, itemIndex) => itemIndex !== index),
-                        )
-                      }
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <label className="timesheet-reason">
-                Reason for change
-                <input
-                  required
-                  minLength={3}
-                  maxLength={500}
-                  value={reason}
-                  onChange={(event) => setReason(event.target.value)}
-                />
-              </label>
-              <div className="dialog-actions">
-                <button
-                  className="team-secondary-action"
-                  type="button"
-                  onClick={() => setEditing(null)}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="auth-submit"
-                  type="submit"
-                  disabled={isSaving}
-                >
-                  {isSaving ? "Saving…" : "Save audited edit"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </ModalDialog>
+          onSave={saveEdit}
+        />
       )}
 
       <section className="timesheet-table-section" aria-label="Shift records">

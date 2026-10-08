@@ -1,10 +1,10 @@
 "use client";
 
+import { SixDigitPinInput } from "@/app/clock/_components/six-digit-pin-input";
 import {
   getRememberedPinUser,
   subscribeToRememberedPinUser,
 } from "@/lib/pin-client";
-import { SixDigitPinInput } from "@/app/six-digit-pin-input";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";

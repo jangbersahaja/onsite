@@ -1,6 +1,9 @@
 "use client";
 
-import { managementNavigation, WorkspaceShell } from "@/app/workspace-shell";
+import {
+  managementNavigation,
+  WorkspaceShell,
+} from "@/app/_components/workspace-shell";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 

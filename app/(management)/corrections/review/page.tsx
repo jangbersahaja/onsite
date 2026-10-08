@@ -1,6 +1,6 @@
 "use client";
 
-import { REVIEW_REQUESTS_CHANGED_EVENT } from "@/app/workspace-shell";
+import { REVIEW_REQUESTS_CHANGED_EVENT } from "@/app/_components/workspace-shell";
 import {
   formatOutletDateTime,
   outletDateTimeToISOString,

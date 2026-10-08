@@ -1,6 +1,6 @@
 "use client";
 
-import { ModalDialog } from "@/app/modal-dialog";
+import { ModalDialog } from "@/app/_components/modal-dialog";
 import {
   formatOutletDateTime,
   outletDateTimeToISOString,
