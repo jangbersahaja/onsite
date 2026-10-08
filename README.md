@@ -37,8 +37,18 @@ OnSITE is a multi-outlet workforce app built with Next.js, Drizzle, and Postgres
 - `PIN_PEPPER`: Optional server-only secret of at least 32 bytes for staff PIN sign-in. Generate one with `openssl rand -base64 32`, keep it stable, and do not commit it. Changing it disables existing PINs until staff set them again; password sign-in continues to work.
 - `BOOTSTRAP_ADMIN_*`: Name, username, email, and password for the initial super admin.
 - `BOOTSTRAP_OUTLET_*`: Optional name, address, coordinates, and timezone for one outlet.
+- `STOREHUB_STORE_NAME`: StoreHub account subdomain/name for API authentication.
+- `STOREHUB_API_TOKEN`: Server-only token issued for StoreHub API access.
+- `STOREHUB_OUTLET_ID`: OnSITE outlet UUID to receive the StoreHub attendance feed.
+- `STOREHUB_POS_STORE_ID`: Matching StoreHub POS store ID.
 
 Keep `.env.local` private and never commit live credentials.
+
+## StoreHub attendance
+
+The management dashboard and timesheets can display StoreHub attendance for the outlet mapped by `STOREHUB_OUTLET_ID`. Configure the StoreHub account name and API token supplied by StoreHub, then map the OnSITE outlet UUID to its StoreHub POS store ID. The OnSITE UUID is the `id` on the matching `outlets` database row. The integration is read-only, fetches when these management views load or refresh, and does not create OnSITE staff accounts or clock events.
+
+The integration uses [`@pyyupsk/storehub`](https://github.com/pyyupsk/storehub), an unofficial community client whose API details are reverse-engineered. Confirm API access and verify the response fields with StoreHub before relying on the feed. Its documented timesheet data has employee/store IDs and clock-in/out times, but no break events. Consecutive sessions for the same employee in the same outlet-local workday are grouped into one shift; each gap between a clock-out and the next clock-in is counted as a break. A break in progress cannot be confirmed until the next clock-in arrives. When the StoreHub API is unreachable, OnSITE attendance remains available.
 
 ## Validation
 

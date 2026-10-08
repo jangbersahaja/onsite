@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Image from "next/image";
+import { useEffect, useState } from "react";
 
 type DashboardView = "today" | "yesterday" | "custom";
 type ShiftStatus = "on_shift" | "on_break" | "finished";
 
 type DashboardShift = {
   id: string;
-  userId: string;
+  source: "onsite" | "storehub";
+  userId: string | null;
   employeeName: string;
   profilePhotoUrl: string | null;
   clockInAt: string;
@@ -16,8 +17,8 @@ type DashboardShift = {
   clockInLocal: string;
   clockOutLocal: string | null;
   status: ShiftStatus;
-  workedMinutes: number;
-  breakMinutes: number;
+  workedMinutes: number | null;
+  breakMinutes: number | null;
 };
 
 type DashboardOutlet = {
@@ -29,10 +30,12 @@ type DashboardOutlet = {
   windowStartAt: string;
   windowEndAt: string;
   evaluatedAt: string;
+  storeHubStatus: "not_configured" | "available" | "unavailable";
+  storeHubFetchedAt: string | null;
   onShiftCount: number;
-  onBreakCount: number;
-  workedMinutes: number;
-  breakMinutes: number;
+  onBreakCount: number | null;
+  workedMinutes: number | null;
+  breakMinutes: number | null;
   shifts: DashboardShift[];
 };
 
@@ -42,7 +45,8 @@ type DashboardData = {
   outlets: DashboardOutlet[];
 };
 
-function formatDuration(minutes: number) {
+function formatDuration(minutes: number | null) {
+  if (minutes === null) return "Not provided";
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
 }
 
@@ -108,6 +112,9 @@ function DashboardShiftItem({
         )}
         <div className="dashboard-staff-name">
           <strong>{shift.employeeName}</strong>
+          {shift.source === "storehub" && (
+            <span className="storehub-source-label">StoreHub · read-only</span>
+          )}
           {layout === "card" && (
             <span className={`dashboard-status is-${shift.status}`}>
               {statusLabels[shift.status]}
@@ -293,7 +300,7 @@ export default function ManagePage() {
                 </div>
                 <div>
                   <span>On break</span>
-                  <strong>{outlet.onBreakCount}</strong>
+                  <strong>{outlet.onBreakCount ?? "Not provided"}</strong>
                 </div>
                 <div>
                   <span>Worked</span>
@@ -304,6 +311,12 @@ export default function ManagePage() {
                   <strong>{formatDuration(outlet.breakMinutes)}</strong>
                 </div>
               </div>
+              {outlet.storeHubStatus === "unavailable" && (
+                <p className="team-message" role="status">
+                  StoreHub attendance is temporarily unavailable. OnSITE shifts
+                  are still shown.
+                </p>
+              )}
 
               {outlet.shifts.length > 0 ? (
                 <>

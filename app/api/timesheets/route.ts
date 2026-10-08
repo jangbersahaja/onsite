@@ -1,12 +1,18 @@
 import { auditEvents, outlets, workBreaks, workSessions } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
+import { addCalendarDays } from "@/lib/dashboard-data";
 import { getDb } from "@/lib/db";
 import {
   formatOutletTimestamp,
   outletDateTimeToISOString,
   serializeCsv,
 } from "@/lib/outlet-time";
+import {
+  getConfiguredStoreHubOutletId,
+  getStoreHubAttendance,
+} from "@/lib/storehub-attendance";
+import { filterStoreHubTimesheets } from "@/lib/storehub-attendance-data";
 import { getTeamAccess } from "@/lib/team-access";
 import { getTimesheetRows, parseTimesheetFilters } from "@/lib/timesheet-data";
 import {
@@ -42,6 +48,7 @@ async function getActor(request: Request) {
           id: outlets.id,
           name: outlets.name,
           address: outlets.address,
+          timezone: outlets.timezone,
           isActive: outlets.isActive,
         })
         .from(outlets)
@@ -86,26 +93,101 @@ export async function GET(request: Request) {
       );
     }
 
-    const rows = await getTimesheetRows(actor.outletIds, parsed.data);
+    const isStoreHubEmployee = parsed.data.employeeId?.startsWith("storehub:");
+    const onsiteRows = isStoreHubEmployee
+      ? []
+      : await getTimesheetRows(actor.outletIds, parsed.data);
+    const configuredStoreHubOutletId = getConfiguredStoreHubOutletId();
+    const storeHubOutlet = actor.outlets.find(
+      (outlet) =>
+        outlet.id === configuredStoreHubOutletId &&
+        (!parsed.data.outletId || parsed.data.outletId === outlet.id),
+    );
+    const storeHubAttendance = storeHubOutlet
+      ? await getStoreHubAttendance(storeHubOutlet, {
+          from: parsed.data.from
+            ? new Date(
+                outletDateTimeToISOString(
+                  `${parsed.data.from}T06:00`,
+                  storeHubOutlet.timezone,
+                ),
+              )
+            : undefined,
+          to: parsed.data.to
+            ? new Date(
+                new Date(
+                  outletDateTimeToISOString(
+                    `${addCalendarDays(parsed.data.to, 1)}T06:00`,
+                    storeHubOutlet.timezone,
+                  ),
+                ).getTime() - 1,
+              )
+            : undefined,
+        })
+      : { status: "not_configured" as const, rows: [], fetchedAt: null };
+    const storeHubRows =
+      storeHubAttendance.status === "available"
+        ? filterStoreHubTimesheets(storeHubAttendance.rows, parsed.data).map(
+            (row) => ({
+              ...row,
+              employeeFilterId: `storehub:${row.storeHubEmployeeId}`,
+              clockInLocal: formatOutletTimestamp(row.clockInAt, row.timezone),
+              clockOutLocal: row.clockOutAt
+                ? formatOutletTimestamp(row.clockOutAt, row.timezone)
+                : null,
+              grossDurationMinutes: row.clockOutAt
+                ? Math.max(
+                    0,
+                    Math.floor(
+                      (new Date(row.clockOutAt).getTime() -
+                        new Date(row.clockInAt).getTime()) /
+                        60_000,
+                    ),
+                  )
+                : null,
+              durationMinutes: null,
+              clockInSource: "storehub" as const,
+              clockOutSource: row.clockOutAt ? ("storehub" as const) : null,
+            }),
+          )
+        : [];
+    const rows = [
+      ...onsiteRows.map((row) => ({
+        ...row,
+        source: "onsite" as const,
+        employeeFilterId: row.userId,
+      })),
+      ...storeHubRows,
+    ]
+      .sort(
+        (first, second) =>
+          new Date(second.clockInAt).getTime() -
+          new Date(first.clockInAt).getTime(),
+      )
+      .slice(0, 500);
     if (params.get("format") === "csv") {
       const csvRows = rows.map((row) => {
         const grossMinutes = row.clockOutAt
           ? Math.max(
               0,
               Math.floor(
-                (row.clockOutAt.getTime() - row.clockInAt.getTime()) / 60_000,
+                (new Date(row.clockOutAt).getTime() -
+                  new Date(row.clockInAt).getTime()) /
+                  60_000,
               ),
             )
           : null;
-        const breakMinutes = getCompletedBreakMinutes(row.breaks);
-        const workedMinutes = getWorkedMinutes(
-          row.clockInAt,
-          row.clockOutAt,
-          row.breaks,
-        );
+        const breakMinutes =
+          row.source === "storehub"
+            ? row.breakMinutes
+            : getCompletedBreakMinutes(row.breaks);
+        const workedMinutes =
+          row.source === "storehub"
+            ? row.workedMinutes
+            : getWorkedMinutes(row.clockInAt, row.clockOutAt, row.breaks);
         return [
           row.employeeName,
-          row.employeeEmail,
+          row.employeeEmail ?? "",
           row.outletName,
           formatOutletTimestamp(row.clockInAt, row.timezone),
           row.clockOutAt
@@ -114,9 +196,11 @@ export async function GET(request: Request) {
           grossMinutes === null ? "" : (grossMinutes / 60).toFixed(2),
           breakMinutes,
           workedMinutes === null ? "" : (workedMinutes / 60).toFixed(2),
-          row.clockInSource === "manual" || row.clockOutSource === "manual"
-            ? "Manually adjusted"
-            : "GPS verified",
+          row.source === "storehub"
+            ? "StoreHub import"
+            : row.clockInSource === "manual" || row.clockOutSource === "manual"
+              ? "Manually adjusted"
+              : "GPS verified",
         ];
       });
       return new Response(
@@ -130,7 +214,7 @@ export async function GET(request: Request) {
             "Gross hours",
             "Break minutes",
             "Worked hours",
-            "Punch source / adjustment",
+            "Source / adjustment",
           ],
           csvRows,
         ),
@@ -147,14 +231,20 @@ export async function GET(request: Request) {
     const employees = Array.from(
       new Map(
         rows.map((row) => [
-          row.userId,
-          { id: row.userId, name: row.employeeName, email: row.employeeEmail },
+          row.employeeFilterId,
+          {
+            id: row.employeeFilterId,
+            name: row.employeeName,
+            email: row.employeeEmail ?? "",
+          },
         ]),
       ).values(),
     );
     return Response.json({
       outlets: actor.outlets,
       employees,
+      storeHubStatus: storeHubAttendance.status,
+      storeHubFetchedAt: storeHubAttendance.fetchedAt,
       rows: rows.map((row) => ({
         ...row,
         clockInLocal: formatOutletTimestamp(row.clockInAt, row.timezone),
@@ -165,16 +255,20 @@ export async function GET(request: Request) {
           ? Math.max(
               0,
               Math.floor(
-                (row.clockOutAt.getTime() - row.clockInAt.getTime()) / 60_000,
+                (new Date(row.clockOutAt).getTime() -
+                  new Date(row.clockInAt).getTime()) /
+                  60_000,
               ),
             )
           : null,
-        breakMinutes: getCompletedBreakMinutes(row.breaks),
-        durationMinutes: getWorkedMinutes(
-          row.clockInAt,
-          row.clockOutAt,
-          row.breaks,
-        ),
+        breakMinutes:
+          row.source === "storehub"
+            ? row.breakMinutes
+            : getCompletedBreakMinutes(row.breaks),
+        durationMinutes:
+          row.source === "storehub"
+            ? row.workedMinutes
+            : getWorkedMinutes(row.clockInAt, row.clockOutAt, row.breaks),
       })),
     });
   } catch {

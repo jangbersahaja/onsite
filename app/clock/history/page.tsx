@@ -40,7 +40,7 @@ type HistoryRequest = {
   event: "clock_in" | "clock_out";
   requestedAt: string;
   reason: string;
-  status: "pending" | "reconciliation" | "approved" | "rejected";
+  status: "reconciliation" | "approved" | "rejected";
   reviewReason: string | null;
   createdAt: string;
 };
@@ -219,9 +219,8 @@ export default function ClockHistoryPage() {
   }
 
   const canManage = authSession.data.user.canAccessBackoffice;
-  const pendingCount = requests.filter(
-    (request) =>
-      request.status === "pending" || request.status === "reconciliation",
+  const reconciliationCount = requests.filter(
+    (request) => request.status === "reconciliation",
   ).length;
   const navigation: WorkspaceNavigationGroup[] = [
     {
@@ -233,7 +232,7 @@ export default function ClockHistoryPage() {
           label: "History",
           glyph: "▤",
           requiredAccess: "clock",
-          count: pendingCount,
+          count: reconciliationCount,
         },
       ],
     },
@@ -323,7 +322,7 @@ export default function ClockHistoryPage() {
               onClick={() => setActiveTab("requests")}
             >
               Requests
-              {pendingCount > 0 && <span>{pendingCount}</span>}
+              {reconciliationCount > 0 && <span>{reconciliationCount}</span>}
             </button>
           </div>
           {activeTab === "shifts" && (
@@ -471,9 +470,7 @@ export default function ClockHistoryPage() {
                 <span className={`correction-status ${request.status}`}>
                   {request.status === "reconciliation"
                     ? "Needs reconciliation"
-                    : request.status === "pending"
-                      ? "Pending approval"
-                      : request.status}
+                    : request.status}
                 </span>
               </article>
             ))}

@@ -11,6 +11,8 @@ import {
 } from "@/lib/dashboard-data";
 import { getDb } from "@/lib/db";
 import { formatOutletTimestamp, isDateOnly } from "@/lib/outlet-time";
+import { getStoreHubAttendance } from "@/lib/storehub-attendance";
+import { storeHubShiftOverlapsWindow } from "@/lib/storehub-attendance-data";
 import { getTeamAccess } from "@/lib/team-access";
 import { and, asc, eq, gt, inArray, isNull, lt, or } from "drizzle-orm";
 
@@ -81,7 +83,7 @@ export async function GET(request: Request) {
           date < localToday
             ? endAt
             : new Date(Math.min(now.getTime(), endAt.getTime()));
-        const shifts =
+        const [shifts, storeHubAttendance] = await Promise.all([
           evaluatedAt.getTime() > startAt.getTime()
             ? await db
                 .select({
@@ -106,7 +108,12 @@ export async function GET(request: Request) {
                 )
                 .orderBy(asc(user.name), asc(workSessions.clockInAt))
                 .limit(500)
-            : [];
+            : Promise.resolve([]),
+          getStoreHubAttendance(outlet, {
+            from: new Date(startAt.getTime() - 24 * 60 * 60 * 1000),
+            to: endAt,
+          }),
+        ]);
         const breaks = shifts.length
           ? await db
               .select({
@@ -124,7 +131,7 @@ export async function GET(request: Request) {
               )
               .orderBy(asc(workBreaks.startedAt))
           : [];
-        const shiftRows = shifts.map((shift) => {
+        const onsiteShiftRows = shifts.map((shift) => {
           const shiftBreaks = breaks.filter(
             (breakInterval) => breakInterval.workSessionId === shift.id,
           );
@@ -138,6 +145,7 @@ export async function GET(request: Request) {
           );
           return {
             id: shift.id,
+            source: "onsite" as const,
             userId: shift.userId,
             employeeName: shift.employeeName,
             profilePhotoUrl: shift.profilePhotoPath
@@ -166,6 +174,58 @@ export async function GET(request: Request) {
             })),
           };
         });
+        const storeHubShiftRows =
+          storeHubAttendance.status === "available"
+            ? storeHubAttendance.rows
+                .filter((shift) =>
+                  storeHubShiftOverlapsWindow(shift, startAt, evaluatedAt),
+                )
+                .map((shift) => {
+                  const metrics = getDashboardShiftMetrics(
+                    shift.clockInAt,
+                    shift.clockOutAt,
+                    shift.breaks,
+                    startAt,
+                    endAt,
+                    evaluatedAt,
+                  );
+                  return {
+                    ...metrics,
+                    id: shift.id,
+                    source: "storehub" as const,
+                    storeHubEmployeeId: shift.storeHubEmployeeId,
+                    userId: null,
+                    employeeName: shift.employeeName,
+                    profilePhotoUrl: null,
+                    clockInAt: shift.clockInAt,
+                    clockOutAt: shift.clockOutAt,
+                    clockInLocal: formatOutletTimestamp(
+                      shift.clockInAt,
+                      outlet.timezone,
+                    ),
+                    clockOutLocal: shift.clockOutAt
+                      ? formatOutletTimestamp(shift.clockOutAt, outlet.timezone)
+                      : null,
+                    status: getDashboardShiftStatus(
+                      shift.clockInAt,
+                      shift.clockOutAt,
+                      shift.breaks,
+                      evaluatedAt,
+                    ),
+                    workedMinutes:
+                      shift.breakMinutes === null
+                        ? null
+                        : metrics.workedMinutes,
+                    breakMinutes:
+                      shift.breakMinutes === null ? null : metrics.breakMinutes,
+                    breaks: shift.breaks,
+                  };
+                })
+            : [];
+        const shiftRows = [...onsiteShiftRows, ...storeHubShiftRows];
+        const hasUnknownMetrics = storeHubShiftRows.some(
+          (shift) => shift.breakMinutes === null,
+        );
 
         return {
           id: outlet.id,
@@ -176,18 +236,28 @@ export async function GET(request: Request) {
           windowStartAt: startAt,
           windowEndAt: endAt,
           evaluatedAt,
+          storeHubStatus: storeHubAttendance.status,
+          storeHubFetchedAt: storeHubAttendance.fetchedAt,
           onShiftCount: shiftRows.filter((shift) => shift.status === "on_shift")
             .length,
-          onBreakCount: shiftRows.filter((shift) => shift.status === "on_break")
-            .length,
-          workedMinutes: shiftRows.reduce(
-            (total, shift) => total + shift.workedMinutes,
-            0,
-          ),
-          breakMinutes: shiftRows.reduce(
-            (total, shift) => total + shift.breakMinutes,
-            0,
-          ),
+          onBreakCount: storeHubShiftRows.some(
+            (shift) => shift.status !== "finished",
+          )
+            ? null
+            : onsiteShiftRows.filter((shift) => shift.status === "on_break")
+                .length,
+          workedMinutes: hasUnknownMetrics
+            ? null
+            : shiftRows.reduce(
+                (total, shift) => total + (shift.workedMinutes ?? 0),
+                0,
+              ),
+          breakMinutes: hasUnknownMetrics
+            ? null
+            : shiftRows.reduce(
+                (total, shift) => total + (shift.breakMinutes ?? 0),
+                0,
+              ),
           shifts: orderDashboardShifts(shiftRows),
         };
       }),

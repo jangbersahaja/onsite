@@ -19,7 +19,7 @@ type ReviewRequest = {
   event: "clock_in" | "clock_out";
   requestedAt: string;
   reason: string;
-  status: "pending" | "reconciliation";
+  status: "reconciliation";
   appliedAt: string | null;
   createdAt: string;
 };
@@ -34,29 +34,49 @@ type DeviceRequest = {
 };
 
 type ReviewData = {
-  corrections: ReviewRequest[];
-  devices: DeviceRequest[];
+  corrections: ReviewList<ReviewRequest>;
+  devices: ReviewList<DeviceRequest>;
 };
 
-async function loadReviewRequests() {
-  const [correctionResponse, deviceResponse] = await Promise.all([
-    fetch("/api/corrections?view=review", { cache: "no-store" }),
-    fetch("/api/staff-devices?view=review", { cache: "no-store" }),
+type ReviewList<T> = {
+  items: T[] | null;
+  error: string | null;
+};
+
+async function loadReviewList<T>(
+  url: string,
+  fallbackError: string,
+): Promise<ReviewList<T>> {
+  try {
+    const response = await fetch(url, { cache: "no-store" });
+    const body = (await response.json()) as {
+      requests?: T[];
+      error?: string;
+    };
+    if (!response.ok) {
+      throw new Error(body.error ?? fallbackError);
+    }
+    return { items: body.requests ?? [], error: null };
+  } catch (error) {
+    return {
+      items: null,
+      error: error instanceof Error ? error.message : fallbackError,
+    };
+  }
+}
+
+async function loadReviewRequests(): Promise<ReviewData> {
+  const [corrections, devices] = await Promise.all([
+    loadReviewList<ReviewRequest>(
+      "/api/corrections?view=review",
+      "Could not load correction requests.",
+    ),
+    loadReviewList<DeviceRequest>(
+      "/api/staff-devices?view=review",
+      "Could not load device requests.",
+    ),
   ]);
-  const [correctionBody, deviceBody] = await Promise.all([
-    correctionResponse.json(),
-    deviceResponse.json(),
-  ]);
-  if (!correctionResponse.ok)
-    throw new Error(
-      correctionBody.error ?? "Could not load correction requests.",
-    );
-  if (!deviceResponse.ok)
-    throw new Error(deviceBody.error ?? "Could not load device requests.");
-  return {
-    corrections: correctionBody.requests as ReviewRequest[],
-    devices: deviceBody.requests as DeviceRequest[],
-  } satisfies ReviewData;
+  return { corrections, devices };
 }
 
 function formatRequestedTime(value: string, timezone: string) {
@@ -79,15 +99,18 @@ function formatDeviceRequestTime(value: string) {
 }
 
 export default function CorrectionReviewPage() {
-  const [requests, setRequests] = useState<ReviewRequest[]>([]);
-  const [deviceRequests, setDeviceRequests] = useState<DeviceRequest[]>([]);
+  const [requests, setRequests] = useState<ReviewRequest[] | null>(null);
+  const [deviceRequests, setDeviceRequests] = useState<DeviceRequest[] | null>(
+    null,
+  );
+  const [correctionError, setCorrectionError] = useState("");
+  const [deviceError, setDeviceError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
   const [message, setMessage] = useState("");
-  const pendingRequests = requests.filter(
-    (request) => request.status === "pending",
-  );
-  const reconciliationRequests = requests.filter(
+  const requestList = requests ?? [];
+  const deviceRequestList = deviceRequests ?? [];
+  const reconciliationRequests = requestList.filter(
     (request) => request.status === "reconciliation",
   );
 
@@ -95,15 +118,13 @@ export default function CorrectionReviewPage() {
     setIsLoading(true);
     try {
       const loaded = await loadReviewRequests();
-      setRequests(loaded.corrections);
-      setDeviceRequests(loaded.devices);
+      if (loaded.corrections.items) setRequests(loaded.corrections.items);
+      if (loaded.devices.items) setDeviceRequests(loaded.devices.items);
+      setCorrectionError(loaded.corrections.error ?? "");
+      setDeviceError(loaded.devices.error ?? "");
       setMessage("");
     } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Could not load correction requests.",
-      );
+      setMessage(error instanceof Error ? error.message : "Refresh failed.");
     } finally {
       setIsLoading(false);
     }
@@ -114,8 +135,10 @@ export default function CorrectionReviewPage() {
     loadReviewRequests()
       .then((loaded) => {
         if (!active) return;
-        setRequests(loaded.corrections);
-        setDeviceRequests(loaded.devices);
+        setRequests(loaded.corrections.items);
+        setDeviceRequests(loaded.devices.items);
+        setCorrectionError(loaded.corrections.error ?? "");
+        setDeviceError(loaded.devices.error ?? "");
       })
       .catch((error: unknown) => {
         if (active)
@@ -141,13 +164,7 @@ export default function CorrectionReviewPage() {
     const submitter = (event.nativeEvent as SubmitEvent).submitter;
     const decision =
       submitter instanceof HTMLButtonElement ? submitter.value : "";
-    if (
-      decision !== "approve" &&
-      decision !== "reject" &&
-      decision !== "confirm" &&
-      decision !== "adjust"
-    )
-      return;
+    if (decision !== "confirm" && decision !== "adjust") return;
 
     let requestedAt: string | undefined;
     if (decision === "adjust") {
@@ -155,7 +172,7 @@ export default function CorrectionReviewPage() {
       try {
         requestedAt = outletDateTimeToISOString(
           localTime,
-          requests.find((request) => request.id === requestId)?.timezone ??
+          requestList.find((request) => request.id === requestId)?.timezone ??
             "UTC",
         );
       } catch (error) {
@@ -179,17 +196,14 @@ export default function CorrectionReviewPage() {
       if (!response.ok)
         throw new Error(body.error ?? "Could not record this decision.");
       setMessage(
-        decision === "approve"
-          ? "Request approved."
-          : decision === "reject"
-            ? "Request rejected."
-            : decision === "adjust"
-              ? "Punch adjusted and reconciled."
-              : "Punch reconciled.",
+        decision === "adjust"
+          ? "Punch adjusted and reconciled."
+          : "Punch reconciled.",
       );
       window.dispatchEvent(new Event(REVIEW_REQUESTS_CHANGED_EVENT));
-      setRequests((current) =>
-        current.filter((request) => request.id !== requestId),
+      setRequests(
+        (current) =>
+          current?.filter((request) => request.id !== requestId) ?? null,
       );
     } catch (error) {
       setMessage(
@@ -216,8 +230,9 @@ export default function CorrectionReviewPage() {
       const body = await response.json();
       if (!response.ok)
         throw new Error(body.error ?? "Could not update trusted device.");
-      setDeviceRequests((current) =>
-        current.filter((request) => request.id !== requestId),
+      setDeviceRequests(
+        (current) =>
+          current?.filter((request) => request.id !== requestId) ?? null,
       );
       window.dispatchEvent(new Event(REVIEW_REQUESTS_CHANGED_EVENT));
       setMessage(
@@ -263,81 +278,21 @@ export default function CorrectionReviewPage() {
       )}
       <section
         className="correction-review-list"
-        aria-label="Pending clock corrections"
-      >
-        <header className="correction-review-section-heading">
-          <h2>Pending approval</h2>
-          <span>{pendingRequests.length}</span>
-        </header>
-        {pendingRequests.map((request) => (
-          <article className="correction-review-item" key={request.id}>
-            <div className="correction-review-details">
-              <p className="eyebrow">
-                {request.outletName} · {request.event.replace("_", " ")}
-              </p>
-              <h2>{request.requesterName}</h2>
-              <p className="correction-review-email">
-                {request.requesterEmail}
-              </p>
-              <strong className="correction-requested-time">
-                {formatRequestedTime(request.requestedAt, request.timezone)}
-              </strong>
-              <p className="correction-request-reason">{request.reason}</p>
-            </div>
-            <form
-              className="correction-decision-form"
-              onSubmit={(event) => void decide(event, request.id)}
-            >
-              <label>
-                Decision reason
-                <textarea
-                  name="reason"
-                  minLength={3}
-                  maxLength={500}
-                  rows={2}
-                  required
-                  placeholder="Record why this request is approved or rejected."
-                />
-              </label>
-              <div className="correction-decision-actions">
-                <button
-                  className="correction-reject-button"
-                  type="submit"
-                  name="decision"
-                  value="reject"
-                  disabled={Boolean(busyId)}
-                >
-                  {busyId === `correction:${request.id}` ? "Saving…" : "Reject"}
-                </button>
-                <button
-                  className="auth-submit"
-                  type="submit"
-                  name="decision"
-                  value="approve"
-                  disabled={Boolean(busyId)}
-                >
-                  {busyId === `correction:${request.id}`
-                    ? "Saving…"
-                    : "Approve"}
-                </button>
-              </div>
-            </form>
-          </article>
-        ))}
-        {!isLoading && pendingRequests.length === 0 && (
-          <p className="correction-review-empty">
-            No pending clock correction requests.
-          </p>
-        )}
-      </section>
-      <section
-        className="correction-review-list"
         aria-label="Applied punches awaiting reconciliation"
       >
         <header className="correction-review-section-heading">
           <h2>Needs reconciliation</h2>
-          <span>{reconciliationRequests.length}</span>
+          <span>{requests === null ? "—" : reconciliationRequests.length}</span>
         </header>
+        {correctionError && (
+          <p className="team-message" role="alert">
+            {correctionError}
+            {requests !== null && " Showing previously loaded requests."}
+          </p>
+        )}
+        {isLoading && requests === null && (
+          <p className="correction-review-empty">Loading clock corrections…</p>
+        )}
         {reconciliationRequests.map((request) => (
           <article className="correction-review-item" key={request.id}>
             <div className="correction-review-details">
@@ -411,11 +366,13 @@ export default function CorrectionReviewPage() {
             </form>
           </article>
         ))}
-        {!isLoading && reconciliationRequests.length === 0 && (
-          <p className="correction-review-empty">
-            No applied punches need reconciliation.
-          </p>
-        )}
+        {requests !== null &&
+          !correctionError &&
+          reconciliationRequests.length === 0 && (
+            <p className="correction-review-empty">
+              No clock corrections need review.
+            </p>
+          )}
       </section>
       <section
         className="correction-review-list"
@@ -423,9 +380,20 @@ export default function CorrectionReviewPage() {
       >
         <header className="correction-review-section-heading">
           <h2>Device enrollments</h2>
-          <span>{deviceRequests.length}</span>
+          <span>
+            {deviceRequests === null ? "—" : deviceRequestList.length}
+          </span>
         </header>
-        {deviceRequests.map((request) => (
+        {deviceError && (
+          <p className="team-message" role="alert">
+            {deviceError}
+            {deviceRequests !== null && " Showing previously loaded requests."}
+          </p>
+        )}
+        {isLoading && deviceRequests === null && (
+          <p className="correction-review-empty">Loading device enrollments…</p>
+        )}
+        {deviceRequestList.map((request) => (
           <article className="correction-review-item" key={request.id}>
             <div className="correction-review-details">
               <p className="eyebrow">
@@ -457,14 +425,13 @@ export default function CorrectionReviewPage() {
             </div>
           </article>
         ))}
-        {!isLoading && deviceRequests.length === 0 && (
-          <p className="correction-review-empty">
-            No pending device enrollments.
-          </p>
-        )}
-        {isLoading && (
-          <p className="correction-review-empty">Loading review requests…</p>
-        )}
+        {deviceRequests !== null &&
+          !deviceError &&
+          deviceRequestList.length === 0 && (
+            <p className="correction-review-empty">
+              No pending device enrollments.
+            </p>
+          )}
       </section>
     </div>
   );

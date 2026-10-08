@@ -47,7 +47,7 @@ type CorrectionRequest = {
   event: "clock_in" | "clock_out";
   requestedAt: string;
   reason: string;
-  status: "pending" | "reconciliation" | "approved" | "rejected";
+  status: "reconciliation" | "approved" | "rejected";
   reviewReason: string | null;
   createdAt: string;
 };
@@ -229,10 +229,9 @@ export default function Home() {
     clockData?.outlets.find((outlet) => outlet.id === selectedOutletId) ??
     clockData?.outlets[0] ??
     null;
-  const pendingCorrectionCount =
+  const reconciliationCount =
     clockData?.correctionRequests.filter(
-      (request) =>
-        request.status === "pending" || request.status === "reconciliation",
+      (request) => request.status === "reconciliation",
     ).length ?? 0;
   const liveGeofence =
     selectedOutlet && locationFix?.outletId === selectedOutlet.id
@@ -681,7 +680,7 @@ export default function Home() {
           label: "History",
           glyph: "▤",
           requiredAccess: "clock",
-          count: pendingCorrectionCount,
+          count: reconciliationCount,
         },
       ],
     },

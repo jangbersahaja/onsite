@@ -1556,10 +1556,6 @@ h2 {
   font-size: 9px;
   text-transform: capitalize;
 }
-.correction-status.pending {
-  background: #f8f0df;
-  color: #8b6828;
-}
 .correction-status.reconciliation {
   background: #fff1dc;
   color: #835319;
@@ -2285,7 +2281,8 @@ h2 {
   white-space: nowrap;
 }
 .manual-adjustment-label,
-.gps-source-label {
+.gps-source-label,
+.storehub-source-label {
   font-size: 10px;
   white-space: nowrap;
 }
@@ -2294,6 +2291,9 @@ h2 {
 }
 .gps-source-label {
   color: #51705a;
+}
+.storehub-source-label {
+  color: #176b7a;
 }
 .timesheet-table td:last-child {
   text-align: right;
@@ -3824,6 +3824,10 @@ small,
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.dashboard-staff-name .storehub-source-label {
+  white-space: normal;
+  color: #176b7a;
 }
 .dashboard-staff-detail {
   display: grid;

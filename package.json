@@ -13,6 +13,7 @@
     "bootstrap-admin": "tsx scripts/bootstrap-admin.ts"
   },
   "dependencies": {
+    "@pyyupsk/storehub": "^0.1.0",
     "@vercel/blob": "^2.8.0",
     "drizzle-orm": "^0.45.3",
     "next": "16.3.8",

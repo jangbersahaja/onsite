@@ -10,9 +10,10 @@ import { useEffect, useState, type FormEvent } from "react";
 
 type TimesheetRow = {
   id: string;
-  userId: string;
+  source: "onsite" | "storehub";
+  userId: string | null;
   employeeName: string;
-  employeeEmail: string;
+  employeeEmail: string | null;
   outletId: string;
   outletName: string;
   timezone: string;
@@ -21,17 +22,19 @@ type TimesheetRow = {
   clockInLocal: string;
   clockOutLocal: string | null;
   grossDurationMinutes: number | null;
-  breakMinutes: number;
+  breakMinutes: number | null;
   durationMinutes: number | null;
   breaks: { id: string; startedAt: string; endedAt: string | null }[];
-  clockInSource: "gps" | "manual";
-  clockOutSource: "gps" | "manual" | null;
+  clockInSource: "gps" | "manual" | "storehub";
+  clockOutSource: "gps" | "manual" | "storehub" | null;
 };
 
 type TimesheetData = {
   outlets: { id: string; name: string; address: string }[];
   employees: { id: string; name: string; email: string }[];
   rows: TimesheetRow[];
+  storeHubStatus: "not_configured" | "available" | "unavailable";
+  storeHubFetchedAt: string | null;
 };
 
 type EditingBreak = {
@@ -132,6 +135,7 @@ export default function TimesheetsPage() {
   }
 
   function startEdit(row: TimesheetRow) {
+    if (row.source !== "onsite") return;
     setEditing(row);
     setClockInAt(row.clockInLocal.slice(0, 16).replace(" ", "T"));
     setClockOutAt(row.clockOutLocal?.slice(0, 16).replace(" ", "T") ?? "");
@@ -192,7 +196,7 @@ export default function TimesheetsPage() {
   }
 
   const completedRows =
-    data?.rows.filter((row) => row.durationMinutes !== null) ?? [];
+    data?.rows.filter((row) => row.clockOutAt !== null) ?? [];
   const totalMinutes = completedRows.reduce(
     (total, row) => total + (row.durationMinutes ?? 0),
     0,
@@ -295,6 +299,12 @@ export default function TimesheetsPage() {
       {message && (
         <p className="team-message" role="status">
           {message}
+        </p>
+      )}
+      {data?.storeHubStatus === "unavailable" && (
+        <p className="team-message" role="status">
+          StoreHub attendance is temporarily unavailable. OnSITE timesheets are
+          still shown.
         </p>
       )}
 
@@ -466,17 +476,30 @@ export default function TimesheetsPage() {
                 <tr key={row.id}>
                   <td>
                     <strong>{row.employeeName}</strong>
-                    <small>{row.employeeEmail}</small>
+                    {row.employeeEmail && <small>{row.employeeEmail}</small>}
+                    {row.source === "storehub" && (
+                      <small className="storehub-source-label">
+                        StoreHub · read-only
+                      </small>
+                    )}
                   </td>
                   <td>{row.outletName}</td>
                   <td>{row.clockInLocal}</td>
                   <td>{row.clockOutLocal ?? "Open shift"}</td>
                   <td>{formatDuration(row.grossDurationMinutes)}</td>
-                  <td>{formatDuration(row.breakMinutes)}</td>
+                  <td>
+                    {row.breakMinutes === null
+                      ? "Not provided"
+                      : formatDuration(row.breakMinutes)}
+                  </td>
                   <td>{formatDuration(row.durationMinutes)}</td>
                   <td>
-                    {row.clockInSource === "manual" ||
-                    row.clockOutSource === "manual" ? (
+                    {row.source === "storehub" ? (
+                      <span className="storehub-source-label">
+                        StoreHub import
+                      </span>
+                    ) : row.clockInSource === "manual" ||
+                      row.clockOutSource === "manual" ? (
                       <span className="manual-adjustment-label">
                         Manually adjusted
                       </span>
@@ -485,13 +508,17 @@ export default function TimesheetsPage() {
                     )}
                   </td>
                   <td>
-                    <button
-                      className="timesheet-edit-button"
-                      type="button"
-                      onClick={() => startEdit(row)}
-                    >
-                      Edit
-                    </button>
+                    {row.source === "onsite" ? (
+                      <button
+                        className="timesheet-edit-button"
+                        type="button"
+                        onClick={() => startEdit(row)}
+                      >
+                        Edit
+                      </button>
+                    ) : (
+                      <span className="storehub-source-label">Read only</span>
+                    )}
                   </td>
                 </tr>
               ))}

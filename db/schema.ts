@@ -29,7 +29,6 @@ export const correctionEventEnum = pgEnum("correction_event", [
   "clock_out",
 ]);
 export const correctionStatusEnum = pgEnum("correction_status", [
-  "pending",
   "reconciliation",
   "approved",
   "rejected",
@@ -339,7 +338,7 @@ export const correctionRequests = pgTable(
     event: correctionEventEnum("event").notNull(),
     requestedAt: timestamp("requested_at", { withTimezone: true }).notNull(),
     reason: text("reason").notNull(),
-    status: correctionStatusEnum("status").notNull().default("pending"),
+    status: correctionStatusEnum("status").notNull().default("reconciliation"),
     appliedAt: timestamp("applied_at", { withTimezone: true }),
     reconciledBy: text("reconciled_by").references(() => user.id, {
       onDelete: "set null",
