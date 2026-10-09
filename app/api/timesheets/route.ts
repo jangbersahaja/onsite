@@ -4,9 +4,9 @@ import { getAuth } from "@/lib/auth";
 import { addCalendarDays } from "@/lib/dashboard-data";
 import { getDb } from "@/lib/db";
 import {
+  csvCell,
   formatOutletTimestamp,
   outletDateTimeToISOString,
-  serializeCsv,
 } from "@/lib/outlet-time";
 import {
   getConfiguredStoreHubOutletId,
@@ -30,6 +30,22 @@ function unavailable() {
     },
     { status: 503 },
   );
+}
+
+function filenamePart(value: string) {
+  return (
+    value
+      .normalize("NFKC")
+      .trim()
+      .replace(/[^\p{L}\p{N}._-]+/gu, "_")
+      .replace(/^[_ .-]+|[_ .-]+$/g, "") || "All"
+  );
+}
+
+function formatCsvOutletTimestamp(value: Date | string, timezone: string) {
+  const [date, time] = formatOutletTimestamp(value, timezone).split(" ");
+  const [year, month, day] = date.split("-");
+  return `${day}/${month}/${year} ${time}`;
 }
 
 async function getActor(request: Request) {
@@ -89,6 +105,16 @@ export async function GET(request: Request) {
     ) {
       return Response.json(
         { error: "You cannot access this outlet." },
+        { status: 403 },
+      );
+    }
+    if (
+      parsed.data.outletId &&
+      actor.outlets.find((outlet) => outlet.id === parsed.data.outletId)
+        ?.isActive === false
+    ) {
+      return Response.json(
+        { error: "This outlet is inactive." },
         { status: 403 },
       );
     }
@@ -166,62 +192,167 @@ export async function GET(request: Request) {
       )
       .slice(0, 500);
     if (params.get("format") === "csv") {
-      const csvRows = rows.map((row) => {
-        const grossMinutes = row.clockOutAt
-          ? Math.max(
-              0,
-              Math.floor(
-                (new Date(row.clockOutAt).getTime() -
-                  new Date(row.clockInAt).getTime()) /
-                  60_000,
-              ),
-            )
-          : null;
-        const breakMinutes =
-          row.source === "storehub"
-            ? row.breakMinutes
-            : getCompletedBreakMinutes(row.breaks);
-        const workedMinutes =
-          row.source === "storehub"
-            ? row.workedMinutes
-            : getWorkedMinutes(row.clockInAt, row.clockOutAt, row.breaks);
-        return [
-          row.employeeName,
-          row.employeeEmail ?? "",
-          row.outletName,
-          formatOutletTimestamp(row.clockInAt, row.timezone),
-          row.clockOutAt
-            ? formatOutletTimestamp(row.clockOutAt, row.timezone)
-            : "Open",
-          grossMinutes === null ? "" : (grossMinutes / 60).toFixed(2),
-          breakMinutes,
-          workedMinutes === null ? "" : (workedMinutes / 60).toFixed(2),
-          row.source === "storehub"
-            ? "StoreHub import"
-            : row.clockInSource === "manual" || row.clockOutSource === "manual"
-              ? "Manually adjusted"
-              : "GPS verified",
-        ];
+      const employeeIdentity = (row: (typeof rows)[number]) =>
+        "userId" in row && row.userId
+          ? `user:${row.userId}`
+          : row.employeeEmail
+            ? `email:${row.employeeEmail.toLowerCase()}`
+            : `name:${row.employeeName.trim().toLowerCase()}`;
+      const orderedRows = [...rows].sort((left, right) => {
+        const outletOrder = left.outletName.localeCompare(
+          right.outletName,
+          "en",
+          { numeric: true, sensitivity: "base" },
+        );
+        if (outletOrder !== 0) return outletOrder;
+        const outletIdOrder = left.outletId.localeCompare(right.outletId);
+        if (outletIdOrder !== 0) return outletIdOrder;
+
+        const employeeOrder = left.employeeName.localeCompare(
+          right.employeeName,
+          "en",
+          { numeric: true, sensitivity: "base" },
+        );
+        if (employeeOrder !== 0) return employeeOrder;
+        const staffOrder = employeeIdentity(left).localeCompare(
+          employeeIdentity(right),
+          "en",
+          { numeric: true, sensitivity: "base" },
+        );
+        if (staffOrder !== 0) return staffOrder;
+
+        const leftDate = formatOutletTimestamp(
+          left.clockInAt,
+          left.timezone,
+        ).slice(0, 10);
+        const rightDate = formatOutletTimestamp(
+          right.clockInAt,
+          right.timezone,
+        ).slice(0, 10);
+        return (
+          leftDate.localeCompare(rightDate) || left.id.localeCompare(right.id)
+        );
       });
-      return new Response(
-        serializeCsv(
+      const groups: { key: string; rows: typeof orderedRows }[] = [];
+      for (const row of orderedRows) {
+        const key = `${row.outletId}:${employeeIdentity(row)}`;
+        const lastGroup = groups[groups.length - 1];
+        if (lastGroup?.key === key) lastGroup.rows.push(row);
+        else groups.push({ key, rows: [row] });
+      }
+
+      const csvRows: unknown[][] = [];
+      const employeeNames = new Map<string, string>();
+      const outletNames = new Map<string, string>();
+      for (const [groupIndex, group] of groups.entries()) {
+        const firstRow = group.rows[0];
+        employeeNames.set(employeeIdentity(firstRow), firstRow.employeeName);
+        outletNames.set(firstRow.outletId, firstRow.outletName);
+        if (groupIndex > 0) csvRows.push([]);
+        csvRows.push(
+          ["Name", firstRow.employeeName],
+          ["Email", firstRow.employeeEmail ?? ""],
+          ["Outlet", firstRow.outletName],
+          [],
           [
-            "Employee",
-            "Email",
-            "Outlet",
             "Clock in (outlet time)",
             "Clock out (outlet time)",
             "Gross hours",
-            "Break minutes",
+            "Break hours",
             "Worked hours",
             "Source / adjustment",
           ],
-          csvRows,
-        ),
+        );
+
+        let totalWorkedMinutes = 0;
+        for (const row of group.rows) {
+          const clockInLocal = formatCsvOutletTimestamp(
+            row.clockInAt,
+            row.timezone,
+          );
+          const clockOutLocal = row.clockOutAt
+            ? formatCsvOutletTimestamp(row.clockOutAt, row.timezone)
+            : null;
+          const grossMinutes = row.clockOutAt
+            ? Math.max(
+                0,
+                Math.floor(
+                  (new Date(row.clockOutAt!).getTime() -
+                    new Date(row.clockInAt).getTime()) /
+                    60_000,
+                ),
+              )
+            : null;
+          const breakMinutes =
+            row.source === "storehub"
+              ? row.breakMinutes
+              : getCompletedBreakMinutes(row.breaks);
+          const workedMinutes =
+            row.source === "storehub"
+              ? row.workedMinutes
+              : getWorkedMinutes(row.clockInAt, row.clockOutAt, row.breaks);
+          if (workedMinutes !== null) totalWorkedMinutes += workedMinutes;
+
+          csvRows.push([
+            clockInLocal,
+            clockOutLocal ?? "Open",
+            grossMinutes === null ? "" : (grossMinutes / 60).toFixed(2),
+            breakMinutes === null ? "" : (breakMinutes / 60).toFixed(2),
+            workedMinutes === null ? "" : (workedMinutes / 60).toFixed(2),
+            row.source === "storehub"
+              ? "StoreHub import"
+              : row.clockInSource === "manual" ||
+                  row.clockOutSource === "manual"
+                ? "Manually adjusted"
+                : "GPS verified",
+          ]);
+        }
+        csvRows.push(
+          ["Total shift records", group.rows.length],
+          ["Total work hours", (totalWorkedMinutes / 60).toFixed(2)],
+        );
+      }
+
+      const employeeName =
+        employeeNames.size === 1 ? [...employeeNames.values()][0] : null;
+      const outletName =
+        outletNames.size === 1
+          ? [...outletNames.values()][0]
+          : parsed.data.outletId
+            ? (actor.outlets.find(
+                (outlet) => outlet.id === parsed.data.outletId,
+              )?.name ?? null)
+            : null;
+      const dateRange =
+        parsed.data.from && parsed.data.to
+          ? `${parsed.data.from}_to_${parsed.data.to}`
+          : parsed.data.from
+            ? `From_${parsed.data.from}`
+            : parsed.data.to
+              ? `Through_${parsed.data.to}`
+              : "All_Dates";
+      const filename =
+        [
+          "Timesheets",
+          ...(employeeName ? [filenamePart(employeeName)] : []),
+          ...(outletName ? [filenamePart(outletName)] : []),
+          filenamePart(dateRange),
+        ].join("_") + ".csv";
+      const fallbackFilename = filename
+        .normalize("NFKD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^\x20-\x7e]/g, "_")
+        .replace(/["\\]/g, "_");
+      const encodedFilename = encodeURIComponent(filename).replace(
+        /['()*]/g,
+        (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+      );
+      return new Response(
+        csvRows.map((row) => row.map(csvCell).join(",")).join("\r\n"),
         {
           headers: {
             "Content-Type": "text/csv; charset=utf-8",
-            "Content-Disposition": 'attachment; filename="timesheets.csv"',
+            "Content-Disposition": `attachment; filename="${fallbackFilename}"; filename*=UTF-8''${encodedFilename}`,
             "Cache-Control": "no-store",
           },
         },
@@ -282,6 +413,7 @@ export async function GET(request: Request) {
 const editSchema = z
   .object({
     id: z.string().uuid(),
+    outletId: z.string().uuid(),
     clockInAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
     clockOutAt: z
       .string()
@@ -343,7 +475,11 @@ export async function PATCH(request: Request) {
       .where(eq(workSessions.id, parsed.data.id))
       .limit(1);
 
-    if (!current || !actor.outletIds.includes(current.outletId)) {
+    if (
+      !current ||
+      current.outletId !== parsed.data.outletId ||
+      !actor.outletIds.includes(current.outletId)
+    ) {
       return Response.json(
         { error: "Timesheet entry not found." },
         { status: 404 },

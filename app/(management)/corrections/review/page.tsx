@@ -5,6 +5,7 @@ import {
   formatOutletDateTime,
   outletDateTimeToISOString,
 } from "@/lib/outlet-time";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
 type ReviewRequest = {
@@ -65,16 +66,25 @@ async function loadReviewList<T>(
   }
 }
 
-async function loadReviewRequests(): Promise<ReviewData> {
+async function loadReviewRequests(
+  outletId?: string,
+  devicesOnly = false,
+): Promise<ReviewData> {
+  const correctionQuery = new URLSearchParams({ view: "review" });
+  if (outletId) correctionQuery.set("outletId", outletId);
   const [corrections, devices] = await Promise.all([
-    loadReviewList<ReviewRequest>(
-      "/api/corrections?view=review",
-      "Could not load correction requests.",
-    ),
-    loadReviewList<DeviceRequest>(
-      "/api/staff-devices?view=review",
-      "Could not load device requests.",
-    ),
+    devicesOnly
+      ? Promise.resolve({ items: [], error: null })
+      : loadReviewList<ReviewRequest>(
+          `/api/corrections?${correctionQuery}`,
+          "Could not load correction requests.",
+        ),
+    outletId && !devicesOnly
+      ? Promise.resolve({ items: [], error: null })
+      : loadReviewList<DeviceRequest>(
+          "/api/staff-devices?view=review",
+          "Could not load device requests.",
+        ),
   ]);
   return { corrections, devices };
 }
@@ -98,7 +108,15 @@ function formatDeviceRequestTime(value: string) {
   }).format(new Date(value));
 }
 
-export default function CorrectionReviewPage() {
+export default function CorrectionReviewPage({
+  outletId,
+  devicesOnly = false,
+}: {
+  outletId?: string;
+  devicesOnly?: boolean;
+} = {}) {
+  const pathname = usePathname();
+  const router = useRouter();
   const [requests, setRequests] = useState<ReviewRequest[] | null>(null);
   const [deviceRequests, setDeviceRequests] = useState<DeviceRequest[] | null>(
     null,
@@ -117,7 +135,7 @@ export default function CorrectionReviewPage() {
   async function refresh() {
     setIsLoading(true);
     try {
-      const loaded = await loadReviewRequests();
+      const loaded = await loadReviewRequests(outletId, devicesOnly);
       if (loaded.corrections.items) setRequests(loaded.corrections.items);
       if (loaded.devices.items) setDeviceRequests(loaded.devices.items);
       setCorrectionError(loaded.corrections.error ?? "");
@@ -131,8 +149,12 @@ export default function CorrectionReviewPage() {
   }
 
   useEffect(() => {
+    if (pathname === "/corrections/review") router.replace("/outlets");
+  }, [pathname, router]);
+
+  useEffect(() => {
     let active = true;
-    loadReviewRequests()
+    loadReviewRequests(outletId, devicesOnly)
       .then((loaded) => {
         if (!active) return;
         setRequests(loaded.corrections.items);
@@ -154,7 +176,7 @@ export default function CorrectionReviewPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [devicesOnly, outletId]);
 
   async function decide(event: FormEvent<HTMLFormElement>, requestId: string) {
     event.preventDefault();
@@ -190,7 +212,15 @@ export default function CorrectionReviewPage() {
       const response = await fetch("/api/corrections", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requestId, decision, reason, requestedAt }),
+        body: JSON.stringify({
+          requestId,
+          outletId:
+            outletId ??
+            requestList.find((request) => request.id === requestId)?.outletId,
+          decision,
+          reason,
+          requestedAt,
+        }),
       });
       const body = await response.json();
       if (!response.ok)
@@ -256,9 +286,13 @@ export default function CorrectionReviewPage() {
       <div className="page-heading">
         <div>
           <p className="eyebrow">MANAGER REVIEW</p>
-          <h1>Review requests</h1>
+          <h1>{devicesOnly ? "Device requests" : "Review requests"}</h1>
           <p className="subheading">
-            Review clock corrections and staff device enrollments.
+            {devicesOnly
+              ? "Review trusted device enrollments across your outlets."
+              : outletId
+                ? "Review clock corrections for this outlet."
+                : "Review clock corrections and staff device enrollments."}
           </p>
         </div>
         <button
@@ -276,163 +310,178 @@ export default function CorrectionReviewPage() {
           {message}
         </p>
       )}
-      <section
-        className="correction-review-list"
-        aria-label="Applied punches awaiting reconciliation"
-      >
-        <header className="correction-review-section-heading">
-          <h2>Needs reconciliation</h2>
-          <span>{requests === null ? "—" : reconciliationRequests.length}</span>
-        </header>
-        {correctionError && (
-          <p className="team-message" role="alert">
-            {correctionError}
-            {requests !== null && " Showing previously loaded requests."}
-          </p>
-        )}
-        {isLoading && requests === null && (
-          <p className="correction-review-empty">Loading clock corrections…</p>
-        )}
-        {reconciliationRequests.map((request) => (
-          <article className="correction-review-item" key={request.id}>
-            <div className="correction-review-details">
-              <p className="eyebrow">
-                {request.outletName} · {request.event.replace("_", " ")}
+      {!devicesOnly && (
+        <section
+          className="correction-review-list"
+          aria-label="Applied punches awaiting reconciliation"
+        >
+          <header className="correction-review-section-heading">
+            <h2>Needs reconciliation</h2>
+            <span>
+              {requests === null ? "—" : reconciliationRequests.length}
+            </span>
+          </header>
+          {correctionError && (
+            <p className="team-message" role="alert">
+              {correctionError}
+              {requests !== null && " Showing previously loaded requests."}
+            </p>
+          )}
+          {isLoading && requests === null && (
+            <p className="correction-review-empty">
+              Loading clock corrections…
+            </p>
+          )}
+          {reconciliationRequests.map((request) => (
+            <article className="correction-review-item" key={request.id}>
+              <div className="correction-review-details">
+                <p className="eyebrow">
+                  {request.outletName} · {request.event.replace("_", " ")}
+                </p>
+                <h2>{request.requesterName}</h2>
+                <p className="correction-review-email">
+                  {request.requesterEmail}
+                </p>
+                <strong className="correction-requested-time">
+                  {formatRequestedTime(request.requestedAt, request.timezone)}
+                </strong>
+                <p className="correction-request-reason">{request.reason}</p>
+                <small>
+                  Applied
+                  {request.appliedAt
+                    ? ` ${formatRequestedTime(request.appliedAt, request.timezone)}`
+                    : " immediately"}
+                </small>
+              </div>
+              <form
+                className="correction-decision-form"
+                onSubmit={(event) => void decide(event, request.id)}
+              >
+                <label>
+                  Manager note
+                  <textarea
+                    name="reason"
+                    minLength={3}
+                    maxLength={500}
+                    rows={2}
+                    required
+                    placeholder="Add a reconciliation note."
+                  />
+                </label>
+                <label>
+                  Adjust punch time
+                  <input
+                    name="requestedAt"
+                    type="datetime-local"
+                    required
+                    defaultValue={formatOutletDateTime(
+                      request.requestedAt,
+                      request.timezone,
+                    )}
+                  />
+                </label>
+                <div className="correction-decision-actions">
+                  <button
+                    className="team-secondary-action"
+                    type="submit"
+                    name="decision"
+                    value="adjust"
+                    disabled={Boolean(busyId)}
+                  >
+                    {busyId === `correction:${request.id}`
+                      ? "Saving…"
+                      : "Adjust"}
+                  </button>
+                  <button
+                    className="auth-submit"
+                    type="submit"
+                    name="decision"
+                    value="confirm"
+                    disabled={Boolean(busyId)}
+                  >
+                    {busyId === `correction:${request.id}`
+                      ? "Saving…"
+                      : "Confirm"}
+                  </button>
+                </div>
+              </form>
+            </article>
+          ))}
+          {requests !== null &&
+            !correctionError &&
+            reconciliationRequests.length === 0 && (
+              <p className="correction-review-empty">
+                No clock corrections need review.
               </p>
-              <h2>{request.requesterName}</h2>
-              <p className="correction-review-email">
-                {request.requesterEmail}
-              </p>
-              <strong className="correction-requested-time">
-                {formatRequestedTime(request.requestedAt, request.timezone)}
-              </strong>
-              <p className="correction-request-reason">{request.reason}</p>
-              <small>
-                Applied
-                {request.appliedAt
-                  ? ` ${formatRequestedTime(request.appliedAt, request.timezone)}`
-                  : " immediately"}
-              </small>
-            </div>
-            <form
-              className="correction-decision-form"
-              onSubmit={(event) => void decide(event, request.id)}
-            >
-              <label>
-                Manager note
-                <textarea
-                  name="reason"
-                  minLength={3}
-                  maxLength={500}
-                  rows={2}
-                  required
-                  placeholder="Add a reconciliation note."
-                />
-              </label>
-              <label>
-                Adjust punch time
-                <input
-                  name="requestedAt"
-                  type="datetime-local"
-                  required
-                  defaultValue={formatOutletDateTime(
-                    request.requestedAt,
-                    request.timezone,
-                  )}
-                />
-              </label>
+            )}
+        </section>
+      )}
+      {(!outletId || devicesOnly) && (
+        <section
+          className="correction-review-list"
+          aria-label="Device enrollments"
+        >
+          <header className="correction-review-section-heading">
+            <h2>Device enrollments</h2>
+            <span>
+              {deviceRequests === null ? "—" : deviceRequestList.length}
+            </span>
+          </header>
+          {deviceError && (
+            <p className="team-message" role="alert">
+              {deviceError}
+              {deviceRequests !== null &&
+                " Showing previously loaded requests."}
+            </p>
+          )}
+          {isLoading && deviceRequests === null && (
+            <p className="correction-review-empty">
+              Loading device enrollments…
+            </p>
+          )}
+          {deviceRequestList.map((request) => (
+            <article className="correction-review-item" key={request.id}>
+              <div className="correction-review-details">
+                <p className="eyebrow">
+                  TRUSTED DEVICE · {request.outletNames.join(", ")}
+                </p>
+                <h2>{request.employeeName}</h2>
+                <p className="correction-review-email">
+                  {request.employeeEmail}
+                </p>
+                <strong className="correction-requested-time">
+                  Requested {formatDeviceRequestTime(request.createdAt)}
+                </strong>
+              </div>
               <div className="correction-decision-actions">
                 <button
-                  className="team-secondary-action"
-                  type="submit"
-                  name="decision"
-                  value="adjust"
+                  className="correction-reject-button"
+                  type="button"
                   disabled={Boolean(busyId)}
+                  onClick={() => void decideDevice(request.id, "reject")}
                 >
-                  {busyId === `correction:${request.id}` ? "Saving…" : "Adjust"}
+                  {busyId === `device:${request.id}` ? "Saving…" : "Reject"}
                 </button>
                 <button
                   className="auth-submit"
-                  type="submit"
-                  name="decision"
-                  value="confirm"
+                  type="button"
                   disabled={Boolean(busyId)}
+                  onClick={() => void decideDevice(request.id, "approve")}
                 >
-                  {busyId === `correction:${request.id}`
-                    ? "Saving…"
-                    : "Confirm"}
+                  {busyId === `device:${request.id}` ? "Saving…" : "Approve"}
                 </button>
               </div>
-            </form>
-          </article>
-        ))}
-        {requests !== null &&
-          !correctionError &&
-          reconciliationRequests.length === 0 && (
-            <p className="correction-review-empty">
-              No clock corrections need review.
-            </p>
-          )}
-      </section>
-      <section
-        className="correction-review-list"
-        aria-label="Device enrollments"
-      >
-        <header className="correction-review-section-heading">
-          <h2>Device enrollments</h2>
-          <span>
-            {deviceRequests === null ? "—" : deviceRequestList.length}
-          </span>
-        </header>
-        {deviceError && (
-          <p className="team-message" role="alert">
-            {deviceError}
-            {deviceRequests !== null && " Showing previously loaded requests."}
-          </p>
-        )}
-        {isLoading && deviceRequests === null && (
-          <p className="correction-review-empty">Loading device enrollments…</p>
-        )}
-        {deviceRequestList.map((request) => (
-          <article className="correction-review-item" key={request.id}>
-            <div className="correction-review-details">
-              <p className="eyebrow">
-                TRUSTED DEVICE · {request.outletNames.join(", ")}
+            </article>
+          ))}
+          {deviceRequests !== null &&
+            !deviceError &&
+            deviceRequestList.length === 0 && (
+              <p className="correction-review-empty">
+                No pending device enrollments.
               </p>
-              <h2>{request.employeeName}</h2>
-              <p className="correction-review-email">{request.employeeEmail}</p>
-              <strong className="correction-requested-time">
-                Requested {formatDeviceRequestTime(request.createdAt)}
-              </strong>
-            </div>
-            <div className="correction-decision-actions">
-              <button
-                className="correction-reject-button"
-                type="button"
-                disabled={Boolean(busyId)}
-                onClick={() => void decideDevice(request.id, "reject")}
-              >
-                {busyId === `device:${request.id}` ? "Saving…" : "Reject"}
-              </button>
-              <button
-                className="auth-submit"
-                type="button"
-                disabled={Boolean(busyId)}
-                onClick={() => void decideDevice(request.id, "approve")}
-              >
-                {busyId === `device:${request.id}` ? "Saving…" : "Approve"}
-              </button>
-            </div>
-          </article>
-        ))}
-        {deviceRequests !== null &&
-          !deviceError &&
-          deviceRequestList.length === 0 && (
-            <p className="correction-review-empty">
-              No pending device enrollments.
-            </p>
-          )}
-      </section>
+            )}
+        </section>
+      )}
     </div>
   );
 }

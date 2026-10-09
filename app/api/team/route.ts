@@ -35,6 +35,17 @@ export async function GET(request: Request) {
     if (!access)
       return Response.json({ error: "Team access denied." }, { status: 403 });
 
+    const requestedOutletId = new URL(request.url).searchParams.get("outletId");
+    if (requestedOutletId && !access.outletIds.includes(requestedOutletId)) {
+      return Response.json(
+        { error: "You cannot access this outlet." },
+        { status: 403 },
+      );
+    }
+    const visibleOutletIds = requestedOutletId
+      ? [requestedOutletId]
+      : access.outletIds;
+
     const db = getDb();
     const [members, invitationRows, managers, managerAssignments] =
       await Promise.all([
@@ -58,7 +69,7 @@ export async function GET(request: Request) {
             and(
               eq(outletMemberships.isActive, true),
               eq(outlets.isActive, true),
-              inArray(outletMemberships.outletId, access.outletIds),
+              inArray(outletMemberships.outletId, visibleOutletIds),
             ),
           )
           .orderBy(user.name)
@@ -115,7 +126,7 @@ export async function GET(request: Request) {
                 and(
                   eq(outletMemberships.role, "manager"),
                   eq(user.accountType, "admin"),
-                  inArray(outlets.id, access.outletIds),
+                  inArray(outlets.id, visibleOutletIds),
                 ),
               )
           : Promise.resolve([]),
@@ -155,11 +166,13 @@ export async function GET(request: Request) {
     }
     const pendingInvitations = Array.from(invitationMap.values()).filter(
       (invitation) =>
-        access.isSuperAdmin ||
-        (invitation.outletIds.length > 0 &&
-          invitation.outletIds.every((outletId) =>
-            access.outletIds.includes(outletId),
-          )),
+        (!requestedOutletId ||
+          invitation.outletIds.includes(requestedOutletId)) &&
+        (access.isSuperAdmin ||
+          (invitation.outletIds.length > 0 &&
+            invitation.outletIds.every((outletId) =>
+              access.outletIds.includes(outletId),
+            ))),
     );
 
     const staffUserIds = Array.from(

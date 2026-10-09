@@ -1,11 +1,11 @@
 "use client";
 
 import { authClient } from "@/lib/auth-client";
+import { MAX_PROFILE_PHOTO_BYTES } from "@/lib/profile-photo";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { MAX_PROFILE_PHOTO_BYTES } from "@/lib/profile-photo";
 
 export type WorkspaceNavigationItem = {
   href: string;
@@ -16,60 +16,90 @@ export type WorkspaceNavigationItem = {
 };
 
 export type WorkspaceNavigationGroup = {
+  id?: string;
   label: string;
   items: WorkspaceNavigationItem[];
+  collapsible?: boolean;
 };
 
 export const REVIEW_REQUESTS_CHANGED_EVENT = "review-requests-changed";
-
-export const managementNavigation: WorkspaceNavigationGroup[] = [
-  {
-    label: "WORKSPACE",
-    items: [
-      {
-        href: "/clock",
-        label: "Clock",
-        glyph: "◷",
-        requiredAccess: "clock",
-      },
-    ],
-  },
-  {
-    label: "MANAGE",
-    items: [
-      {
-        href: "/manage",
-        label: "Dashboard",
-        glyph: "⌂",
-        requiredAccess: "backoffice",
-      },
-      {
-        href: "/timesheets",
-        label: "Timesheets",
-        glyph: "▦",
-        requiredAccess: "backoffice",
-      },
-      {
-        href: "/corrections/review",
-        label: "Review requests",
-        glyph: "↗",
-        requiredAccess: "backoffice",
-      },
-      {
-        href: "/team",
-        label: "Team",
-        glyph: "♙",
-        requiredAccess: "backoffice",
-      },
-    ],
-  },
-];
 
 export type WorkspaceOutlet = {
   id: string;
   name: string;
   role?: string;
 };
+
+export function createManagementNavigation(
+  outlets: WorkspaceOutlet[] = [],
+  canManageOutlets = false,
+): WorkspaceNavigationGroup[] {
+  return [
+    {
+      label: "WORKSPACE",
+      items: [
+        {
+          href: "/clock",
+          label: "Clock",
+          glyph: "◷",
+          requiredAccess: "clock",
+        },
+      ],
+    },
+    {
+      label: "MANAGE",
+      items: [
+        {
+          href: "/manage",
+          label: "Dashboard",
+          glyph: "⌂",
+          requiredAccess: "backoffice",
+        },
+        ...(canManageOutlets
+          ? [
+              {
+                href: "/outlets",
+                label: "Outlets",
+                glyph: "⌖",
+                requiredAccess: "backoffice" as const,
+              },
+            ]
+          : []),
+        {
+          href: "/device-requests",
+          label: "Device requests",
+          glyph: "▣",
+          requiredAccess: "backoffice",
+        },
+      ],
+    },
+    ...outlets.map((outlet) => ({
+      id: `outlet:${outlet.id}`,
+      label: outlet.name,
+      collapsible: true,
+      items: [
+        {
+          href: `/outlets/${outlet.id}/timesheets`,
+          label: "Timesheets",
+          glyph: "▦",
+          requiredAccess: "backoffice" as const,
+        },
+        {
+          href: `/outlets/${outlet.id}/corrections/review`,
+          label: "Review requests",
+          glyph: "↗",
+          requiredAccess: "backoffice" as const,
+        },
+        {
+          href: `/outlets/${outlet.id}/team`,
+          label: "Team",
+          glyph: "♙",
+          requiredAccess: "backoffice" as const,
+        },
+      ],
+    })),
+  ];
+}
 
 type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -114,11 +144,14 @@ export function WorkspaceShell({
   const session = authClient.useSession();
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const [expandedNavigationGroups, setExpandedNavigationGroups] = useState<
+    Set<string>
+  >(() => new Set());
   const [profilePhotoMessage, setProfilePhotoMessage] = useState("");
   const [isPhotoSaving, setIsPhotoSaving] = useState(false);
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const profilePhotoInputRef = useRef<HTMLInputElement>(null);
-  const [pendingReviewCount, setPendingReviewCount] = useState(0);
+  const [pendingDeviceRequestCount, setPendingDeviceRequestCount] = useState(0);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(
     null,
   );
@@ -138,8 +171,8 @@ export function WorkspaceShell({
             : session.data?.user.canAccessBackoffice === true,
         )
         .map((item) =>
-          item.href === "/corrections/review"
-            ? { ...item, count: pendingReviewCount }
+          item.href === "/device-requests"
+            ? { ...item, count: pendingDeviceRequestCount }
             : item,
         ),
     }))
@@ -186,27 +219,17 @@ export function WorkspaceShell({
     async function refreshReviewCount() {
       const generation = ++refreshGeneration;
       try {
-        const [correctionResponse, deviceResponse] = await Promise.all([
-          fetch("/api/corrections?view=review", { cache: "no-store" }),
-          fetch("/api/staff-devices?view=review", { cache: "no-store" }),
-        ]);
-        if (!correctionResponse.ok || !deviceResponse.ok) return;
-
-        const [correctionBody, deviceBody] = await Promise.all([
-          correctionResponse.json() as Promise<{ requests?: unknown }>,
-          deviceResponse.json() as Promise<{ requests?: unknown }>,
-        ]);
-        if (
-          !Array.isArray(correctionBody.requests) ||
-          !Array.isArray(deviceBody.requests)
-        ) {
-          return;
-        }
+        const deviceResponse = await fetch("/api/staff-devices?view=review", {
+          cache: "no-store",
+        });
+        if (!deviceResponse.ok) return;
+        const deviceBody = (await deviceResponse.json()) as {
+          requests?: unknown;
+        };
+        if (!Array.isArray(deviceBody.requests)) return;
 
         if (active && generation === refreshGeneration) {
-          setPendingReviewCount(
-            correctionBody.requests.length + deviceBody.requests.length,
-          );
+          setPendingDeviceRequestCount(deviceBody.requests.length);
         }
       } catch {
         // Keep the last known count when a background refresh fails.
@@ -218,7 +241,6 @@ export function WorkspaceShell({
     }
 
     function onReviewDecision() {
-      setPendingReviewCount((count) => Math.max(0, count - 1));
       void refreshReviewCount();
     }
 
@@ -381,28 +403,67 @@ export function WorkspaceShell({
         )}
 
         <nav className="primary-nav" aria-label="Main navigation">
-          {visibleNavigation.map((group) => (
-            <div className="nav-group" key={group.label}>
-              <p className="nav-group-label">{group.label}</p>
-              {group.items.map((item) => (
-                <Link
-                  className={`nav-item${item.href === activeHref ? " is-active" : ""}`}
-                  href={item.href}
-                  key={item.href}
-                  aria-current={item.href === activeHref ? "page" : undefined}
-                  onClick={() => setIsMobileNavOpen(false)}
-                >
-                  <span className="nav-glyph" aria-hidden="true">
-                    {item.glyph}
-                  </span>
-                  {item.label}
-                  {Boolean(item.count) && (
-                    <span className="nav-count">{item.count}</span>
-                  )}
-                </Link>
-              ))}
-            </div>
-          ))}
+          {visibleNavigation.map((group, groupIndex) => {
+            const groupId = group.id ?? group.label;
+            const isActiveGroup = group.items.some(
+              (item) => item.href === activeHref,
+            );
+            const isExpanded =
+              !group.collapsible ||
+              isActiveGroup ||
+              expandedNavigationGroups.has(groupId);
+
+            return (
+              <div className="nav-group" key={groupId}>
+                {group.collapsible ? (
+                  <button
+                    className="nav-group-toggle"
+                    type="button"
+                    aria-expanded={isExpanded}
+                    aria-controls={`nav-group-items-${groupIndex}`}
+                    onClick={() =>
+                      setExpandedNavigationGroups((current) => {
+                        const next = new Set(current);
+                        if (next.has(groupId)) next.delete(groupId);
+                        else next.add(groupId);
+                        return next;
+                      })
+                    }
+                  >
+                    <span className="nav-group-label">{group.label}</span>
+                    <span className="nav-group-chevron" aria-hidden="true">
+                      {isExpanded ? "⌄" : "›"}
+                    </span>
+                  </button>
+                ) : (
+                  <p className="nav-group-label">{group.label}</p>
+                )}
+                {isExpanded && (
+                  <div id={`nav-group-items-${groupIndex}`}>
+                    {group.items.map((item) => (
+                      <Link
+                        className={`nav-item${item.href === activeHref ? " is-active" : ""}`}
+                        href={item.href}
+                        key={item.href}
+                        aria-current={
+                          item.href === activeHref ? "page" : undefined
+                        }
+                        onClick={() => setIsMobileNavOpen(false)}
+                      >
+                        <span className="nav-glyph" aria-hidden="true">
+                          {item.glyph}
+                        </span>
+                        {item.label}
+                        {Boolean(item.count) && (
+                          <span className="nav-count">{item.count}</span>
+                        )}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
 
         <div className="rail-bottom">

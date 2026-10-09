@@ -6,6 +6,7 @@ import {
 } from "@/app/(management)/timesheets/_components/timesheet-edit-dialog";
 import { outletDateTimeToISOString } from "@/lib/outlet-time";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
 type TimesheetRow = {
@@ -29,6 +30,14 @@ type TimesheetRow = {
   clockOutSource: "gps" | "manual" | "storehub" | null;
 };
 
+type TimesheetStaffGroup = {
+  key: string;
+  employeeName: string;
+  employeeEmail: string | null;
+  outletName: string;
+  rows: TimesheetRow[];
+};
+
 type TimesheetData = {
   outlets: { id: string; name: string; address: string }[];
   employees: { id: string; name: string; email: string }[];
@@ -50,6 +59,36 @@ const emptyFilters: Filters = {
   from: "",
   to: "",
 };
+
+const timesheetFiltersStorageKey = "onsite-timesheet-filters";
+
+function readSavedFilters(): Filters {
+  try {
+    const saved = JSON.parse(
+      window.localStorage.getItem(timesheetFiltersStorageKey) ?? "null",
+    ) as Partial<Filters> | null;
+    if (!saved || typeof saved !== "object") return emptyFilters;
+    return {
+      outletId: typeof saved.outletId === "string" ? saved.outletId : "",
+      employeeId: typeof saved.employeeId === "string" ? saved.employeeId : "",
+      from: typeof saved.from === "string" ? saved.from : "",
+      to: typeof saved.to === "string" ? saved.to : "",
+    };
+  } catch {
+    return emptyFilters;
+  }
+}
+
+function saveFilters(filters: Filters) {
+  try {
+    window.localStorage.setItem(
+      timesheetFiltersStorageKey,
+      JSON.stringify(filters),
+    );
+  } catch {
+    return;
+  }
+}
 
 function filterQuery(filters: Filters, format?: "csv") {
   const params = new URLSearchParams();
@@ -75,8 +114,44 @@ function formatDuration(minutes: number | null) {
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
 }
 
-export default function TimesheetsPage() {
-  const [filters, setFilters] = useState(emptyFilters);
+function splitLocalTimestamp(timestamp: string | null) {
+  if (!timestamp) return null;
+  const separator = timestamp.indexOf(" ");
+  if (separator < 0) return { date: timestamp, time: "" };
+  return {
+    date: timestamp.slice(0, separator),
+    time: timestamp.slice(separator + 1),
+  };
+}
+
+function formatShiftDate(date: string) {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, month - 1, day)));
+}
+
+function staffGroupKey(row: TimesheetRow) {
+  const identity = row.userId
+    ? `user:${row.userId}`
+    : row.employeeEmail
+      ? `email:${row.employeeEmail.toLowerCase()}`
+      : `name:${row.employeeName.trim().toLowerCase()}`;
+  return `${row.outletId}:${identity}`;
+}
+
+export default function TimesheetsPage({
+  outletId,
+}: { outletId?: string } = {}) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const [filters, setFilters] = useState({
+    ...emptyFilters,
+    outletId: outletId ?? "",
+  });
   const [data, setData] = useState<TimesheetData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -84,10 +159,11 @@ export default function TimesheetsPage() {
   const [editing, setEditing] = useState<TimesheetRow | null>(null);
 
   async function load(nextFilters: Filters) {
+    const scopedFilters = outletId ? { ...nextFilters, outletId } : nextFilters;
     setIsLoading(true);
     setMessage("");
     try {
-      setData(await fetchTimesheetData(nextFilters));
+      setData(await fetchTimesheetData(scopedFilters));
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "Could not load timesheets.",
@@ -98,8 +174,19 @@ export default function TimesheetsPage() {
   }
 
   useEffect(() => {
+    if (pathname === "/timesheets") router.replace("/outlets");
+  }, [pathname, router]);
+
+  useEffect(() => {
     let active = true;
-    fetchTimesheetData(emptyFilters)
+    const saved = readSavedFilters();
+    const savedFilters = {
+      ...saved,
+      outletId: outletId ?? saved.outletId,
+      employeeId:
+        outletId && saved.outletId !== outletId ? "" : saved.employeeId,
+    };
+    fetchTimesheetData(savedFilters)
       .then((loaded) => {
         if (active) setData(loaded);
       })
@@ -112,16 +199,22 @@ export default function TimesheetsPage() {
           );
       })
       .finally(() => {
-        if (active) setIsLoading(false);
+        if (active) {
+          setFilters(savedFilters);
+          setIsLoading(false);
+        }
       });
     return () => {
       active = false;
     };
-  }, []);
+  }, [outletId]);
 
   function handleFilterSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    void load(filters);
+    const scopedFilters = outletId ? { ...filters, outletId } : filters;
+    setFilters(scopedFilters);
+    saveFilters(scopedFilters);
+    void load(scopedFilters);
   }
 
   function startEdit(row: TimesheetRow) {
@@ -139,6 +232,7 @@ export default function TimesheetsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: editing.id,
+          outletId: outletId ?? editing.outletId,
           clockInAt: values.clockInAt,
           clockOutAt: values.clockOutAt || null,
           breaks: values.breaks.map((breakInterval) => ({
@@ -178,6 +272,51 @@ export default function TimesheetsPage() {
     (total, row) => total + (row.durationMinutes ?? 0),
     0,
   );
+  const sortedRows = [...(data?.rows ?? [])].sort((left, right) => {
+    const outletOrder = left.outletName.localeCompare(right.outletName, "en", {
+      numeric: true,
+      sensitivity: "base",
+    });
+    if (outletOrder !== 0) return outletOrder;
+    const outletIdOrder = left.outletId.localeCompare(right.outletId);
+    if (outletIdOrder !== 0) return outletIdOrder;
+
+    const employeeOrder = left.employeeName.localeCompare(
+      right.employeeName,
+      "en",
+      { numeric: true, sensitivity: "base" },
+    );
+    if (employeeOrder !== 0) return employeeOrder;
+    const staffOrder = staffGroupKey(left).localeCompare(
+      staffGroupKey(right),
+      "en",
+      { numeric: true, sensitivity: "base" },
+    );
+    if (staffOrder !== 0) return staffOrder;
+
+    return (
+      left.clockInLocal
+        .slice(0, 10)
+        .localeCompare(right.clockInLocal.slice(0, 10)) ||
+      left.id.localeCompare(right.id)
+    );
+  });
+  const staffGroups: TimesheetStaffGroup[] = [];
+  for (const row of sortedRows) {
+    const key = staffGroupKey(row);
+    const lastGroup = staffGroups[staffGroups.length - 1];
+    if (lastGroup?.key === key) {
+      lastGroup.rows.push(row);
+    } else {
+      staffGroups.push({
+        key,
+        employeeName: row.employeeName,
+        employeeEmail: row.employeeEmail,
+        outletName: row.outletName,
+        rows: [row],
+      });
+    }
+  }
   const csvQuery = filterQuery(filters, "csv");
 
   return (
@@ -187,11 +326,18 @@ export default function TimesheetsPage() {
           <p className="eyebrow">PAYROLL REVIEW</p>
           <h1>Timesheets</h1>
           <p className="subheading">
-            Review shifts across the outlets you manage.
+            {outletId
+              ? "Review shifts and hours for this outlet."
+              : "Review shifts across the outlets you manage."}
           </p>
         </div>
         <div className="timesheet-heading-actions">
-          <Link className="timesheet-cancel" href="/corrections/review">
+          <Link
+            className="timesheet-cancel"
+            href={
+              outletId ? `/outlets/${outletId}/corrections/review` : "/outlets"
+            }
+          >
             Review requests
           </Link>
           <a className="timesheet-export" href={`/api/timesheets?${csvQuery}`}>
@@ -205,11 +351,12 @@ export default function TimesheetsPage() {
           Outlet
           <select
             value={filters.outletId}
+            disabled={Boolean(outletId)}
             onChange={(event) =>
               setFilters({ ...filters, outletId: event.target.value })
             }
           >
-            <option value="">All managed outlets</option>
+            {!outletId && <option value="">All managed outlets</option>}
             {data?.outlets.map((outlet) => (
               <option value={outlet.id} key={outlet.id}>
                 {outlet.name}
@@ -298,91 +445,133 @@ export default function TimesheetsPage() {
       )}
 
       <section className="timesheet-table-section" aria-label="Shift records">
-        <div className="team-table-wrap">
-          <table className="team-table timesheet-table">
-            <thead>
-              <tr>
-                <th>EMPLOYEE</th>
-                <th>OUTLET</th>
-                <th>CLOCK IN</th>
-                <th>CLOCK OUT</th>
-                <th>GROSS</th>
-                <th>BREAK</th>
-                <th>WORKED</th>
-                <th>SOURCE</th>
-                <th>
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {data?.rows.map((row) => (
-                <tr key={row.id}>
-                  <td>
-                    <strong>{row.employeeName}</strong>
-                    {row.employeeEmail && <small>{row.employeeEmail}</small>}
-                    {row.source === "storehub" && (
-                      <small className="storehub-source-label">
-                        StoreHub · read-only
-                      </small>
-                    )}
-                  </td>
-                  <td>{row.outletName}</td>
-                  <td>{row.clockInLocal}</td>
-                  <td>{row.clockOutLocal ?? "Open shift"}</td>
-                  <td>{formatDuration(row.grossDurationMinutes)}</td>
-                  <td>
-                    {row.breakMinutes === null
-                      ? "Not provided"
-                      : formatDuration(row.breakMinutes)}
-                  </td>
-                  <td>{formatDuration(row.durationMinutes)}</td>
-                  <td>
-                    {row.source === "storehub" ? (
-                      <span className="storehub-source-label">
-                        StoreHub import
-                      </span>
-                    ) : row.clockInSource === "manual" ||
-                      row.clockOutSource === "manual" ? (
-                      <span className="manual-adjustment-label">
-                        Manually adjusted
-                      </span>
-                    ) : (
-                      <span className="gps-source-label">GPS verified</span>
-                    )}
-                  </td>
-                  <td>
-                    {row.source === "onsite" ? (
-                      <button
-                        className="timesheet-edit-button"
-                        type="button"
-                        onClick={() => startEdit(row)}
-                      >
-                        Edit
-                      </button>
-                    ) : (
-                      <span className="storehub-source-label">Read only</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {data && data.rows.length === 0 && (
-                <tr>
-                  <td className="timesheet-empty" colSpan={9}>
-                    No shifts match these filters.
-                  </td>
-                </tr>
-              )}
-              {!data && isLoading && (
-                <tr>
-                  <td className="timesheet-empty" colSpan={9}>
-                    Loading shift records…
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        {staffGroups.map((group, groupIndex) => (
+          <section
+            className="timesheet-staff-group"
+            aria-labelledby={`timesheet-staff-${groupIndex}`}
+            key={group.key}
+          >
+            <header className="timesheet-staff-heading">
+              <div>
+                <h2 id={`timesheet-staff-${groupIndex}`}>
+                  {group.employeeName}
+                </h2>
+                {group.employeeEmail && <small>{group.employeeEmail}</small>}
+              </div>
+              <span>{group.outletName}</span>
+            </header>
+            <div className="team-table-wrap">
+              <table className="team-table timesheet-table">
+                <thead>
+                  <tr>
+                    <th>SHIFT DATE</th>
+                    <th>CLOCK IN</th>
+                    <th>CLOCK OUT</th>
+                    <th>WORKED</th>
+                    <th>RECORD</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {group.rows.map((row) => {
+                    const clockIn = splitLocalTimestamp(row.clockInLocal);
+                    const clockOut = splitLocalTimestamp(row.clockOutLocal);
+                    return (
+                      <tr key={row.id}>
+                        <td>
+                          <div className="timesheet-shift-date">
+                            <time dateTime={row.clockInAt}>
+                              {clockIn && formatShiftDate(clockIn.date)}
+                            </time>
+                            {clockOut &&
+                              clockIn &&
+                              clockOut.date !== clockIn.date && (
+                                <small>
+                                  Ends {formatShiftDate(clockOut.date)}
+                                </small>
+                              )}
+                          </div>
+                        </td>
+                        <td className="timesheet-clock-time">
+                          {clockIn?.time}
+                        </td>
+                        <td className="timesheet-clock-time">
+                          {clockOut?.time ?? "Open shift"}
+                        </td>
+                        <td>
+                          <strong className="timesheet-worked">
+                            {formatDuration(row.durationMinutes)}
+                          </strong>
+                          <small className="timesheet-duration-detail">
+                            Gross {formatDuration(row.grossDurationMinutes)}
+                            <span aria-hidden="true"> · </span>
+                            Break{" "}
+                            {row.breakMinutes === null
+                              ? "Not provided"
+                              : formatDuration(row.breakMinutes)}
+                          </small>
+                        </td>
+                        <td>
+                          <div className="timesheet-record-cell">
+                            {row.source === "storehub" ? (
+                              <span className="storehub-source-label">
+                                StoreHub · read-only
+                              </span>
+                            ) : row.clockInSource === "manual" ||
+                              row.clockOutSource === "manual" ? (
+                              <span className="manual-adjustment-label">
+                                Manually adjusted
+                              </span>
+                            ) : (
+                              <span className="gps-source-label">
+                                GPS verified
+                              </span>
+                            )}
+                            {row.source === "onsite" && (
+                              <button
+                                className="timesheet-edit-button"
+                                type="button"
+                                onClick={() => startEdit(row)}
+                              >
+                                Edit
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr>
+                    <td colSpan={3}>
+                      {group.rows.length} shift{" "}
+                      {group.rows.length === 1 ? "record" : "records"}
+                    </td>
+                    <td className="timesheet-table-total-hours" colSpan={2}>
+                      <span>Total work hours</span>
+                      <strong>
+                        {formatDuration(
+                          group.rows.reduce(
+                            (total, row) => total + (row.durationMinutes ?? 0),
+                            0,
+                          ),
+                        )}
+                      </strong>
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </section>
+        ))}
+        {staffGroups.length === 0 && data && (
+          <p className="timesheet-empty-message">
+            No shifts match these filters.
+          </p>
+        )}
+        {staffGroups.length === 0 && !data && isLoading && (
+          <p className="timesheet-empty-message">Loading shift records…</p>
+        )}
         <p className="timesheet-footnote">
           Date filters and displayed times use each outlet&apos;s timezone. Up
           to 500 matching shifts are shown.

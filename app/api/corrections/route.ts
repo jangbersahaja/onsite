@@ -62,7 +62,9 @@ export async function GET(request: Request) {
     if (!session)
       return Response.json({ error: "Sign in required." }, { status: 401 });
 
-    const review = new URL(request.url).searchParams.get("view") === "review";
+    const params = new URL(request.url).searchParams;
+    const review = params.get("view") === "review";
+    const requestedOutletId = params.get("outletId");
     if (!review && !session.user.canAccessClock) {
       return Response.json(
         { error: "Clock access is not enabled." },
@@ -77,6 +79,19 @@ export async function GET(request: Request) {
         { status: 403 },
       );
     }
+    if (
+      review &&
+      requestedOutletId &&
+      !reviewOutletIds.includes(requestedOutletId)
+    ) {
+      return Response.json(
+        { error: "You cannot access this outlet." },
+        { status: 403 },
+      );
+    }
+    const visibleOutletIds = requestedOutletId
+      ? [requestedOutletId]
+      : reviewOutletIds;
 
     const requests = await getDb()
       .select({
@@ -103,7 +118,7 @@ export async function GET(request: Request) {
       .where(
         review && access
           ? and(
-              inArray(correctionRequests.outletId, reviewOutletIds),
+              inArray(correctionRequests.outletId, visibleOutletIds),
               eq(correctionRequests.status, "reconciliation"),
             )
           : eq(correctionRequests.requestedBy, session.user.id),
@@ -123,6 +138,7 @@ export async function GET(request: Request) {
 const reviewSchema = z
   .object({
     requestId: z.string().uuid(),
+    outletId: z.string().uuid(),
     decision: z.enum(["confirm", "adjust"]),
     reason: z.string().trim().min(3).max(500),
     requestedAt: z.string().datetime({ offset: true }).optional(),
@@ -182,6 +198,7 @@ export async function PATCH(request: Request) {
         .where(
           and(
             eq(correctionRequests.id, parsed.data.requestId),
+            eq(correctionRequests.outletId, parsed.data.outletId),
             inArray(correctionRequests.outletId, reviewOutletIds),
             eq(correctionRequests.status, "reconciliation"),
           ),

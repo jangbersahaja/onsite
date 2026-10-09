@@ -2,6 +2,7 @@
 
 import { ModalDialog } from "@/app/_components/modal-dialog";
 import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
 type TeamMember = {
@@ -71,8 +72,9 @@ type TeamData = {
   staffDevices: StaffDevice[];
 };
 
-async function loadTeamData() {
-  const response = await fetch("/api/team", { cache: "no-store" });
+async function loadTeamData(outletId?: string) {
+  const query = outletId ? `?outletId=${encodeURIComponent(outletId)}` : "";
+  const response = await fetch(`/api/team${query}`, { cache: "no-store" });
   const body = await response.json();
   if (!response.ok) throw new Error(body.error ?? "Could not load team data.");
   return body as TeamData;
@@ -88,7 +90,17 @@ function formatExpiry(value: string) {
 const roleOrder = { manager: 0, supervisor: 1, staff: 2 } as const;
 type TeamView = "people" | "invitations" | "devices" | "locations";
 
-export default function TeamPage() {
+export default function TeamPage({
+  outletId,
+  initialView,
+  outletsOnly = false,
+}: {
+  outletId?: string;
+  initialView?: TeamView;
+  outletsOnly?: boolean;
+} = {}) {
+  const pathname = usePathname();
+  const router = useRouter();
   const [data, setData] = useState<TeamData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isInviting, setIsInviting] = useState(false);
@@ -111,16 +123,29 @@ export default function TeamPage() {
   const [assignmentKey, setAssignmentKey] = useState("");
   const [deviceActionId, setDeviceActionId] = useState("");
   const [permissionUserId, setPermissionUserId] = useState("");
-  const [activeTeamView, setActiveTeamView] = useState<TeamView>("people");
+  const [activeTeamView, setActiveTeamView] = useState<TeamView>(
+    initialView ?? "people",
+  );
   const [showAllStaffDevices, setShowAllStaffDevices] = useState(false);
 
   useEffect(() => {
+    if (pathname === "/team") router.replace("/outlets");
+  }, [pathname, router]);
+
+  useEffect(() => {
     let active = true;
-    loadTeamData()
+    loadTeamData(outletId)
       .then((team) => {
         if (!active) return;
+        if (outletsOnly && !team.isAdmin) {
+          router.replace("/manage");
+          return;
+        }
         setData(team);
-        setOutletIds(team.outlets[0] ? [team.outlets[0].id] : []);
+        setOutletIds(
+          outletId ? [outletId] : team.outlets[0] ? [team.outlets[0].id] : [],
+        );
+        setActiveTeamView(initialView ?? "people");
       })
       .catch((error: unknown) => {
         if (active)
@@ -136,7 +161,7 @@ export default function TeamPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [initialView, outletId, outletsOnly, router]);
 
   async function handleInvite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -164,7 +189,7 @@ export default function TeamPage() {
         `Link created for ${email}. It expires ${formatExpiry(body.expiresAt)}.`,
       );
       setEmail("");
-      setData(await loadTeamData());
+      setData(await loadTeamData(outletId));
     } catch (error) {
       setInviteMessage(
         error instanceof Error ? error.message : "Could not create invitation.",
@@ -197,7 +222,7 @@ export default function TeamPage() {
       const body = await response.json();
       if (!response.ok)
         throw new Error(body.error ?? "Could not create outlet.");
-      const team = await loadTeamData();
+      const team = await loadTeamData(outletId);
       setData(team);
       setOutletIds([body.outlet.id]);
       setMessage(`${body.outlet.name} was added.`);
@@ -236,7 +261,7 @@ export default function TeamPage() {
       const body = await response.json();
       if (!response.ok)
         throw new Error(body.error ?? "Could not update outlet.");
-      setData(await loadTeamData());
+      setData(await loadTeamData(outletId));
       setEditingOutletId("");
       setIsOutletDialogOpen(false);
       setMessage(`${body.outlet.name} was updated.`);
@@ -270,7 +295,7 @@ export default function TeamPage() {
       const body = await response.json();
       if (!response.ok)
         throw new Error(body.error ?? "Could not deactivate outlet.");
-      setData(await loadTeamData());
+      setData(await loadTeamData(outletId));
       setEditingOutletId("");
       setIsOutletDialogOpen(false);
       setMessage("Outlet deactivated. Its historical shifts remain available.");
@@ -302,12 +327,12 @@ export default function TeamPage() {
       const body = await response.json();
       if (!response.ok)
         throw new Error(body.error ?? "Could not update assignment.");
-      setData(await loadTeamData());
+      setData(await loadTeamData(outletId));
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "Could not update assignment.",
       );
-      setData(await loadTeamData());
+      setData(await loadTeamData(outletId));
     } finally {
       setAssignmentKey("");
     }
@@ -338,13 +363,13 @@ export default function TeamPage() {
       const body = await response.json();
       if (!response.ok)
         throw new Error(body.error ?? "Could not update app access.");
-      setData(await loadTeamData());
+      setData(await loadTeamData(outletId));
       setMessage(`App access updated for ${person.name}.`);
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "Could not update app access.",
       );
-      setData(await loadTeamData());
+      setData(await loadTeamData(outletId));
     } finally {
       setPermissionUserId("");
     }
@@ -388,7 +413,7 @@ export default function TeamPage() {
       const body = await response.json();
       if (!response.ok)
         throw new Error(body.error ?? "Could not update trusted device.");
-      setData(await loadTeamData());
+      setData(await loadTeamData(outletId));
       setMessage("Staff device revoked.");
     } catch (error) {
       setMessage(
@@ -412,7 +437,7 @@ export default function TeamPage() {
       const body = await response.json();
       if (!response.ok)
         throw new Error(body.error ?? "Could not revoke invitation.");
-      setData(await loadTeamData());
+      setData(await loadTeamData(outletId));
       setMessage("Invitation revoked. Its link can no longer be used.");
     } catch (error) {
       setMessage(
@@ -526,15 +551,18 @@ export default function TeamPage() {
   const pendingDeviceCount = data.staffDevices.filter(
     (device) => device.status === "pending",
   ).length;
-  const teamViews: { id: TeamView; label: string; count?: number }[] = [
-    { id: "people", label: "People" },
-    { id: "invitations", label: "Invitations", count: data.invitations.length },
-    { id: "devices", label: "Devices", count: pendingDeviceCount },
-    { id: "locations", label: "Locations" },
-  ];
-  const visibleTeamViews = teamViews.filter(
-    (view) => view.id !== "locations" || data.isAdmin,
-  );
+  const visibleTeamViews: { id: TeamView; label: string; count?: number }[] =
+    outletsOnly
+      ? []
+      : [
+          { id: "people", label: "People" },
+          {
+            id: "invitations",
+            label: "Invitations",
+            count: data.invitations.length,
+          },
+          { id: "devices", label: "Devices", count: pendingDeviceCount },
+        ];
   const editingOutlet = data.outlets.find(
     (outlet) => outlet.id === editingOutletId,
   );
@@ -546,8 +574,14 @@ export default function TeamPage() {
           <p className="eyebrow">
             {data.isSuperAdmin ? "SUPER ADMIN" : "BACKOFFICE ACCESS"}
           </p>
-          <h1>Team</h1>
-          <p className="subheading">Manage outlet locations and team access.</p>
+          <h1>{outletsOnly ? "Outlets" : "Team"}</h1>
+          <p className="subheading">
+            {outletsOnly
+              ? "Manage outlet details and clock-in locations."
+              : outletId
+                ? "Manage people, invitations, and clock-in access for this outlet."
+                : "Manage people and access across your outlets."}
+          </p>
         </div>
       </div>
       {message && (
@@ -556,20 +590,22 @@ export default function TeamPage() {
         </p>
       )}
 
-      <nav className="team-view-nav" aria-label="Team sections">
-        {visibleTeamViews.map((view) => (
-          <button
-            className={`team-view-tab${activeTeamView === view.id ? " is-active" : ""}`}
-            type="button"
-            key={view.id}
-            aria-current={activeTeamView === view.id ? "page" : undefined}
-            onClick={() => setActiveTeamView(view.id)}
-          >
-            {view.label}
-            {view.count ? <span>{view.count}</span> : null}
-          </button>
-        ))}
-      </nav>
+      {visibleTeamViews.length > 0 && (
+        <nav className="team-view-nav" aria-label="Team sections">
+          {visibleTeamViews.map((view) => (
+            <button
+              className={`team-view-tab${activeTeamView === view.id ? " is-active" : ""}`}
+              type="button"
+              key={view.id}
+              aria-current={activeTeamView === view.id ? "page" : undefined}
+              onClick={() => setActiveTeamView(view.id)}
+            >
+              {view.label}
+              {view.count ? <span>{view.count}</span> : null}
+            </button>
+          ))}
+        </nav>
+      )}
 
       {activeTeamView === "locations" && data.isAdmin && (
         <section className="team-list-section" aria-labelledby="outlets-title">
@@ -1205,7 +1241,7 @@ export default function TeamPage() {
                         {pending && (
                           <Link
                             className="reset-link-button"
-                            href="/corrections/review"
+                            href="/device-requests"
                           >
                             Review request
                           </Link>
