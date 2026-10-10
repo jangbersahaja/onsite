@@ -1984,38 +1984,71 @@ h2 {
   color: var(--muted);
   font-size: 10px;
 }
-.manager-assignment-details {
-  position: relative;
-}
-.manager-assignment-details summary {
-  color: var(--green);
-  cursor: pointer;
-  font-size: 10px;
-  font-weight: 650;
-}
-.manager-outlet-options {
-  position: absolute;
-  z-index: 1;
-  top: calc(100% + 8px);
-  right: 0;
-  display: grid;
-  min-width: 220px;
-  gap: 9px;
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  background: #fff;
-  padding: 12px;
-  box-shadow: 0 8px 24px rgba(30, 43, 37, 0.09);
-}
-.manager-outlet-options label {
+.manager-assignment-action {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  color: #526057;
-  font-size: 10px;
+  gap: 12px;
+  justify-content: flex-end;
 }
-.manager-outlet-options input {
+.manager-assignment-count {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.dialog-description {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.outlet-access-options {
+  display: grid;
+  gap: 10px;
+}
+.outlet-access-option {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+.outlet-access-option:hover {
+  border-color: var(--green);
+}
+.outlet-access-option:has(input:checked) {
+  border-color: var(--green);
+  background: #f4f3ff;
+}
+.outlet-access-option:has(input:disabled) {
+  cursor: progress;
+  opacity: 0.7;
+}
+.outlet-access-option input {
+  width: 16px;
+  height: 16px;
+  margin: 2px 0 0;
   accent-color: var(--green);
+}
+.outlet-access-option span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.outlet-access-option strong {
+  color: var(--ink);
+  font-size: 13px;
+}
+.outlet-access-option small {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
 }
 .outlet-list-item strong {
   font-size: 12px;
@@ -2179,18 +2212,6 @@ h2 {
 .team-permission-options input {
   accent-color: var(--green);
 }
-.team-person-actions {
-  min-width: 90px;
-}
-.team-person-actions summary {
-  color: var(--green);
-  cursor: pointer;
-  font-size: 10px;
-  font-weight: 650;
-}
-.team-person-actions > div {
-  margin-top: 6px;
-}
 .team-access-item {
   display: flex;
   align-items: center;
@@ -2294,13 +2315,6 @@ h2 {
   .manager-assignment-row {
     grid-template-columns: minmax(0, 1fr) auto;
   }
-  .manager-outlet-options {
-    position: fixed;
-    top: auto;
-    right: 12px;
-    bottom: 76px;
-    left: 12px;
-  }
   .pending-invite-row span {
     grid-column: 1;
   }
@@ -2385,6 +2399,24 @@ h2 {
   margin: 0;
   padding: 0 13px;
   white-space: nowrap;
+}
+.team-outlet-filter {
+  display: grid;
+  min-width: 200px;
+  gap: 6px;
+  color: #4e5d53;
+  font-size: 10px;
+  font-weight: 650;
+}
+.team-outlet-filter select {
+  width: 100%;
+  height: 39px;
+  border: 1px solid #d9e1d9;
+  border-radius: 4px;
+  background: #fff;
+  padding: 0 9px;
+  color: var(--ink);
+  font: inherit;
 }
 .timesheet-summary {
   display: grid;
@@ -3857,8 +3889,8 @@ small,
   :is(
     .outlet-list-item small,
     .manager-assignment-person small,
-    .manager-assignment-details summary,
-    .manager-outlet-options label,
+    .manager-assignment-count,
+    .outlet-access-option small,
     .team-invite-form label,
     .issued-invite p,
     .copy-invite-button,
@@ -3877,8 +3909,8 @@ small,
     .reset-link-button,
     .issued-invite p,
     .pending-invite-row,
-    .manager-assignment-details summary,
-    .manager-outlet-options label,
+    .manager-assignment-count,
+    .outlet-access-option small,
     .team-role,
     .manual-adjustment-label,
     .gps-source-label

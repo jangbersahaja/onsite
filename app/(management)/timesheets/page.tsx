@@ -6,7 +6,6 @@ import {
 } from "@/app/(management)/timesheets/_components/timesheet-edit-dialog";
 import { outletDateTimeToISOString } from "@/lib/outlet-time";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
 type TimesheetRow = {
@@ -143,15 +142,8 @@ function staffGroupKey(row: TimesheetRow) {
   return `${row.outletId}:${identity}`;
 }
 
-export default function TimesheetsPage({
-  outletId,
-}: { outletId?: string } = {}) {
-  const pathname = usePathname();
-  const router = useRouter();
-  const [filters, setFilters] = useState({
-    ...emptyFilters,
-    outletId: outletId ?? "",
-  });
+export default function TimesheetsPage() {
+  const [filters, setFilters] = useState(emptyFilters);
   const [data, setData] = useState<TimesheetData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -159,11 +151,10 @@ export default function TimesheetsPage({
   const [editing, setEditing] = useState<TimesheetRow | null>(null);
 
   async function load(nextFilters: Filters) {
-    const scopedFilters = outletId ? { ...nextFilters, outletId } : nextFilters;
     setIsLoading(true);
     setMessage("");
     try {
-      setData(await fetchTimesheetData(scopedFilters));
+      setData(await fetchTimesheetData(nextFilters));
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "Could not load timesheets.",
@@ -174,18 +165,8 @@ export default function TimesheetsPage({
   }
 
   useEffect(() => {
-    if (pathname === "/timesheets") router.replace("/outlets");
-  }, [pathname, router]);
-
-  useEffect(() => {
     let active = true;
-    const saved = readSavedFilters();
-    const savedFilters = {
-      ...saved,
-      outletId: outletId ?? saved.outletId,
-      employeeId:
-        outletId && saved.outletId !== outletId ? "" : saved.employeeId,
-    };
+    const savedFilters = readSavedFilters();
     fetchTimesheetData(savedFilters)
       .then((loaded) => {
         if (active) setData(loaded);
@@ -207,14 +188,12 @@ export default function TimesheetsPage({
     return () => {
       active = false;
     };
-  }, [outletId]);
+  }, []);
 
   function handleFilterSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const scopedFilters = outletId ? { ...filters, outletId } : filters;
-    setFilters(scopedFilters);
-    saveFilters(scopedFilters);
-    void load(scopedFilters);
+    saveFilters(filters);
+    void load(filters);
   }
 
   function startEdit(row: TimesheetRow) {
@@ -232,7 +211,7 @@ export default function TimesheetsPage({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           id: editing.id,
-          outletId: outletId ?? editing.outletId,
+          outletId: editing.outletId,
           clockInAt: values.clockInAt,
           clockOutAt: values.clockOutAt || null,
           breaks: values.breaks.map((breakInterval) => ({
@@ -326,18 +305,11 @@ export default function TimesheetsPage({
           <p className="eyebrow">PAYROLL REVIEW</p>
           <h1>Timesheets</h1>
           <p className="subheading">
-            {outletId
-              ? "Review shifts and hours for this outlet."
-              : "Review shifts across the outlets you manage."}
+            Review shifts and hours across the outlets you manage.
           </p>
         </div>
         <div className="timesheet-heading-actions">
-          <Link
-            className="timesheet-cancel"
-            href={
-              outletId ? `/outlets/${outletId}/corrections/review` : "/outlets"
-            }
-          >
+          <Link className="timesheet-cancel" href="/corrections/review">
             Review requests
           </Link>
           <a className="timesheet-export" href={`/api/timesheets?${csvQuery}`}>
@@ -351,12 +323,11 @@ export default function TimesheetsPage({
           Outlet
           <select
             value={filters.outletId}
-            disabled={Boolean(outletId)}
             onChange={(event) =>
               setFilters({ ...filters, outletId: event.target.value })
             }
           >
-            {!outletId && <option value="">All managed outlets</option>}
+            <option value="">All managed outlets</option>
             {data?.outlets.map((outlet) => (
               <option value={outlet.id} key={outlet.id}>
                 {outlet.name}

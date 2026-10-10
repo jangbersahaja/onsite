@@ -43,6 +43,18 @@ export async function GET(request: Request) {
           { status: 403 },
         );
       }
+      const requestedOutletId = new URL(request.url).searchParams.get(
+        "outletId",
+      );
+      if (requestedOutletId && !access.outletIds.includes(requestedOutletId)) {
+        return Response.json(
+          { error: "Outlet is not available." },
+          { status: 403 },
+        );
+      }
+      const visibleOutletIds = requestedOutletId
+        ? [requestedOutletId]
+        : access.outletIds;
 
       const rows = await getDb()
         .select({
@@ -66,7 +78,7 @@ export async function GET(request: Request) {
             eq(outletMemberships.role, "staff"),
             eq(outletMemberships.isActive, true),
             eq(outlets.isActive, true),
-            inArray(outletMemberships.outletId, access.outletIds),
+            inArray(outletMemberships.outletId, visibleOutletIds),
           ),
         )
         .orderBy(desc(staffDeviceEnrollments.createdAt));

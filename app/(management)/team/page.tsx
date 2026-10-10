@@ -3,7 +3,6 @@
 import { NotificationSettings } from "@/app/(management)/team/_components/notification-settings";
 import { ModalDialog } from "@/app/_components/modal-dialog";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
 type TeamMember = {
@@ -89,25 +88,15 @@ function formatExpiry(value: string) {
 }
 
 const roleOrder = { manager: 0, supervisor: 1, staff: 2 } as const;
-type TeamView = "people" | "invitations" | "devices" | "locations";
+type TeamView = "people" | "invitations" | "devices";
 
-export default function TeamPage({
-  outletId,
-  initialView,
-  outletsOnly = false,
-}: {
-  outletId?: string;
-  initialView?: TeamView;
-  outletsOnly?: boolean;
-} = {}) {
-  const pathname = usePathname();
-  const router = useRouter();
+export default function TeamPage() {
   const [data, setData] = useState<TeamData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isInviting, setIsInviting] = useState(false);
-  const [isCreatingOutlet, setIsCreatingOutlet] = useState(false);
   const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
-  const [isOutletDialogOpen, setIsOutletDialogOpen] = useState(false);
+  const [selectedOutletId, setSelectedOutletId] = useState("");
+  const outletId = selectedOutletId || undefined;
   const [email, setEmail] = useState("");
   const [inviteType, setInviteType] = useState<"admin" | "staff">("staff");
   const [outletIds, setOutletIds] = useState<string[]>([]);
@@ -117,36 +106,20 @@ export default function TeamPage({
   const [issuedResetLink, setIssuedResetLink] = useState("");
   const [message, setMessage] = useState("");
   const [inviteMessage, setInviteMessage] = useState("");
-  const [outletMessage, setOutletMessage] = useState("");
   const [resettingUserId, setResettingUserId] = useState("");
+  const [resetUserId, setResetUserId] = useState("");
   const [revokingInvitationId, setRevokingInvitationId] = useState("");
-  const [editingOutletId, setEditingOutletId] = useState("");
-  const [assignmentKey, setAssignmentKey] = useState("");
   const [deviceActionId, setDeviceActionId] = useState("");
   const [permissionUserId, setPermissionUserId] = useState("");
-  const [activeTeamView, setActiveTeamView] = useState<TeamView>(
-    initialView ?? "people",
-  );
+  const [activeTeamView, setActiveTeamView] = useState<TeamView>("people");
   const [showAllStaffDevices, setShowAllStaffDevices] = useState(false);
-
-  useEffect(() => {
-    if (pathname === "/team") router.replace("/outlets");
-  }, [pathname, router]);
 
   useEffect(() => {
     let active = true;
     loadTeamData(outletId)
       .then((team) => {
         if (!active) return;
-        if (outletsOnly && !team.isAdmin) {
-          router.replace("/manage");
-          return;
-        }
         setData(team);
-        setOutletIds(
-          outletId ? [outletId] : team.outlets[0] ? [team.outlets[0].id] : [],
-        );
-        setActiveTeamView(initialView ?? "people");
       })
       .catch((error: unknown) => {
         if (active)
@@ -162,7 +135,7 @@ export default function TeamPage({
     return () => {
       active = false;
     };
-  }, [initialView, outletId, outletsOnly, router]);
+  }, [outletId]);
 
   async function handleInvite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -197,145 +170,6 @@ export default function TeamPage({
       );
     } finally {
       setIsInviting(false);
-    }
-  }
-
-  async function handleCreateOutlet(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (isCreatingOutlet) return;
-    const form = event.currentTarget;
-    const formData = new FormData(form);
-    setIsCreatingOutlet(true);
-    setOutletMessage("");
-    try {
-      const response = await fetch("/api/outlets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: formData.get("name"),
-          address: formData.get("address"),
-          latitude: Number(formData.get("latitude")),
-          longitude: Number(formData.get("longitude")),
-          radiusMeters: Number(formData.get("radiusMeters")),
-          timezone: formData.get("timezone"),
-        }),
-      });
-      const body = await response.json();
-      if (!response.ok)
-        throw new Error(body.error ?? "Could not create outlet.");
-      const team = await loadTeamData(outletId);
-      setData(team);
-      setOutletIds([body.outlet.id]);
-      setMessage(`${body.outlet.name} was added.`);
-      setIsOutletDialogOpen(false);
-      form.reset();
-    } catch (error) {
-      setOutletMessage(
-        error instanceof Error ? error.message : "Could not create outlet.",
-      );
-    } finally {
-      setIsCreatingOutlet(false);
-    }
-  }
-
-  async function handleEditOutlet(
-    event: FormEvent<HTMLFormElement>,
-    id: string,
-  ) {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    setOutletMessage("");
-    try {
-      const response = await fetch("/api/outlets", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id,
-          name: formData.get("name"),
-          address: formData.get("address"),
-          latitude: Number(formData.get("latitude")),
-          longitude: Number(formData.get("longitude")),
-          radiusMeters: Number(formData.get("radiusMeters")),
-          timezone: formData.get("timezone"),
-        }),
-      });
-      const body = await response.json();
-      if (!response.ok)
-        throw new Error(body.error ?? "Could not update outlet.");
-      setData(await loadTeamData(outletId));
-      setEditingOutletId("");
-      setIsOutletDialogOpen(false);
-      setMessage(`${body.outlet.name} was updated.`);
-    } catch (error) {
-      setOutletMessage(
-        error instanceof Error ? error.message : "Could not update outlet.",
-      );
-    }
-  }
-
-  async function handleDeactivateOutlet(id: string, reason: string) {
-    const outletName = data?.outlets.find((outlet) => outlet.id === id)?.name;
-    if (!reason.trim()) {
-      setOutletMessage("Enter a reason before deactivating this outlet.");
-      return;
-    }
-    if (
-      !window.confirm(
-        `Deactivate ${outletName ?? "this outlet"}? Its historical shifts will remain available.`,
-      )
-    ) {
-      return;
-    }
-    setOutletMessage("");
-    try {
-      const response = await fetch("/api/outlets", {
-        method: "DELETE",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, reason }),
-      });
-      const body = await response.json();
-      if (!response.ok)
-        throw new Error(body.error ?? "Could not deactivate outlet.");
-      setData(await loadTeamData(outletId));
-      setEditingOutletId("");
-      setIsOutletDialogOpen(false);
-      setMessage("Outlet deactivated. Its historical shifts remain available.");
-    } catch (error) {
-      setOutletMessage(
-        error instanceof Error ? error.message : "Could not deactivate outlet.",
-      );
-    }
-  }
-
-  async function handleManagerAssignment(
-    managerId: string,
-    assignedOutletId: string,
-    assigned: boolean,
-  ) {
-    const key = `${managerId}:${assignedOutletId}`;
-    setAssignmentKey(key);
-    setMessage("");
-    try {
-      const response = await fetch("/api/outlet-assignments", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          managerId,
-          outletId: assignedOutletId,
-          assigned,
-        }),
-      });
-      const body = await response.json();
-      if (!response.ok)
-        throw new Error(body.error ?? "Could not update assignment.");
-      setData(await loadTeamData(outletId));
-    } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Could not update assignment.",
-      );
-      setData(await loadTeamData(outletId));
-    } finally {
-      setAssignmentKey("");
     }
   }
 
@@ -522,6 +356,9 @@ export default function TeamPage({
     );
     return leftRole - rightRole || left.name.localeCompare(right.name);
   });
+  const resetPerson = visiblePeople.find(
+    (person) => person.userId === resetUserId,
+  );
   const staffMembers = Array.from(
     new Map(
       data.members
@@ -552,21 +389,15 @@ export default function TeamPage({
   const pendingDeviceCount = data.staffDevices.filter(
     (device) => device.status === "pending",
   ).length;
-  const visibleTeamViews: { id: TeamView; label: string; count?: number }[] =
-    outletsOnly
-      ? []
-      : [
-          { id: "people", label: "People" },
-          {
-            id: "invitations",
-            label: "Invitations",
-            count: data.invitations.length,
-          },
-          { id: "devices", label: "Devices", count: pendingDeviceCount },
-        ];
-  const editingOutlet = data.outlets.find(
-    (outlet) => outlet.id === editingOutletId,
-  );
+  const visibleTeamViews: { id: TeamView; label: string; count?: number }[] = [
+    { id: "people", label: "People" },
+    {
+      id: "invitations",
+      label: "Invitations",
+      count: data.invitations.length,
+    },
+    { id: "devices", label: "Devices", count: pendingDeviceCount },
+  ];
 
   return (
     <div className="team-page-content">
@@ -575,15 +406,29 @@ export default function TeamPage({
           <p className="eyebrow">
             {data.isSuperAdmin ? "SUPER ADMIN" : "BACKOFFICE ACCESS"}
           </p>
-          <h1>{outletsOnly ? "Outlets" : "Team"}</h1>
+          <h1>Team</h1>
           <p className="subheading">
-            {outletsOnly
-              ? "Manage outlet details and clock-in locations."
-              : outletId
-                ? "Manage people, invitations, and clock-in access for this outlet."
-                : "Manage people and access across your outlets."}
+            {outletId
+              ? "Manage people, invitations, and clock-in access for this outlet."
+              : "Manage people and access across all your outlets."}
           </p>
         </div>
+        {data.outlets.length > 0 && (
+          <label className="team-outlet-filter">
+            <span>Outlet</span>
+            <select
+              value={selectedOutletId}
+              onChange={(event) => setSelectedOutletId(event.target.value)}
+            >
+              <option value="">All managed outlets</option>
+              {data.outlets.map((outlet) => (
+                <option key={outlet.id} value={outlet.id}>
+                  {outlet.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
       {message && (
         <p className="team-message" role="status" aria-live="polite">
@@ -608,264 +453,6 @@ export default function TeamPage({
             </button>
           ))}
         </nav>
-      )}
-
-      {activeTeamView === "locations" && data.isAdmin && (
-        <section className="team-list-section" aria-labelledby="outlets-title">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">OUTLET MANAGEMENT</p>
-              <h2 id="outlets-title">Outlets</h2>
-              <p className="team-section-description">
-                Manage outlet details and clock-in locations.
-              </p>
-            </div>
-            <div className="team-heading-actions">
-              <span className="team-count">{data.outlets.length}</span>
-              <button
-                className="team-secondary-action"
-                type="button"
-                onClick={() => {
-                  setEditingOutletId("");
-                  setOutletMessage("");
-                  setIsOutletDialogOpen(true);
-                }}
-              >
-                Add outlet
-              </button>
-            </div>
-          </div>
-          <div className="outlet-list" aria-label="Active outlets">
-            {data.outlets.length ? (
-              data.outlets.map((outlet) => (
-                <div className="outlet-list-item" key={outlet.id}>
-                  <div className="outlet-list-heading">
-                    <div>
-                      <strong>{outlet.name}</strong>
-                      <small>{outlet.address}</small>
-                    </div>
-                    <button
-                      className="reset-link-button"
-                      type="button"
-                      onClick={() => {
-                        setEditingOutletId(outlet.id);
-                        setOutletMessage("");
-                        setIsOutletDialogOpen(true);
-                      }}
-                    >
-                      Edit outlet
-                    </button>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <p className="team-empty-outlets">
-                No outlets yet. Add an outlet to set up your locations.
-              </p>
-            )}
-          </div>
-          <ModalDialog
-            open={isOutletDialogOpen}
-            onOpenChange={(isOpen) => {
-              setIsOutletDialogOpen(isOpen);
-              if (!isOpen) setEditingOutletId("");
-            }}
-            labelledBy="outlet-dialog-title"
-          >
-            <div className="dialog-panel">
-              <header className="dialog-header">
-                <div>
-                  <p className="eyebrow">COMPANY LOCATIONS</p>
-                  <h2 id="outlet-dialog-title">
-                    {editingOutlet ? "Edit outlet" : "Add outlet"}
-                  </h2>
-                </div>
-                <button
-                  className="dialog-close"
-                  type="button"
-                  aria-label="Close dialog"
-                  onClick={() => setIsOutletDialogOpen(false)}
-                >
-                  ×
-                </button>
-              </header>
-              <form
-                className="team-dialog-form"
-                key={editingOutlet?.id ?? "new-outlet"}
-                onSubmit={(event) =>
-                  editingOutlet
-                    ? void handleEditOutlet(event, editingOutlet.id)
-                    : void handleCreateOutlet(event)
-                }
-              >
-                <label>
-                  Outlet name
-                  <input
-                    name="name"
-                    defaultValue={editingOutlet?.name}
-                    required
-                    maxLength={120}
-                  />
-                </label>
-                <label className="dialog-wide-field">
-                  Address
-                  <input
-                    name="address"
-                    defaultValue={editingOutlet?.address}
-                    required
-                    maxLength={300}
-                  />
-                </label>
-                <label>
-                  Latitude
-                  <input
-                    name="latitude"
-                    type="number"
-                    min={-90}
-                    max={90}
-                    step="any"
-                    defaultValue={editingOutlet?.latitude}
-                    required
-                  />
-                </label>
-                <label>
-                  Longitude
-                  <input
-                    name="longitude"
-                    type="number"
-                    min={-180}
-                    max={180}
-                    step="any"
-                    defaultValue={editingOutlet?.longitude}
-                    required
-                  />
-                </label>
-                <label>
-                  Geofence radius (meters)
-                  <input
-                    name="radiusMeters"
-                    type="number"
-                    min={25}
-                    max={1000}
-                    step={1}
-                    defaultValue={editingOutlet?.radiusMeters ?? 100}
-                    required
-                  />
-                </label>
-                <label>
-                  IANA timezone
-                  <input
-                    name="timezone"
-                    defaultValue={
-                      editingOutlet?.timezone ?? "Asia/Kuala_Lumpur"
-                    }
-                    required
-                    maxLength={100}
-                  />
-                </label>
-                {editingOutlet && (
-                  <div className="dialog-danger-zone dialog-wide-field">
-                    <label>
-                      Deactivation reason
-                      <input name="deactivationReason" maxLength={500} />
-                    </label>
-                    <button
-                      className="deactivate-outlet-button"
-                      type="button"
-                      onClick={(event) =>
-                        void handleDeactivateOutlet(
-                          editingOutlet.id,
-                          String(
-                            new FormData(event.currentTarget.form!).get(
-                              "deactivationReason",
-                            ) ?? "",
-                          ),
-                        )
-                      }
-                    >
-                      Deactivate outlet
-                    </button>
-                  </div>
-                )}
-                {outletMessage && (
-                  <p className="team-message dialog-wide-field" role="alert">
-                    {outletMessage}
-                  </p>
-                )}
-                <div className="dialog-actions dialog-wide-field">
-                  <button
-                    className="team-secondary-action"
-                    type="button"
-                    onClick={() => setIsOutletDialogOpen(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    className="team-primary-action"
-                    type="submit"
-                    disabled={isCreatingOutlet}
-                  >
-                    {isCreatingOutlet
-                      ? "Saving…"
-                      : editingOutlet
-                        ? "Save changes"
-                        : "Add outlet"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </ModalDialog>
-          {data.managers.length > 0 && (
-            <div className="manager-assignment-list">
-              <div className="section-heading">
-                <div>
-                  <p className="eyebrow">MANAGER ACCESS</p>
-                  <h2>Outlet assignments</h2>
-                </div>
-                <span className="team-count">{data.managers.length}</span>
-              </div>
-              {data.managers.map((manager) => (
-                <div className="manager-assignment-row" key={manager.id}>
-                  <div className="manager-assignment-person">
-                    <strong>{manager.name}</strong>
-                    <small>{manager.email}</small>
-                  </div>
-                  <details className="manager-assignment-details">
-                    <summary>Manage outlet access</summary>
-                    <div className="manager-outlet-options">
-                      {data.outlets.map((outlet) => {
-                        const key = `${manager.id}:${outlet.id}`;
-                        const assigned = data.managerAssignments.some(
-                          (assignment) =>
-                            assignment.userId === manager.id &&
-                            assignment.outletId === outlet.id &&
-                            assignment.isActive,
-                        );
-                        return (
-                          <label key={outlet.id}>
-                            <input
-                              type="checkbox"
-                              checked={assigned}
-                              disabled={assignmentKey === key}
-                              onChange={(event) =>
-                                void handleManagerAssignment(
-                                  manager.id,
-                                  outlet.id,
-                                  event.target.checked,
-                                )
-                              }
-                            />
-                            {outlet.name}
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </details>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
       )}
 
       <ModalDialog
@@ -1014,6 +601,59 @@ export default function TeamPage({
         </div>
       </ModalDialog>
 
+      <ModalDialog
+        open={Boolean(resetPerson)}
+        onOpenChange={(open) => {
+          if (!open) setResetUserId("");
+        }}
+        labelledBy="reset-password-title"
+      >
+        {resetPerson && (
+          <div className="dialog-panel">
+            <header className="dialog-header">
+              <div>
+                <p className="eyebrow">ACCOUNT ACCESS</p>
+                <h2 id="reset-password-title">Reset password</h2>
+              </div>
+              <button
+                className="dialog-close"
+                type="button"
+                aria-label="Close dialog"
+                onClick={() => setResetUserId("")}
+              >
+                ×
+              </button>
+            </header>
+            <p className="dialog-description">
+              Create a one-time link for {resetPerson.email}. It works once and
+              expires after 30 minutes.
+            </p>
+            <div className="dialog-actions">
+              <button
+                className="reset-link-button"
+                type="button"
+                disabled={Boolean(resettingUserId)}
+                onClick={async () => {
+                  await handleReset(resetPerson.userId, resetPerson.email);
+                  setResetUserId("");
+                }}
+              >
+                {resettingUserId === resetPerson.userId
+                  ? "Creating…"
+                  : "Create reset link"}
+              </button>
+              <button
+                className="copy-invite-button"
+                type="button"
+                onClick={() => setResetUserId("")}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </ModalDialog>
+
       {activeTeamView === "people" && (
         <section
           className="team-list-section"
@@ -1035,6 +675,13 @@ export default function TeamPage({
                 disabled={!data.outlets.length && !data.isSuperAdmin}
                 onClick={() => {
                   setInviteMessage("");
+                  setOutletIds(
+                    outletId
+                      ? [outletId]
+                      : data.outlets[0]
+                        ? [data.outlets[0].id]
+                        : [],
+                  );
                   setIsInviteDialogOpen(true);
                 }}
               >
@@ -1118,23 +765,13 @@ export default function TeamPage({
                     </td>
                     <td>
                       {person.canReset && (
-                        <details className="team-person-actions">
-                          <summary>Actions</summary>
-                          <div>
-                            <button
-                              className="reset-link-button"
-                              type="button"
-                              disabled={Boolean(resettingUserId)}
-                              onClick={() =>
-                                void handleReset(person.userId, person.email)
-                              }
-                            >
-                              {resettingUserId === person.userId
-                                ? "Creating…"
-                                : "Create reset link"}
-                            </button>
-                          </div>
-                        </details>
+                        <button
+                          className="reset-link-button"
+                          type="button"
+                          onClick={() => setResetUserId(person.userId)}
+                        >
+                          Reset password
+                        </button>
                       )}
                     </td>
                   </tr>
@@ -1244,7 +881,7 @@ export default function TeamPage({
                         {pending && (
                           <Link
                             className="reset-link-button"
-                            href="/device-requests"
+                            href="/corrections/review"
                           >
                             Review request
                           </Link>

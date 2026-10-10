@@ -1,5 +1,5 @@
-import TeamPage from "@/app/(management)/team/page";
+import { OutletsManager } from "@/app/(management)/outlets/_components/outlets-manager";
 
 export default function OutletsPage() {
-  return <TeamPage initialView="locations" outletsOnly />;
+  return <OutletsManager />;
 }

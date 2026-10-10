@@ -31,7 +31,6 @@ export type WorkspaceOutlet = {
 };
 
 export function createManagementNavigation(
-  outlets: WorkspaceOutlet[] = [],
   canManageOutlets = false,
 ): WorkspaceNavigationGroup[] {
   return [
@@ -66,38 +65,25 @@ export function createManagementNavigation(
             ]
           : []),
         {
-          href: "/device-requests",
-          label: "Device requests",
-          glyph: "▣",
+          href: "/timesheets",
+          label: "Timesheets",
+          glyph: "▦",
+          requiredAccess: "backoffice",
+        },
+        {
+          href: "/corrections/review",
+          label: "Review requests",
+          glyph: "↗",
+          requiredAccess: "backoffice",
+        },
+        {
+          href: "/team",
+          label: "Team",
+          glyph: "♙",
           requiredAccess: "backoffice",
         },
       ],
     },
-    ...outlets.map((outlet) => ({
-      id: `outlet:${outlet.id}`,
-      label: outlet.name,
-      collapsible: true,
-      items: [
-        {
-          href: `/outlets/${outlet.id}/timesheets`,
-          label: "Timesheets",
-          glyph: "▦",
-          requiredAccess: "backoffice" as const,
-        },
-        {
-          href: `/outlets/${outlet.id}/corrections/review`,
-          label: "Review requests",
-          glyph: "↗",
-          requiredAccess: "backoffice" as const,
-        },
-        {
-          href: `/outlets/${outlet.id}/team`,
-          label: "Team",
-          glyph: "♙",
-          requiredAccess: "backoffice" as const,
-        },
-      ],
-    })),
   ];
 }
 
@@ -128,6 +114,19 @@ function initials(name: string) {
     .join("");
 }
 
+async function fetchReviewRows(
+  url: string,
+): Promise<{ outletId?: string }[] | null> {
+  try {
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) return null;
+    const body = (await response.json()) as { requests?: unknown };
+    return Array.isArray(body.requests) ? body.requests : null;
+  } catch {
+    return null;
+  }
+}
+
 export function WorkspaceShell({
   activeHref,
   pageTitle,
@@ -152,6 +151,7 @@ export function WorkspaceShell({
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const profilePhotoInputRef = useRef<HTMLInputElement>(null);
   const [pendingDeviceRequestCount, setPendingDeviceRequestCount] = useState(0);
+  const [pendingCorrectionCount, setPendingCorrectionCount] = useState(0);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(
     null,
   );
@@ -170,11 +170,14 @@ export function WorkspaceShell({
             ? session.data?.user.canAccessClock === true
             : session.data?.user.canAccessBackoffice === true,
         )
-        .map((item) =>
-          item.href === "/device-requests"
-            ? { ...item, count: pendingDeviceRequestCount }
-            : item,
-        ),
+        .map((item) => {
+          if (item.href === "/corrections/review")
+            return {
+              ...item,
+              count: pendingDeviceRequestCount + pendingCorrectionCount,
+            };
+          return item;
+        }),
     }))
     .filter((group) => group.items.length > 0);
   const mobileStaffNavigation = visibleNavigation
@@ -218,22 +221,13 @@ export function WorkspaceShell({
     let refreshGeneration = 0;
     async function refreshReviewCount() {
       const generation = ++refreshGeneration;
-      try {
-        const deviceResponse = await fetch("/api/staff-devices?view=review", {
-          cache: "no-store",
-        });
-        if (!deviceResponse.ok) return;
-        const deviceBody = (await deviceResponse.json()) as {
-          requests?: unknown;
-        };
-        if (!Array.isArray(deviceBody.requests)) return;
-
-        if (active && generation === refreshGeneration) {
-          setPendingDeviceRequestCount(deviceBody.requests.length);
-        }
-      } catch {
-        // Keep the last known count when a background refresh fails.
-      }
+      const [devices, corrections] = await Promise.all([
+        fetchReviewRows("/api/staff-devices?view=review"),
+        fetchReviewRows("/api/corrections?view=review"),
+      ]);
+      if (!active || generation !== refreshGeneration) return;
+      if (devices) setPendingDeviceRequestCount(devices.length);
+      if (corrections) setPendingCorrectionCount(corrections.length);
     }
 
     function onReviewRequestsChanged() {
