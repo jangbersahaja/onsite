@@ -4303,3 +4303,77 @@ small,
     font-size: 19px;
   }
 }
+
+/* Clock page mobile layout. Scoped to #clock so other pages keep their styles. */
+@media (max-width: 760px) {
+  #clock {
+    padding: 16px 14px 24px;
+  }
+  #clock .page-heading {
+    margin-bottom: 14px;
+  }
+  #clock .page-heading h1 {
+    font-size: 26px;
+  }
+  #clock .page-heading .subheading {
+    display: none;
+  }
+  #clock .clock-layout,
+  #clock .clock-column,
+  #clock .day-column {
+    gap: 12px;
+  }
+  #clock .clock-panel {
+    min-height: 0;
+    border-radius: 14px;
+    padding: 14px 16px 14px;
+    box-shadow: var(--shadow-card);
+  }
+  #clock .clock-face {
+    padding: 12px 0 10px;
+  }
+  #clock .clock-time {
+    font-size: 56px;
+  }
+  #clock .geofence-row {
+    min-height: 0;
+    padding: 12px 0 0;
+  }
+  #clock .clock-actions {
+    gap: 8px;
+    margin: 12px 0 8px;
+  }
+  #clock .clock-actions > .clock-action,
+  #clock .clock-actions > .clock-break-action {
+    height: 64px;
+    min-height: 64px;
+    margin: 0;
+    border-radius: 12px;
+    font-size: 17px;
+  }
+  #clock .clock-actions:has(.clock-break-action) {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  }
+  #clock .clock-actions > .clock-break-action {
+    font-size: 15px;
+  }
+  #clock .clock-hint {
+    margin-top: 6px;
+  }
+  #clock .shift-state-summary {
+    gap: 4px;
+    border-radius: 14px;
+    padding: 14px 16px;
+  }
+  #clock .shift-state-summary h2 {
+    margin: 0;
+    font-size: 17px;
+  }
+  #clock .shift-state-duration {
+    margin-top: 2px;
+    font-size: 20px;
+  }
+  #clock .recent-section {
+    margin-top: 16px;
+  }
+}
