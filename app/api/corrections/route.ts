@@ -12,6 +12,7 @@ import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
 import { getCorrectionTimeError } from "@/lib/correction-time";
 import { getDb } from "@/lib/db";
+import { notifyOutletManagers } from "@/lib/push-notifications";
 import {
   getStaffDeviceCookieName,
   isApprovedStaffDevice,
@@ -400,6 +401,11 @@ export async function PATCH(request: Request) {
         { status: outcome.status },
       );
     }
+    await notifyOutletManagers({
+      outletId: parsed.data.outletId,
+      actorId: session.user.id,
+      event: "correction_reviewed",
+    });
     return Response.json({ success: true });
   } catch {
     return Response.json(
@@ -762,6 +768,11 @@ export async function POST(request: Request) {
         { status: outcome.status },
       );
     }
+    await notifyOutletManagers({
+      outletId: input.outletId,
+      actorId: session.user.id,
+      event: "correction_requested",
+    });
     return Response.json(
       { request: outcome.correction, session: outcome.session },
       { status: 201 },

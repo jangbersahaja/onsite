@@ -8,6 +8,7 @@ import {
   formatOutletTimestamp,
   outletDateTimeToISOString,
 } from "@/lib/outlet-time";
+import { notifyOutletManagers } from "@/lib/push-notifications";
 import {
   getConfiguredStoreHubOutletId,
   getStoreHubAttendance,
@@ -704,6 +705,11 @@ export async function PATCH(request: Request) {
       return Response.json({ error: outcome.error }, { status: 400 });
     }
 
+    await notifyOutletManagers({
+      outletId: parsed.data.outletId,
+      actorId: actor.userId,
+      event: "timesheet_edited",
+    });
     return Response.json({ success: true });
   } catch {
     return Response.json(

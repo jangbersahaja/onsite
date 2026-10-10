@@ -1,5 +1,6 @@
 "use client";
 
+import { NotificationSettings } from "@/app/(management)/team/_components/notification-settings";
 import { ModalDialog } from "@/app/_components/modal-dialog";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -589,6 +590,8 @@ export default function TeamPage({
           {message}
         </p>
       )}
+
+      {outletId && <NotificationSettings outletId={outletId} />}
 
       {visibleTeamViews.length > 0 && (
         <nav className="team-view-nav" aria-label="Team sections">

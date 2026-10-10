@@ -151,6 +151,9 @@ export const outletMemberships = pgTable(
       .notNull()
       .references(() => outlets.id, { onDelete: "cascade" }),
     role: membershipRoleEnum("role").notNull(),
+    notificationsEnabled: boolean("notifications_enabled")
+      .notNull()
+      .default(false),
     assignedBy: text("assigned_by").references(() => user.id, {
       onDelete: "set null",
     }),
@@ -167,6 +170,26 @@ export const outletMemberships = pgTable(
     index("outlet_memberships_outlet_role_idx").on(table.outletId, table.role),
     index("outlet_memberships_user_idx").on(table.userId),
   ],
+);
+
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull().unique(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("push_subscriptions_user_idx").on(table.userId)],
 );
 
 export const invitations = pgTable(

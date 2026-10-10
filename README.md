@@ -35,6 +35,7 @@ OnSITE is a multi-outlet workforce app built with Next.js, Drizzle, and Postgres
 
 - `DATABASE_URL`: Postgres connection string.
 - `PIN_PEPPER`: Optional server-only secret of at least 32 bytes for staff PIN sign-in. Generate one with `openssl rand -base64 32`, keep it stable, and do not commit it. Changing it disables existing PINs until staff set them again; password sign-in continues to work.
+- `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`: Required to deliver browser push alerts. Generate the key pair once with `npx web-push generate-vapid-keys`, set the subject to a `mailto:` contact or HTTPS URL, and keep the private key secret and stable.
 - `BOOTSTRAP_ADMIN_*`: Name, username, email, and password for the initial super admin.
 - `BOOTSTRAP_OUTLET_*`: Optional name, address, coordinates, and timezone for one outlet.
 - `STOREHUB_STORE_NAME`: StoreHub account subdomain/name for API authentication.
@@ -43,6 +44,8 @@ OnSITE is a multi-outlet workforce app built with Next.js, Drizzle, and Postgres
 - `STOREHUB_POS_STORE_ID`: Matching StoreHub POS store ID.
 
 Keep `.env.local` private and never commit live credentials.
+
+Outlet managers can opt in to browser notifications for each assigned outlet. Push sends are triggered by local clock, break, correction, and timesheet writes; StoreHub attendance remains read-only and does not trigger notifications or additional StoreHub requests.
 
 ## StoreHub attendance
 

@@ -11,6 +11,7 @@ import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { verifyGeofence } from "@/lib/geofence";
 import { parseDateRange } from "@/lib/outlet-time";
+import { notifyOutletManagers } from "@/lib/push-notifications";
 import {
   getStaffDeviceCookieName,
   isApprovedStaffDevice,
@@ -361,6 +362,11 @@ export async function POST(request: Request) {
           { status: 409 },
         );
       }
+      await notifyOutletManagers({
+        outletId: input.outletId,
+        actorId: session.user.id,
+        event: input.action === "start_break" ? "break_started" : "break_ended",
+      });
       return Response.json({
         break: {
           id: outcome.breakRecord.id,
@@ -593,6 +599,11 @@ export async function POST(request: Request) {
       );
     }
 
+    await notifyOutletManagers({
+      outletId: result.outletId,
+      actorId: session.user.id,
+      event: input.action,
+    });
     return Response.json({
       session: {
         id: result.id,

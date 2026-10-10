@@ -1716,6 +1716,45 @@ h2 {
   border-top: 1px solid var(--line);
   padding: 21px 0 25px;
 }
+.outlet-notification-settings {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-top: 1px solid var(--line);
+  padding: 21px 0 25px;
+}
+.outlet-notification-settings h2 {
+  margin: 3px 0 0;
+  font-size: 19px;
+}
+.notification-settings-message {
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.notification-device-action {
+  margin-top: 10px;
+}
+.notification-setting-toggle {
+  display: flex;
+  min-width: 92px;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  color: var(--ink);
+  font-size: 12px;
+}
+.notification-setting-toggle input {
+  width: 38px;
+  height: 22px;
+  accent-color: var(--green);
+  cursor: pointer;
+}
+.notification-setting-toggle input:disabled {
+  cursor: not-allowed;
+}
 .team-invite-section > .section-heading,
 .team-list-section > .section-heading {
   margin-bottom: 17px;
@@ -3052,6 +3091,7 @@ small,
     .eyebrow,
     .detail-label,
     .team-message,
+    .outlet-notification-settings,
     .team-section-description,
     .team-table th,
     .team-table td,
