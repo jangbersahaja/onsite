@@ -432,35 +432,33 @@ export function WorkspaceShell({
                   >
                     <span className="nav-group-label">{group.label}</span>
                     <span className="nav-group-chevron" aria-hidden="true">
-                      {isExpanded ? "⌄" : "›"}
+                      ⌄
                     </span>
                   </button>
                 ) : (
                   <p className="nav-group-label">{group.label}</p>
                 )}
-                {isExpanded && (
-                  <div id={`nav-group-items-${groupIndex}`}>
-                    {group.items.map((item) => (
-                      <Link
-                        className={`nav-item${item.href === activeHref ? " is-active" : ""}`}
-                        href={item.href}
-                        key={item.href}
-                        aria-current={
-                          item.href === activeHref ? "page" : undefined
-                        }
-                        onClick={() => setIsMobileNavOpen(false)}
-                      >
-                        <span className="nav-glyph" aria-hidden="true">
-                          {item.glyph}
-                        </span>
-                        {item.label}
-                        {Boolean(item.count) && (
-                          <span className="nav-count">{item.count}</span>
-                        )}
-                      </Link>
-                    ))}
-                  </div>
-                )}
+                <div id={`nav-group-items-${groupIndex}`} hidden={!isExpanded}>
+                  {group.items.map((item) => (
+                    <Link
+                      className={`nav-item${item.href === activeHref ? " is-active" : ""}`}
+                      href={item.href}
+                      key={item.href}
+                      aria-current={
+                        item.href === activeHref ? "page" : undefined
+                      }
+                      onClick={() => setIsMobileNavOpen(false)}
+                    >
+                      <span className="nav-glyph" aria-hidden="true">
+                        {item.glyph}
+                      </span>
+                      {item.label}
+                      {Boolean(item.count) && (
+                        <span className="nav-count">{item.count}</span>
+                      )}
+                    </Link>
+                  ))}
+                </div>
               </div>
             );
           })}

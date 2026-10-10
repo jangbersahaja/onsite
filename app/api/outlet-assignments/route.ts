@@ -3,7 +3,7 @@ import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { getTeamAccess } from "@/lib/team-access";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
 const assignmentSchema = z
@@ -64,7 +64,7 @@ export async function PATCH(request: Request) {
       .where(
         and(
           eq(user.id, parsed.data.managerId),
-          eq(user.accountType, "admin"),
+          inArray(user.accountType, ["admin", "super_admin"]),
         ),
       )
       .limit(1);

@@ -177,6 +177,13 @@ function formatDate(
   }).format(new Date(value));
 }
 
+function splitClockTime(value: string) {
+  const match = value.match(/^(.*?)\s*([ap]m)$/i);
+  return match
+    ? { time: match[1], period: match[2] }
+    : { time: value, period: "" };
+}
+
 export default function Home() {
   const authSession = authClient.useSession();
   const router = useRouter();
@@ -591,6 +598,34 @@ export default function Home() {
       : []),
   ];
 
+  const currentHour =
+    currentTime && selectedOutlet
+      ? Number(
+          formatDate(currentTime, selectedOutlet.timezone, {
+            hour: "numeric",
+            hourCycle: "h23",
+          }),
+        )
+      : null;
+  const greeting =
+    currentHour === null
+      ? "Welcome"
+      : currentHour < 12
+        ? "Good morning"
+        : currentHour < 18
+          ? "Good afternoon"
+          : "Good evening";
+
+  const clockParts = splitClockTime(
+    currentTime && selectedOutlet
+      ? formatDate(currentTime, selectedOutlet.timezone, {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: true,
+        })
+      : "--:--",
+  );
+
   return (
     <WorkspaceShell
       activeHref="/clock"
@@ -615,14 +650,13 @@ export default function Home() {
       <main className="page-content" id="clock">
         <div className="page-heading">
           <div>
-            <p className="eyebrow">YOUR SHIFT</p>
             <h1>
-              Welcome, {authSession.data.user.name.split(" ")[0]}
+              {greeting}, {authSession.data.user.name.split(" ")[0]}
               <span>.</span>
             </h1>
-            <p className="subheading">
-              Your time, place, and shift at a glance.
-            </p>
+            {selectedOutlet && (
+              <p className="subheading">Clocking at {selectedOutlet.name}</p>
+            )}
           </div>
         </div>
 
@@ -632,7 +666,9 @@ export default function Home() {
               className={`clock-panel${isDeviceBlocked ? " is-device-blocked" : ""}`}
             >
               <div className="clock-panel-top">
-                <span className="live-indicator">
+                <span
+                  className={`live-indicator clock-status is-${isOnBreak ? "break" : isClockedIn ? "active" : "ready"}`}
+                >
                   <i />
                   {isOnBreak
                     ? "ON BREAK"
@@ -640,41 +676,46 @@ export default function Home() {
                       ? "SHIFT IN PROGRESS"
                       : "READY TO START"}
                 </span>
-                <span className="clock-date">
-                  {currentTime && selectedOutlet
-                    ? formatDate(currentTime, selectedOutlet.timezone, {
-                        weekday: "long",
-                        day: "2-digit",
-                        month: "short",
-                      }).toLocaleUpperCase()
-                    : ""}
-                </span>
               </div>
               <div className="clock-face">
                 <span className="clock-time">
-                  {currentTime && selectedOutlet
-                    ? formatDate(currentTime, selectedOutlet.timezone, {
+                  {clockParts.time}
+                  {clockParts.period && <span>{clockParts.period}</span>}
+                </span>
+              </div>
+              {isClockedIn && clockedInAt && currentTime && selectedOutlet && (
+                <dl className="clock-shift-meta">
+                  <div>
+                    <dt>Started</dt>
+                    <dd>
+                      {formatDate(clockedInAt, selectedOutlet.timezone, {
                         hour: "2-digit",
                         minute: "2-digit",
-                        hour12: true,
-                      })
-                    : "--:--"}
-                </span>
-              </div>
-              <div className="geofence-row">
-                <span className="location-glyph" aria-hidden="true">
-                  ⌖
-                </span>
-                <div>
-                  <strong>
-                    {selectedOutlet?.name ?? "Choose an assigned outlet"}
-                  </strong>
-                  <small>
-                    {selectedOutlet?.address ??
-                      "Your account has no active outlet assignment."}
-                  </small>
-                </div>
-              </div>
+                      })}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Worked</dt>
+                    <dd>
+                      {formatDuration(
+                        clockedInAt.toISOString(),
+                        currentTime,
+                        activeSessionBreaks,
+                      )}
+                    </dd>
+                  </div>
+                  {activeBreak && (
+                    <div>
+                      <dt>On break</dt>
+                      <dd>
+                        {formatMinutes(
+                          getElapsedMinutes(activeBreak.startedAt, currentTime),
+                        )}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+              )}
               <div className="clock-actions">
                 <button
                   className={`clock-action${isClockedIn && !isOnBreak ? " is-clocked-in" : ""}${shouldRequestManual ? " is-manual" : ""}`}
@@ -694,21 +735,14 @@ export default function Home() {
                     isLoadingData
                   }
                 >
-                  <span className="clock-action-icon" aria-hidden="true">
-                    {shouldRequestManual
-                      ? "✎"
-                      : isOnBreak
-                        ? "▶"
-                        : isClockedIn
-                          ? "↗"
-                          : "↘"}
-                  </span>
-                  {shouldRequestManual
-                    ? "Request manual"
-                    : isCheckingLocation
-                      ? isOnBreak
-                        ? "Resuming shift…"
-                        : "Checking location…"
+                  {isCheckingLocation
+                    ? isOnBreak
+                      ? "Resuming…"
+                      : "Checking location…"
+                    : shouldRequestManual
+                      ? isClockedIn
+                        ? "Manual clock out"
+                        : "Manual clock in"
                       : isOnBreak
                         ? "Resume shift"
                         : isClockedIn
@@ -717,7 +751,7 @@ export default function Home() {
                 </button>
                 {isClockedIn && !isOnBreak && (
                   <button
-                    className="clock-break-action team-secondary-action"
+                    className="clock-break-action"
                     type="button"
                     onClick={() => void handleBreakAction()}
                     disabled={
@@ -728,6 +762,21 @@ export default function Home() {
                   </button>
                 )}
               </div>
+              {actionMessage && (
+                <p
+                  className={`clock-action-feedback${isCheckingLocation || actionMessage.includes("recorded") || actionMessage.startsWith("Device request sent") || actionMessage.startsWith("This browser is already approved") ? "" : " is-blocked"}`}
+                  role={
+                    isCheckingLocation ||
+                    actionMessage.includes("recorded") ||
+                    actionMessage.startsWith("Device request sent") ||
+                    actionMessage.startsWith("This browser is already approved")
+                      ? "status"
+                      : "alert"
+                  }
+                >
+                  {actionMessage}
+                </p>
+              )}
               {selectedOutlet?.role === "staff" &&
                 staffDeviceStatus?.required && (
                   <div>
@@ -847,69 +896,10 @@ export default function Home() {
                   </button>
                 ) : null}
               </div>
-              {actionMessage && (
-                <p
-                  className={`clock-action-feedback${isCheckingLocation || actionMessage.includes("recorded") || actionMessage.startsWith("Device request sent") || actionMessage.startsWith("This browser is already approved") ? "" : " is-blocked"}`}
-                  role={
-                    isCheckingLocation ||
-                    actionMessage.includes("recorded") ||
-                    actionMessage.startsWith("Device request sent") ||
-                    actionMessage.startsWith("This browser is already approved")
-                      ? "status"
-                      : "alert"
-                  }
-                >
-                  {actionMessage}
-                </p>
-              )}
             </article>
           </div>
 
           <aside className="day-column">
-            <article className="shift-state-summary">
-              <p className="eyebrow">
-                {isClockedIn ? "ACTIVE SHIFT" : "SHIFT STATUS"}
-              </p>
-              <h2>
-                {isOnBreak
-                  ? "You’re on break"
-                  : isClockedIn
-                    ? "You’re on the clock"
-                    : "Not clocked in"}
-              </h2>
-              <strong className="shift-state-duration">
-                {isClockedIn && clockedInAt && currentTime
-                  ? formatDuration(
-                      clockedInAt.toISOString(),
-                      currentTime,
-                      activeSessionBreaks,
-                    )
-                  : "Ready when you are"}
-              </strong>
-              {activeBreak && currentTime && (
-                <small className="shift-state-break-duration">
-                  Current break ·{" "}
-                  {formatMinutes(
-                    getElapsedMinutes(activeBreak.startedAt, currentTime),
-                  )}
-                </small>
-              )}
-              <p>
-                {isClockedIn && clockedInAt && selectedOutlet
-                  ? `Started at ${formatDate(
-                      clockedInAt,
-                      selectedOutlet.timezone,
-                      {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      },
-                    )} · ${selectedOutlet.name}`
-                  : selectedOutlet
-                    ? `Clock in at ${selectedOutlet.name} when you’re within range.`
-                    : "Ask your manager to assign an outlet before clocking."}
-              </p>
-            </article>
-
             {staffDeviceStatus?.required &&
               staffDeviceStatus.currentBrowserApproved && (
                 <PinSettingsPanel
@@ -936,7 +926,6 @@ export default function Home() {
         <section className="recent-section" id="history">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">SHIFT HISTORY</p>
               <h2>Recent shifts</h2>
             </div>
             <Link className="text-link" href="/clock/history">

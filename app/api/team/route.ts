@@ -109,7 +109,7 @@ export async function GET(request: Request) {
                 email: user.email,
               })
               .from(user)
-              .where(eq(user.accountType, "admin"))
+              .where(inArray(user.accountType, ["admin", "super_admin"]))
               .orderBy(user.name)
           : Promise.resolve([]),
         access.isSuperAdmin
@@ -125,7 +125,7 @@ export async function GET(request: Request) {
               .where(
                 and(
                   eq(outletMemberships.role, "manager"),
-                  eq(user.accountType, "admin"),
+                  inArray(user.accountType, ["admin", "super_admin"]),
                   inArray(outlets.id, visibleOutletIds),
                 ),
               )
