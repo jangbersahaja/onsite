@@ -325,15 +325,39 @@ export function OutletsManager() {
         <div className="outlet-list" aria-label="Active outlets">
           {data.outlets.length ? (
             data.outlets.map((outlet) => (
-              <div className="outlet-list-item" key={outlet.id}>
-                <div className="outlet-list-heading">
-                  <div>
-                    <strong>{outlet.name}</strong>
-                    <small>{outlet.address}</small>
+              <article className="outlet-card" key={outlet.id}>
+                <header className="outlet-card-header">
+                  <span className="outlet-avatar" aria-hidden="true">
+                    {outlet.name.charAt(0).toUpperCase()}
+                  </span>
+                  <div className="outlet-card-title">
+                    <h3>{outlet.name}</h3>
+                    <p>{outlet.address}</p>
                   </div>
+                  <span className="outlet-card-status">Active</span>
+                </header>
+                <dl className="outlet-card-meta">
+                  <div>
+                    <dt>Geofence</dt>
+                    <dd>{outlet.radiusMeters} m radius</dd>
+                  </div>
+                  <div>
+                    <dt>Timezone</dt>
+                    <dd>{outlet.timezone}</dd>
+                  </div>
+                  <div className="outlet-card-meta-wide">
+                    <dt>Coordinates</dt>
+                    <dd>
+                      {outlet.latitude.toFixed(5)},{" "}
+                      {outlet.longitude.toFixed(5)}
+                    </dd>
+                  </div>
+                </dl>
+                <footer className="outlet-card-footer">
                   <button
-                    className="reset-link-button"
+                    className="outlet-card-edit"
                     type="button"
+                    aria-label={`Edit ${outlet.name}`}
                     onClick={() => {
                       setEditingOutletId(outlet.id);
                       setOutletMessage("");
@@ -342,8 +366,8 @@ export function OutletsManager() {
                   >
                     Edit outlet
                   </button>
-                </div>
-              </div>
+                </footer>
+              </article>
             ))
           ) : (
             <p className="team-empty-outlets">

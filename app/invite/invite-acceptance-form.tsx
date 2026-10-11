@@ -1,5 +1,6 @@
 "use client";
 
+import { PasswordInput } from "@/app/_components/password-input";
 import { MAX_PROFILE_PHOTO_BYTES } from "@/lib/profile-photo";
 import Image from "next/image";
 import Link from "next/link";
@@ -161,20 +162,18 @@ export function InviteAcceptanceForm({ token }: { token: string }) {
                 required
               />
               <label htmlFor="invite-password">Create password</label>
-              <input
+              <PasswordInput
                 id="invite-password"
                 name="password"
-                type="password"
                 autoComplete="new-password"
                 minLength={12}
                 maxLength={128}
                 required
               />
               <label htmlFor="invite-confirm-password">Confirm password</label>
-              <input
+              <PasswordInput
                 id="invite-confirm-password"
                 name="confirmPassword"
-                type="password"
                 autoComplete="new-password"
                 minLength={12}
                 maxLength={128}

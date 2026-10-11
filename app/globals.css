@@ -1498,6 +1498,34 @@ h2 {
 .auth-form.is-pin-form .auth-submit {
   margin-top: 3px;
 }
+.auth-form .password-field {
+  position: relative;
+}
+.auth-form .password-field input {
+  padding-right: 44px;
+}
+.password-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  border: 0;
+  border-radius: 0 4px 4px 0;
+  background: transparent;
+  padding: 0;
+  color: var(--muted);
+  cursor: pointer;
+}
+.password-toggle:hover {
+  color: var(--ink);
+}
+.password-toggle:focus-visible {
+  outline: 2px solid rgba(99, 91, 255, 0.18);
+  outline-offset: -2px;
+}
 .auth-submit {
   min-height: 42px;
   margin-top: 11px;
@@ -1911,26 +1939,9 @@ h2 {
 }
 .outlet-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px 20px;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px 20px;
   margin-top: 20px;
-}
-.outlet-list-item {
-  display: grid;
-  gap: 4px;
-  border-bottom: 1px solid var(--line);
-  padding: 0 0 10px;
-}
-.outlet-list-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.outlet-list-heading > div {
-  display: grid;
-  min-width: 0;
-  gap: 4px;
 }
 .outlet-edit-form {
   margin-top: 12px;
@@ -2050,14 +2061,6 @@ h2 {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.4;
-}
-.outlet-list-item strong {
-  font-size: 12px;
-}
-.outlet-list-item small {
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.45;
 }
 .team-invite-form label {
   display: grid;
@@ -2978,12 +2981,170 @@ h2 {
   border-radius: 4px;
   padding: 0 7px;
 }
-.outlet-list-item {
-  gap: 10px;
+.outlet-card {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
   border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 14px;
+  transition:
+    border-color 140ms ease,
+    box-shadow 140ms ease;
+}
+.outlet-card:hover,
+.outlet-card:focus-within {
+  border-color: #c7d2fe;
+  box-shadow: 0 6px 18px rgba(29, 37, 89, 0.06);
+}
+.outlet-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.outlet-card-title {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 3px;
+}
+.outlet-card-title h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+.outlet-card-title p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.outlet-card-status {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 6px;
+  min-height: 22px;
+  border-radius: 999px;
+  background: #ecfdf3;
+  padding: 0 9px;
+  color: #047857;
+  font-size: 10px;
+  font-weight: 650;
+}
+.outlet-card-status::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+.outlet-card-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 14px;
+  margin: 0;
+  border-radius: 6px;
+  background: #f7f8fe;
+  padding: 10px 12px;
+}
+.outlet-card-meta > div {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+.outlet-card-meta-wide {
+  grid-column: 1 / -1;
+}
+.outlet-card-meta dt {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.outlet-card-meta dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.outlet-card-footer {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+.outlet-card-edit {
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid #c7d2fe;
   border-radius: 4px;
   background: #fff;
-  padding: 13px;
+  padding: 0 12px;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease;
+}
+.outlet-card-edit:hover {
+  border-color: #a5b4fc;
+  background: #f5f6ff;
+}
+.outlet-card-edit:focus-visible {
+  outline: 2px solid rgba(99, 91, 255, 0.25);
+  outline-offset: 2px;
+}
+@media (min-width: 761px) {
+  .outlet-card {
+    gap: 18px;
+    border-radius: 10px;
+    padding: 20px;
+  }
+  .outlet-card .outlet-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    font-size: 21px;
+  }
+  .outlet-card-title {
+    gap: 4px;
+  }
+  .outlet-card-title h3 {
+    font-size: 16px;
+  }
+  .outlet-card-title p {
+    font-size: 13px;
+  }
+  .outlet-card-status {
+    min-height: 26px;
+    padding: 0 11px;
+    font-size: 11px;
+  }
+  .outlet-card-meta {
+    gap: 14px 18px;
+    padding: 14px 16px;
+  }
+  .outlet-card-meta dt {
+    font-size: 11px;
+  }
+  .outlet-card-meta dd {
+    font-size: 13px;
+  }
+  .outlet-card-footer {
+    padding-top: 14px;
+  }
+  .outlet-card-edit {
+    min-height: 42px;
+    font-size: 13px;
+  }
 }
 .team-empty-outlets {
   margin: 0;
@@ -3980,7 +4141,6 @@ small,
 .setup-screen :is(.eyebrow, .setup-footnote, .setup-steps li span),
 .team-page-shell
   :is(
-    .outlet-list-item small,
     .manager-assignment-person small,
     .manager-assignment-count,
     .outlet-access-option small,

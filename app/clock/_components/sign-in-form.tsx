@@ -1,5 +1,6 @@
 "use client";
 
+import { PasswordInput } from "@/app/_components/password-input";
 import { SixDigitPinInput } from "@/app/clock/_components/six-digit-pin-input";
 import {
   getRememberedPinUser,
@@ -122,10 +123,9 @@ export function SignInForm() {
                 required
               />
               <label htmlFor="password">Password</label>
-              <input
+              <PasswordInput
                 id="password"
                 name="password"
-                type="password"
                 autoComplete="current-password"
                 required
               />
