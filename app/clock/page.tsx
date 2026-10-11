@@ -16,7 +16,7 @@ import { forgetPinUser, rememberPinUser } from "@/lib/pin-client";
 import { getCompletedBreakMinutes } from "@/lib/work-breaks";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 type ClockOutlet = {
   id: string;
@@ -184,6 +184,34 @@ function splitClockTime(value: string) {
     : { time: value, period: "" };
 }
 
+type ClockCheck = {
+  state: "ok" | "pending" | "blocked";
+  title: string;
+  detail?: string;
+};
+
+function ClockCheckItem({
+  label,
+  check,
+  children,
+}: {
+  label: string;
+  check: ClockCheck;
+  children?: ReactNode;
+}) {
+  return (
+    <div className={`clock-check is-${check.state}`}>
+      <span className="clock-check-dot" aria-hidden="true" />
+      <div className="clock-check-copy">
+        <span className="clock-check-label">{label}</span>
+        <strong>{check.title}</strong>
+        {check.detail && <span>{check.detail}</span>}
+        {children}
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const authSession = authClient.useSession();
   const router = useRouter();
@@ -254,6 +282,111 @@ export default function Home() {
   const shouldRequestManual = Boolean(
     !isOnBreak && isLocationBlocked && !isDeviceBlocked,
   );
+
+  function getGpsCheck(): ClockCheck {
+    if (!selectedOutlet) {
+      return clockData
+        ? {
+            state: "blocked",
+            title: "No outlet assigned",
+            detail:
+              "Ask your manager to add you to an active outlet before clocking.",
+          }
+        : {
+            state: "blocked",
+            title: "Timekeeping unavailable",
+            detail:
+              "Your clock data could not be loaded. Reload the page or contact your manager.",
+          };
+    }
+    if (clockBlockInfo?.reason === "poor_accuracy") {
+      return {
+        state: "blocked",
+        title: "GPS accuracy too low",
+        detail: `Server measured ±${clockBlockInfo.accuracyMeters} m; it must be 50 m or better.`,
+      };
+    }
+    if (clockBlockInfo) {
+      return {
+        state: "blocked",
+        title: "Outside the clocking area",
+        detail: `${clockBlockInfo.distanceMeters} m from the outlet; the limit is ${clockBlockInfo.radiusMeters} m.`,
+      };
+    }
+    if (activeLocationError === "permission_denied") {
+      return {
+        state: "blocked",
+        title: "Location access is off",
+        detail:
+          "Enable location access in your browser settings, then try again.",
+      };
+    }
+    if (activeLocationError === "unavailable") {
+      return {
+        state: "blocked",
+        title: "No reliable location",
+        detail:
+          "Move near a window or retry when your phone has a clear GPS signal.",
+      };
+    }
+    if (liveGeofence && !liveGeofence.allowed) {
+      const accuracy = Math.round(locationFix?.accuracy ?? 0);
+      return liveGeofence.reason === "poor_accuracy"
+        ? {
+            state: "blocked",
+            title: "GPS accuracy too low",
+            detail: `Accuracy is ±${accuracy} m; it must be 50 m or better.`,
+          }
+        : {
+            state: "blocked",
+            title: "Outside the clocking area",
+            detail: `About ${Math.max(0, Math.round(liveGeofence.distanceMeters - selectedOutlet.radiusMeters))} m beyond the ${selectedOutlet.radiusMeters} m outlet radius.`,
+          };
+    }
+    if (liveGeofence?.allowed) return { state: "ok", title: "GPS ready" };
+    return { state: "pending", title: "Checking GPS…" };
+  }
+
+  function getDeviceCheck(): ClockCheck {
+    if (!staffDeviceStatus) {
+      return {
+        state: "pending",
+        title: "Checking browser…",
+        detail:
+          "Clock actions stay locked until this browser's approval is verified.",
+      };
+    }
+    if (!isDeviceBlocked) {
+      return {
+        state: "ok",
+        title: "Browser approved",
+        detail:
+          staffDeviceStatus.status === "replacement_pending"
+            ? "Replacement request is under manager review."
+            : undefined,
+      };
+    }
+    if (
+      staffDeviceStatus.status === "pending" ||
+      staffDeviceStatus.status === "replacement_pending"
+    ) {
+      return {
+        state: "pending",
+        title: "Awaiting manager approval",
+        detail: staffDeviceStatus.currentBrowserHasPendingRequest
+          ? "This browser is awaiting manager approval."
+          : "A device request is already awaiting approval. Ask your manager if you need to replace it.",
+      };
+    }
+    return {
+      state: "blocked",
+      title: "Browser not approved",
+      detail: "Request approval for this browser before clocking.",
+    };
+  }
+
+  const gpsCheck = getGpsCheck();
+  const deviceCheck = getDeviceCheck();
 
   useEffect(() => {
     const outletId = selectedOutlet?.id;
@@ -522,11 +655,9 @@ export default function Home() {
       }
 
       stage = "refreshing";
-      setActionMessage("Clock action recorded. Refreshing your shift…");
+      setActionMessage("Refreshing your shift…");
       setClockData(await loadClockData());
-      setActionMessage(
-        "Clock action recorded with server time and location evidence.",
-      );
+      setActionMessage("");
     } catch (error) {
       if (stage === "location") {
         setLocationError({
@@ -574,11 +705,7 @@ export default function Home() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error ?? "Break action failed.");
       setClockData(await loadClockData());
-      setActionMessage(
-        isOnBreak
-          ? "Break ended and recorded. Your shift has resumed."
-          : "Break started and recorded.",
-      );
+      setActionMessage("");
     } catch (error) {
       setActionMessage(
         error instanceof Error ? error.message : "Break action failed.",
@@ -625,24 +752,6 @@ export default function Home() {
       : []),
   ];
 
-  const currentHour =
-    currentTime && selectedOutlet
-      ? Number(
-          formatDate(currentTime, selectedOutlet.timezone, {
-            hour: "numeric",
-            hourCycle: "h23",
-          }),
-        )
-      : null;
-  const greeting =
-    currentHour === null
-      ? "Welcome"
-      : currentHour < 12
-        ? "Good morning"
-        : currentHour < 18
-          ? "Good afternoon"
-          : "Good evening";
-
   const clockParts = splitClockTime(
     currentTime && selectedOutlet
       ? formatDate(currentTime, selectedOutlet.timezone, {
@@ -675,24 +784,14 @@ export default function Home() {
       navigation={navigation}
     >
       <main className="page-content" id="clock">
-        <div className="page-heading">
-          <div>
-            <h1>
-              {greeting}, {authSession.data.user.name.split(" ")[0]}
-              <span>.</span>
-            </h1>
-            {selectedOutlet && (
-              <p className="subheading">Clocking at {selectedOutlet.name}</p>
-            )}
-          </div>
-        </div>
-
         <section className="clock-layout" aria-label="Clock and shift details">
           <div className="clock-column">
             <article
-              className={`clock-panel${isDeviceBlocked ? " is-device-blocked" : ""}`}
+              className={`clock-panel is-${isOnBreak ? "break" : isClockedIn ? "active" : "ready"}${isDeviceBlocked ? " is-device-blocked" : ""}`}
             >
-              <div className="clock-panel-top">
+              <div
+                className={`clock-status-card is-${isOnBreak ? "break" : isClockedIn ? "active" : "ready"}`}
+              >
                 <span
                   className={`live-indicator clock-status is-${isOnBreak ? "break" : isClockedIn ? "active" : "ready"}`}
                 >
@@ -703,6 +802,45 @@ export default function Home() {
                       ? "SHIFT IN PROGRESS"
                       : "READY TO START"}
                 </span>
+                {isClockedIn &&
+                  clockedInAt &&
+                  currentTime &&
+                  selectedOutlet && (
+                    <dl className="clock-shift-meta">
+                      <div>
+                        <dt>Started</dt>
+                        <dd>
+                          {formatDate(clockedInAt, selectedOutlet.timezone, {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Worked</dt>
+                        <dd>
+                          {formatDuration(
+                            clockedInAt.toISOString(),
+                            currentTime,
+                            activeSessionBreaks,
+                          )}
+                        </dd>
+                      </div>
+                      {activeBreak && (
+                        <div>
+                          <dt>On break</dt>
+                          <dd>
+                            {formatMinutes(
+                              getElapsedMinutes(
+                                activeBreak.startedAt,
+                                currentTime,
+                              ),
+                            )}
+                          </dd>
+                        </div>
+                      )}
+                    </dl>
+                  )}
               </div>
               <div className="clock-face">
                 <span className="clock-time">
@@ -710,39 +848,6 @@ export default function Home() {
                   {clockParts.period && <span>{clockParts.period}</span>}
                 </span>
               </div>
-              {isClockedIn && clockedInAt && currentTime && selectedOutlet && (
-                <dl className="clock-shift-meta">
-                  <div>
-                    <dt>Started</dt>
-                    <dd>
-                      {formatDate(clockedInAt, selectedOutlet.timezone, {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Worked</dt>
-                    <dd>
-                      {formatDuration(
-                        clockedInAt.toISOString(),
-                        currentTime,
-                        activeSessionBreaks,
-                      )}
-                    </dd>
-                  </div>
-                  {activeBreak && (
-                    <div>
-                      <dt>On break</dt>
-                      <dd>
-                        {formatMinutes(
-                          getElapsedMinutes(activeBreak.startedAt, currentTime),
-                        )}
-                      </dd>
-                    </div>
-                  )}
-                </dl>
-              )}
               <div className="clock-actions">
                 <button
                   className={`clock-action${isClockedIn && !isOnBreak ? " is-clocked-in" : ""}${shouldRequestManual ? " is-manual" : ""}`}
@@ -791,10 +896,9 @@ export default function Home() {
               </div>
               {actionMessage && (
                 <p
-                  className={`clock-action-feedback${isCheckingLocation || actionMessage.includes("recorded") || actionMessage.startsWith("Device request sent") || actionMessage.startsWith("This browser is already approved") ? "" : " is-blocked"}`}
+                  className={`clock-action-feedback${isCheckingLocation || actionMessage.startsWith("Device request sent") || actionMessage.startsWith("This browser is already approved") ? "" : " is-blocked"}`}
                   role={
                     isCheckingLocation ||
-                    actionMessage.includes("recorded") ||
                     actionMessage.startsWith("Device request sent") ||
                     actionMessage.startsWith("This browser is already approved")
                       ? "status"
@@ -804,123 +908,32 @@ export default function Home() {
                   {actionMessage}
                 </p>
               )}
-              {isDeviceRequired && staffDeviceStatus?.required && (
-                <div>
-                  {staffDeviceStatus.status === "pending" && (
-                    <p className="clock-hint" role="status">
-                      {staffDeviceStatus.currentBrowserHasPendingRequest
-                        ? "This browser is awaiting manager approval."
-                        : "A device request is already awaiting approval. Ask your manager if you need to replace it."}
-                    </p>
-                  )}
-                  {staffDeviceStatus.status === "replacement_pending" && (
-                    <p className="clock-hint" role="status">
-                      {staffDeviceStatus.currentBrowserApproved
-                        ? "This browser remains approved while the replacement request is reviewed."
-                        : staffDeviceStatus.currentBrowserHasPendingRequest
-                          ? "This replacement browser is awaiting manager approval."
-                          : "A replacement request is pending from another browser; the currently approved browser can still clock."}
-                    </p>
-                  )}
-                  {staffDeviceStatus.status === "active" &&
-                    staffDeviceStatus.currentBrowserApproved && (
-                      <p className="clock-hint" role="status">
-                        This browser is approved for staff clock actions.
-                      </p>
+              <div className="clock-checks" role="status" aria-live="polite">
+                <ClockCheckItem label="GPS" check={gpsCheck} />
+                {isDeviceRequired && (
+                  <ClockCheckItem label="Device" check={deviceCheck}>
+                    {!staffDeviceStatus?.currentBrowserApproved && (
+                      <button
+                        className="clock-correction-link"
+                        type="button"
+                        disabled={isRequestingStaffDevice}
+                        onClick={() => void handleRequestStaffDevice()}
+                      >
+                        {isRequestingStaffDevice
+                          ? "Requesting…"
+                          : staffDeviceStatus?.status === "active"
+                            ? "Request this browser"
+                            : staffDeviceStatus?.currentBrowserHasPendingRequest
+                              ? "Check enrollment request"
+                              : staffDeviceStatus?.status === "pending" ||
+                                  staffDeviceStatus?.status ===
+                                    "replacement_pending"
+                                ? "Check pending request"
+                                : "Request device enrollment"}
+                      </button>
                     )}
-                </div>
-              )}
-              <div
-                className={`clock-location-status${!selectedOutlet || isDeviceBlocked || activeLocationError || clockBlockInfo || (liveGeofence && !liveGeofence.allowed) ? " is-blocked" : liveGeofence?.allowed ? " is-ready" : ""}`}
-                role="status"
-                aria-live="polite"
-              >
-                <span className="clock-location-status-icon" aria-hidden="true">
-                  {!selectedOutlet ||
-                  isDeviceBlocked ||
-                  activeLocationError ||
-                  clockBlockInfo ||
-                  (liveGeofence && !liveGeofence.allowed)
-                    ? "!"
-                    : liveGeofence?.allowed
-                      ? "✓"
-                      : "⌖"}
-                </span>
-                <div>
-                  <strong>
-                    {!selectedOutlet
-                      ? clockData
-                        ? "No outlet is assigned to your account"
-                        : "Timekeeping is unavailable"
-                      : isDeviceRequired && !staffDeviceStatus
-                        ? "Checking trusted-device status"
-                        : isDeviceBlocked
-                          ? "This browser isn’t approved for clock actions"
-                          : clockBlockInfo?.reason === "poor_accuracy"
-                            ? "GPS accuracy is too low to clock in"
-                            : clockBlockInfo
-                              ? "You’re outside the clocking area"
-                              : activeLocationError === "permission_denied"
-                                ? "Location access is turned off"
-                                : activeLocationError === "unavailable"
-                                  ? "We can’t get a reliable location"
-                                  : liveGeofence && !liveGeofence.allowed
-                                    ? liveGeofence.reason === "poor_accuracy"
-                                      ? "GPS accuracy is too low to clock in"
-                                      : "You’re outside the clocking area"
-                                    : liveGeofence?.allowed
-                                      ? "You’re within the clocking area"
-                                      : "Checking your location"}
-                  </strong>
-                  <span>
-                    {!selectedOutlet
-                      ? clockData
-                        ? "Ask your manager to add you to an active outlet before clocking."
-                        : actionMessage ||
-                          "Your clock data could not be loaded. Reload the page or contact your manager."
-                      : isDeviceRequired && !staffDeviceStatus
-                        ? "Clock actions are locked until this browser’s approval can be verified."
-                        : isDeviceBlocked
-                          ? "Enroll this browser or ask your manager to approve it before clocking."
-                          : clockBlockInfo?.reason === "poor_accuracy"
-                            ? `Server measured accuracy at ±${clockBlockInfo.accuracyMeters} m; it must be 50 m or better.`
-                            : clockBlockInfo
-                              ? `${clockBlockInfo.distanceMeters} m from the outlet; the limit is ${clockBlockInfo.radiusMeters} m. GPS accuracy ±${clockBlockInfo.accuracyMeters} m.`
-                              : activeLocationError === "permission_denied"
-                                ? "Enable location access in your browser settings, then try again."
-                                : activeLocationError === "unavailable"
-                                  ? "Move near a window or retry when your phone has a clear GPS signal."
-                                  : liveGeofence && !liveGeofence.allowed
-                                    ? liveGeofence.reason === "poor_accuracy"
-                                      ? `Accuracy is ±${Math.round(locationFix?.accuracy ?? 0)} m; it must be 50 m or better.`
-                                      : `About ${Math.max(0, Math.round(liveGeofence.distanceMeters - selectedOutlet!.radiusMeters))} m beyond the ${selectedOutlet?.radiusMeters} m outlet radius. GPS accuracy ±${Math.round(locationFix?.accuracy ?? 0)} m.`
-                                    : liveGeofence?.allowed
-                                      ? `GPS accuracy ±${Math.round(locationFix?.accuracy ?? 0)} m · ${Math.round(liveGeofence.distanceMeters)} m from outlet`
-                                      : actionMessage ||
-                                        "Location is checked for clock in and out; break times use server time."}
-                  </span>
-                </div>
-                {isDeviceRequired &&
-                !staffDeviceStatus?.currentBrowserApproved ? (
-                  <button
-                    className="clock-correction-link"
-                    type="button"
-                    disabled={isRequestingStaffDevice}
-                    onClick={() => void handleRequestStaffDevice()}
-                  >
-                    {isRequestingStaffDevice
-                      ? "Requesting…"
-                      : staffDeviceStatus?.status === "active"
-                        ? "Request this browser"
-                        : staffDeviceStatus?.currentBrowserHasPendingRequest
-                          ? "Check enrollment request"
-                          : staffDeviceStatus?.status === "pending" ||
-                              staffDeviceStatus?.status ===
-                                "replacement_pending"
-                            ? "Check pending request"
-                            : "Request device enrollment"}
-                  </button>
-                ) : null}
+                  </ClockCheckItem>
+                )}
               </div>
             </article>
           </div>
@@ -1037,17 +1050,10 @@ export default function Home() {
               onOpenChange={setIsCorrectionDialogOpen}
               onSubmitted={async () => {
                 setClockData(await loadClockData());
-                setActionMessage(
-                  "Manual punch recorded. Your manager can reconcile it later.",
-                );
               }}
             />
           )}
         </section>
-        <p className="preview-note">
-          <span>i</span> Clock records use server time and location evidence.
-          Browser GPS can be spoofed.
-        </p>
       </main>
       {confirmDialog}
     </WorkspaceShell>
