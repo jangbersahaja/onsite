@@ -2336,6 +2336,30 @@ h2 {
   cursor: wait;
   opacity: 0.6;
 }
+.device-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.device-revoke-button {
+  display: grid;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  background: #fff;
+  padding: 0;
+  color: var(--danger);
+}
+.device-revoke-button:hover:not(:disabled) {
+  background: #fef2f2;
+}
+.device-revoke-button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
 .pending-invite-list {
   border-bottom: 1px solid var(--line);
 }
@@ -3319,6 +3343,48 @@ h2 {
   min-height: 40px;
   white-space: nowrap;
 }
+.dialog-storehub-fieldset {
+  display: grid;
+  min-width: 0;
+  gap: 14px;
+  margin: 0;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 10px 12px 14px;
+}
+.dialog-storehub-fieldset legend {
+  padding: 0 5px;
+  color: #465a64;
+  font-size: 11px;
+  font-weight: 650;
+}
+.team-dialog-form .dialog-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.team-dialog-form .dialog-checkbox-row input[type="checkbox"] {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--green);
+}
+.dialog-storehub-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.team-dialog-form .password-field {
+  position: relative;
+}
+.team-dialog-form .password-field input {
+  padding-right: 44px;
+}
 .workspace-dialog .issued-invite {
   margin-top: 16px;
 }
@@ -3343,6 +3409,9 @@ h2 {
     grid-column: auto;
   }
   .dialog-danger-zone {
+    grid-template-columns: 1fr;
+  }
+  .dialog-storehub-fields {
     grid-template-columns: 1fr;
   }
   .dialog-danger-zone .deactivate-outlet-button {
@@ -5865,7 +5934,8 @@ small,
     top: 6px;
     right: 6px;
   }
-  .team-table td[data-label="Actions"]:not(.registration-action-cell) {
+  .team-table td[data-label="Actions"]:not(.registration-action-cell),
+  .team-table .device-revoke-button {
     display: none;
   }
   .workspace-shell .team-table td,

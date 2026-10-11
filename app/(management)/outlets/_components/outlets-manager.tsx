@@ -530,53 +530,54 @@ export function OutletsManager() {
                 />
               </label>
               {data.isSuperAdmin && (
-                <fieldset className="dialog-wide-field">
-                  <legend>StoreHub link</legend>
-                  <label>
+                <fieldset className="dialog-wide-field dialog-storehub-fieldset">
+                  <legend>StoreHub</legend>
+                  <label className="dialog-checkbox-row">
                     <input
                       type="checkbox"
                       checked={storeHubEnabled}
                       onChange={(event) =>
                         setStoreHubEnabled(event.currentTarget.checked)
                       }
-                    />{" "}
+                    />
                     Link this outlet to StoreHub
                   </label>
-                  <label>
-                    StoreHub account name
-                    <input
-                      name="storeHubStoreName"
-                      defaultValue={editingOutlet?.storeHub?.storeName}
-                      disabled={!storeHubEnabled}
-                      required={storeHubEnabled}
-                      maxLength={120}
-                    />
-                  </label>
-                  <label>
-                    POS store ID
-                    <input
-                      name="storeHubPosStoreId"
-                      defaultValue={editingOutlet?.storeHub?.posStoreId}
-                      disabled={!storeHubEnabled}
-                      required={storeHubEnabled}
-                      maxLength={120}
-                    />
-                  </label>
-                  <label>
-                    API token
-                    <PasswordInput
-                      name="storeHubToken"
-                      autoComplete="off"
-                      disabled={!storeHubEnabled}
-                      required={storeHubEnabled && !editingOutlet?.storeHub}
-                      maxLength={500}
-                      placeholder={
-                        editingOutlet?.storeHub
-                          ? "Leave blank to keep current token"
-                          : undefined
-                      }
-                    />
-                  </label>
+                  {storeHubEnabled && (
+                    <div className="dialog-storehub-fields">
+                      <label>
+                        StoreHub account name
+                        <input
+                          name="storeHubStoreName"
+                          defaultValue={editingOutlet?.storeHub?.storeName}
+                          required
+                          maxLength={120}
+                        />
+                      </label>
+                      <label>
+                        POS store ID
+                        <input
+                          name="storeHubPosStoreId"
+                          defaultValue={editingOutlet?.storeHub?.posStoreId}
+                          required
+                          maxLength={120}
+                        />
+                      </label>
+                      <label className="dialog-wide-field">
+                        API token
+                        <PasswordInput
+                          name="storeHubToken"
+                          autoComplete="off"
+                          required={!editingOutlet?.storeHub}
+                          maxLength={500}
+                          placeholder={
+                            editingOutlet?.storeHub
+                              ? "Leave blank to keep current token"
+                              : undefined
+                          }
+                        />
+                      </label>
+                    </div>
+                  )}
                 </fieldset>
               )}
               {editingOutlet && (

@@ -940,18 +940,51 @@ export default function TeamPage() {
                       </div>
                     </td>
                     <td data-label="Device">
-                      {deviceStatusLabel(person)}
-                      {person.pendingDevice ? (
-                        <small>
-                          {person.pendingDevice.deviceName ?? "Unknown device"}
-                          {" · "}
-                          {formatExpiry(person.pendingDevice.createdAt)}
-                        </small>
-                      ) : person.activeDevice?.approvedAt ? (
-                        <small>
-                          {formatExpiry(person.activeDevice.approvedAt)}
-                        </small>
-                      ) : null}
+                      <div className="device-cell">
+                        <div>
+                          {deviceStatusLabel(person)}
+                          {person.pendingDevice ? (
+                            <small>
+                              {person.pendingDevice.deviceName ??
+                                "Unknown device"}
+                              {" · "}
+                              {formatExpiry(person.pendingDevice.createdAt)}
+                            </small>
+                          ) : person.activeDevice?.approvedAt ? (
+                            <small>
+                              {formatExpiry(person.activeDevice.approvedAt)}
+                            </small>
+                          ) : null}
+                        </div>
+                        {person.activeDevice && (
+                          <button
+                            className="device-revoke-button"
+                            type="button"
+                            aria-label="Revoke device"
+                            title="Revoke device"
+                            disabled={Boolean(deviceActionId)}
+                            onClick={() =>
+                              void handleStaffDeviceAction(
+                                person.activeDevice!.id,
+                                "revoke",
+                              )
+                            }
+                          >
+                            <svg
+                              aria-hidden="true"
+                              viewBox="0 0 24 24"
+                              width="12"
+                              height="12"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                            >
+                              <path d="M6 6l12 12M18 6L6 18" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
                     </td>
                     <td data-label="Actions">
                       {person.canReset && (
@@ -970,23 +1003,6 @@ export default function TeamPage() {
                         >
                           Review request
                         </Link>
-                      )}
-                      {person.activeDevice && (
-                        <button
-                          className="reset-link-button is-danger"
-                          type="button"
-                          disabled={Boolean(deviceActionId)}
-                          onClick={() =>
-                            void handleStaffDeviceAction(
-                              person.activeDevice!.id,
-                              "revoke",
-                            )
-                          }
-                        >
-                          {deviceActionId === person.activeDevice.id
-                            ? "Saving…"
-                            : "Revoke device"}
-                        </button>
                       )}
                     </td>
                   </tr>
