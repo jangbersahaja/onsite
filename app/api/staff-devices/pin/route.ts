@@ -1,11 +1,11 @@
 import {
-  auditEvents,
   outletMemberships,
   outlets,
   staffDeviceEnrollments,
   user,
 } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
+import { recordAudit } from "@/lib/audit";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
@@ -139,7 +139,7 @@ export async function POST(request: Request) {
         .returning({ id: staffDeviceEnrollments.id });
       if (!updated) return false;
 
-      await tx.insert(auditEvents).values({
+      await recordAudit(tx, {
         actorId: session.user.id,
         action: "staff_device_pin_set",
         entityType: "staff_device_enrollment",
@@ -235,7 +235,7 @@ export async function DELETE(request: Request) {
         .returning({ id: staffDeviceEnrollments.id });
       if (!updated) return false;
 
-      await tx.insert(auditEvents).values({
+      await recordAudit(tx, {
         actorId: session.user.id,
         action: "staff_device_pin_removed",
         entityType: "staff_device_enrollment",

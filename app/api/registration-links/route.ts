@@ -1,5 +1,6 @@
-import { auditEvents, outlets, registrationLinks } from "@/db/schema";
+import { outlets, registrationLinks } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
+import { recordAudit } from "@/lib/audit";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import {
@@ -188,13 +189,14 @@ export async function POST(request: Request) {
           id: registrationLinks.id,
           createdAt: registrationLinks.createdAt,
         });
-      await tx.insert(auditEvents).values({
+      await recordAudit(tx, {
         actorId: session.user.id,
         action: existing
           ? "registration_link_rotated"
           : "registration_link_created",
         entityType: "registration_link",
         entityId: link.id,
+        outletId,
         newValues: { outletId, replacedLinkId: existing?.id ?? null },
       });
       return link;

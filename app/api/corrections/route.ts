@@ -1,5 +1,4 @@
 import {
-  auditEvents,
   correctionRequests,
   outletMemberships,
   outlets,
@@ -9,6 +8,7 @@ import {
   workSessions,
 } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
+import { recordAudit } from "@/lib/audit";
 import { getAuth } from "@/lib/auth";
 import { getCorrectionTimeError } from "@/lib/correction-time";
 import { getDb } from "@/lib/db";
@@ -345,7 +345,7 @@ export async function PATCH(request: Request) {
             reconciledAt: reviewedAt,
           })
           .where(eq(correctionRequests.id, correction.id));
-        await tx.insert(auditEvents).values({
+        await recordAudit(tx, {
           actorId: session.user.id,
           action:
             parsed.data.decision === "adjust"
@@ -353,6 +353,7 @@ export async function PATCH(request: Request) {
               : "correction_reconciled",
           entityType: "correction_request",
           entityId: correction.id,
+          outletId: correction.outletId,
           previousValues: {
             status: "reconciliation",
             requestedAt: correction.requestedAt.toISOString(),
@@ -365,11 +366,12 @@ export async function PATCH(request: Request) {
           reason: parsed.data.reason,
         });
         if (updatedPunch) {
-          await tx.insert(auditEvents).values({
+          await recordAudit(tx, {
             actorId: session.user.id,
             action: "correction_punch_adjusted",
             entityType: "work_session",
             entityId: updatedPunch.id,
+            outletId: correction.outletId,
             previousValues: updatedPunch.previousValues,
             newValues: updatedPunch.newValues,
             reason: parsed.data.reason,
@@ -709,12 +711,13 @@ export async function POST(request: Request) {
               clockOutAt: requestedAt.toISOString(),
               clockOutSource: "manual",
             };
-      await tx.insert(auditEvents).values([
+      await recordAudit(tx, [
         {
           actorId: session.user.id,
           action: "correction_applied",
           entityType: "correction_request",
           entityId: correction.id,
+          outletId: input.outletId,
           newValues: {
             workSessionId: updatedSession.id,
             event: input.event,
@@ -729,6 +732,7 @@ export async function POST(request: Request) {
           action: "correction_punch_applied",
           entityType: "work_session",
           entityId: updatedSession.id,
+          outletId: input.outletId,
           previousValues,
           newValues,
           reason: input.reason,

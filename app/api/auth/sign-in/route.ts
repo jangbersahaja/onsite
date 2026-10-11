@@ -1,5 +1,6 @@
 import { authLoginAttempts, user } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
+import { recordAudit } from "@/lib/audit";
 import { createSession, sessionCookie } from "@/lib/auth-instance";
 import { getDb } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
@@ -129,6 +130,12 @@ export async function POST(request: Request) {
   }
 
   const newSession = await createSession(account.id);
+  await recordAudit(db, {
+    actorId: account.id,
+    action: "sign_in",
+    entityType: "user",
+    entityId: account.id,
+  });
   return Response.json(
     {
       user: {

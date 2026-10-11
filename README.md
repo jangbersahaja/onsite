@@ -38,10 +38,8 @@ OnSITE is a multi-outlet workforce app built with Next.js, Drizzle, and Postgres
 - `VAPID_SUBJECT`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`: Required to deliver browser push alerts. Generate the key pair once with `npx web-push generate-vapid-keys`, set the subject to a `mailto:` contact or HTTPS URL, and keep the private key secret and stable.
 - `BOOTSTRAP_ADMIN_*`: Name, username, email, and password for the initial super admin.
 - `BOOTSTRAP_OUTLET_*`: Optional name, address, coordinates, and timezone for one outlet.
-- `STOREHUB_STORE_NAME`: StoreHub account subdomain/name for API authentication.
-- `STOREHUB_API_TOKEN`: Server-only token issued for StoreHub API access.
-- `STOREHUB_OUTLET_ID`: OnSITE outlet UUID to receive the StoreHub attendance feed.
-- `STOREHUB_POS_STORE_ID`: Matching StoreHub POS store ID.
+- `STOREHUB_CREDENTIAL_KEY`: Required to encrypt StoreHub API tokens at rest (AES-256-GCM). Generate one with `openssl rand -base64 32`, back it up somewhere safe, and keep it stable. Losing or changing it makes every stored StoreHub token unreadable, so each outlet must be relinked.
+- `STOREHUB_STORE_NAME`, `STOREHUB_API_TOKEN`, `STOREHUB_OUTLET_ID`, `STOREHUB_POS_STORE_ID`: Only used by the one-time `npm run import-storehub-env` command. Run it once to move an existing env-based link into the database, then remove these four variables.
 
 Keep `.env.local` private and never commit live credentials.
 
@@ -49,7 +47,7 @@ Outlet managers can opt in to browser notifications for each assigned outlet. Pu
 
 ## StoreHub attendance
 
-The management dashboard and timesheets can display StoreHub attendance for the outlet mapped by `STOREHUB_OUTLET_ID`. Configure the StoreHub account name and API token supplied by StoreHub, then map the OnSITE outlet UUID to its StoreHub POS store ID. The OnSITE UUID is the `id` on the matching `outlets` database row. The integration is read-only, fetches when these management views load or refresh, and does not create OnSITE staff accounts or clock events.
+Super admins link an outlet to StoreHub from the Outlets screen by entering the StoreHub account name, POS store ID, and API token. The token is verified against StoreHub before it is saved, then stored encrypted. Each outlet has at most one link, and each StoreHub store can be linked to only one outlet. The management dashboard and timesheets display attendance for every linked outlet. The integration is read-only, fetches when these management views load or refresh, and does not create OnSITE staff accounts or clock events.
 
 The integration uses [`@pyyupsk/storehub`](https://github.com/pyyupsk/storehub), an unofficial community client whose API details are reverse-engineered. Confirm API access and verify the response fields with StoreHub before relying on the feed. Its documented timesheet data has employee/store IDs and clock-in/out times, but no break events. Consecutive sessions for the same employee in the same outlet-local workday are grouped into one shift; each gap between a clock-out and the next clock-in is counted as a break. A break in progress cannot be confirmed until the next clock-in arrives. When the StoreHub API is unreachable, OnSITE attendance remains available.
 

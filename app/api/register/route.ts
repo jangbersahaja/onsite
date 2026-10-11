@@ -1,5 +1,6 @@
-import { auditEvents, staffDeviceEnrollments, user } from "@/db/schema";
+import { staffDeviceEnrollments, user } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
+import { recordAudit } from "@/lib/audit";
 import { getDb } from "@/lib/db";
 import { describeDeviceFromUserAgent } from "@/lib/device-name";
 import { createOneTimeToken } from "@/lib/one-time-token";
@@ -223,11 +224,12 @@ export async function POST(request: Request) {
         status: "pending",
       });
 
-      await tx.insert(auditEvents).values({
+      await recordAudit(tx, {
         actorId: createdUserId!,
         action: "registration_submitted",
         entityType: "user",
         entityId: createdUserId!,
+        outletId: link.outletId,
         newValues: { outletId: link.outletId, username, email },
       });
     });

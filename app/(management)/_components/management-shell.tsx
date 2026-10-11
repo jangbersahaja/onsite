@@ -13,6 +13,7 @@ const pageTitles: Record<string, string> = {
   "/timesheets": "Timesheets",
   "/corrections/review": "Review requests",
   "/team": "Team",
+  "/activity": "Activity",
 };
 
 export function ManagementShell({ children }: { children: ReactNode }) {

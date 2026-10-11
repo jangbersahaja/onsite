@@ -82,6 +82,12 @@ export function createManagementNavigation(
           glyph: "♙",
           requiredAccess: "backoffice",
         },
+        {
+          href: "/activity",
+          label: "Activity",
+          glyph: "≡",
+          requiredAccess: "backoffice",
+        },
       ],
     },
   ];

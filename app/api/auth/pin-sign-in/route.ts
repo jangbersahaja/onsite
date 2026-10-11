@@ -6,6 +6,7 @@ import {
   user,
 } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
+import { recordAudit } from "@/lib/audit";
 import { createSession, sessionCookie } from "@/lib/auth-instance";
 import { getDb } from "@/lib/db";
 import { getPinPepper, verifyPin } from "@/lib/pin";
@@ -205,6 +206,12 @@ export async function POST(request: Request) {
       .delete(authLoginAttempts)
       .where(inArray(authLoginAttempts.key, keys));
     const newSession = await createSession(account.id);
+    await recordAudit(db, {
+      actorId: account.id,
+      action: "sign_in",
+      entityType: "user",
+      entityId: account.id,
+    });
     return Response.json(
       {
         user: {

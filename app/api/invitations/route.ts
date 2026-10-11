@@ -1,5 +1,6 @@
-import { auditEvents, invitationOutlets, invitations, user } from "@/db/schema";
+import { invitationOutlets, invitations, user } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
+import { recordAudit } from "@/lib/audit";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { createOneTimeToken } from "@/lib/one-time-token";
@@ -147,7 +148,7 @@ export async function POST(request: Request) {
         );
       }
 
-      await tx.insert(auditEvents).values({
+      await recordAudit(tx, {
         actorId: session.user.id,
         action: "invitation_created",
         entityType: "invitation",

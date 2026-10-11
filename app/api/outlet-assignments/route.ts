@@ -1,5 +1,6 @@
-import { auditEvents, outletMemberships, outlets, user } from "@/db/schema";
+import { outletMemberships, outlets, user } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
+import { recordAudit } from "@/lib/audit";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { canManageTargetAccess, getTeamAccess } from "@/lib/team-access";
@@ -128,7 +129,7 @@ export async function PATCH(request: Request) {
           .where(eq(outletMemberships.id, existing.id));
       }
 
-      await tx.insert(auditEvents).values({
+      await recordAudit(tx, {
         actorId: session.user.id,
         action: parsed.data.assigned
           ? "user_assigned_to_outlet"
@@ -136,6 +137,7 @@ export async function PATCH(request: Request) {
         entityType: "outlet_membership",
         entityId:
           existing?.id ?? `${parsed.data.userId}:${parsed.data.outletId}`,
+        outletId: parsed.data.outletId,
         previousValues: { isActive: existing?.isActive ?? false },
         newValues: {
           userId: parsed.data.userId,

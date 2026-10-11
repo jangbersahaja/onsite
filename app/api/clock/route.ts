@@ -1,5 +1,4 @@
 import {
-  auditEvents,
   outletMemberships,
   outlets,
   staffDeviceEnrollments,
@@ -7,6 +6,7 @@ import {
   workSessions,
 } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
+import { recordAudit } from "@/lib/audit";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { verifyGeofence } from "@/lib/geofence";
@@ -295,11 +295,12 @@ export async function POST(request: Request) {
             .insert(workBreaks)
             .values({ workSessionId: openSession.id, startedAt: now })
             .returning();
-          await tx.insert(auditEvents).values({
+          await recordAudit(tx, {
             actorId: session.user.id,
             action: "start_break",
             entityType: "work_break",
             entityId: created.id,
+            outletId: openSession.outletId,
             newValues: {
               workSessionId: openSession.id,
               startedAt: now.toISOString(),
@@ -314,11 +315,12 @@ export async function POST(request: Request) {
           .set({ endedAt: now, updatedAt: now })
           .where(eq(workBreaks.id, openBreak.id))
           .returning();
-        await tx.insert(auditEvents).values({
+        await recordAudit(tx, {
           actorId: session.user.id,
           action: "end_break",
           entityType: "work_break",
           entityId: updated.id,
+          outletId: openSession.outletId,
           previousValues: { endedAt: null },
           newValues: { endedAt: now.toISOString() },
         });
@@ -473,11 +475,12 @@ export async function POST(request: Request) {
           })
           .returning();
 
-        await tx.insert(auditEvents).values({
+        await recordAudit(tx, {
           actorId: session.user.id,
           action: "clock_in",
           entityType: "work_session",
           entityId: created.id,
+          outletId: input.outletId,
           newValues: {
             outletId: input.outletId,
             clockInAt: now.toISOString(),
@@ -534,11 +537,12 @@ export async function POST(request: Request) {
 
       if (!updated) return null;
 
-      await tx.insert(auditEvents).values({
+      await recordAudit(tx, {
         actorId: session.user.id,
         action: "clock_out",
         entityType: "work_session",
         entityId: updated.id,
+        outletId: updated.outletId,
         previousValues: { clockOutAt: null },
         newValues: {
           clockOutAt: now.toISOString(),

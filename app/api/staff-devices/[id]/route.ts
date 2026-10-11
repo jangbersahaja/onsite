@@ -1,11 +1,11 @@
 import {
-  auditEvents,
   outletMemberships,
   outlets,
   staffDeviceEnrollments,
   user,
 } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
+import { recordAudit } from "@/lib/audit";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { getTeamAccess } from "@/lib/team-access";
@@ -162,7 +162,7 @@ export async function PATCH(
         if (!approved) throw new Error("STAFF_DEVICE_STATE_CONFLICT");
 
         for (const previousDevice of revoked) {
-          await tx.insert(auditEvents).values({
+          await recordAudit(tx, {
             actorId: session.user.id,
             action: "staff_device_revoked",
             entityType: "staff_device_enrollment",
@@ -170,7 +170,7 @@ export async function PATCH(
             newValues: { userId: target.userId, replacementId: target.id },
           });
         }
-        await tx.insert(auditEvents).values({
+        await recordAudit(tx, {
           actorId: session.user.id,
           action: "staff_device_enrollment_approved",
           entityType: "staff_device_enrollment",
@@ -192,7 +192,7 @@ export async function PATCH(
         .returning({ id: staffDeviceEnrollments.id });
       if (!revoked) throw new Error("STAFF_DEVICE_STATE_CONFLICT");
 
-      await tx.insert(auditEvents).values({
+      await recordAudit(tx, {
         actorId: session.user.id,
         action:
           action === "reject"

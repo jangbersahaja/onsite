@@ -1,5 +1,6 @@
 import { passwordResetTokens, session, user } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
+import { recordAudit } from "@/lib/audit";
 import { getDb } from "@/lib/db";
 import { hashOneTimeToken } from "@/lib/one-time-token";
 import { hashPassword } from "@/lib/password";
@@ -74,6 +75,12 @@ export async function POST(request: Request) {
       .update(session)
       .set({ revokedAt: now, updatedAt: now })
       .where(and(eq(session.userId, reset.userId), isNull(session.revokedAt)));
+    await recordAudit(tx, {
+      actorId: reset.userId,
+      action: "password_reset_completed",
+      entityType: "user",
+      entityId: reset.userId,
+    });
     return true;
   });
 

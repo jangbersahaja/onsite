@@ -1,5 +1,6 @@
-import { auditEvents, registrationLinks } from "@/db/schema";
+import { registrationLinks } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
+import { recordAudit } from "@/lib/audit";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { canManageOutletRegistration } from "@/lib/registration-rules";
@@ -76,11 +77,12 @@ export async function DELETE(
         )
         .returning({ id: registrationLinks.id });
       if (!updated) return false;
-      await tx.insert(auditEvents).values({
+      await recordAudit(tx, {
         actorId: session.user.id,
         action: "registration_link_revoked",
         entityType: "registration_link",
         entityId: link.id,
+        outletId: link.outletId,
         newValues: { outletId: link.outletId },
       });
       return true;

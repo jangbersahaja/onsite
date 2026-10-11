@@ -1,10 +1,6 @@
-import {
-  auditEvents,
-  outletMemberships,
-  passwordResetTokens,
-  user,
-} from "@/db/schema";
+import { outletMemberships, passwordResetTokens, user } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
+import { recordAudit } from "@/lib/audit";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { createOneTimeToken } from "@/lib/one-time-token";
@@ -109,7 +105,7 @@ export async function POST(request: Request) {
         tokenHash,
         expiresAt,
       });
-      await tx.insert(auditEvents).values({
+      await recordAudit(tx, {
         actorId: session.user.id,
         action: "password_reset_link_issued",
         entityType: "user",

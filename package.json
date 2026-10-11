@@ -10,7 +10,8 @@
     "test": "tsx --test tests/*.test.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
-    "bootstrap-admin": "tsx scripts/bootstrap-admin.ts"
+    "bootstrap-admin": "tsx scripts/bootstrap-admin.ts",
+    "import-storehub-env": "tsx scripts/import-storehub-env.ts"
   },
   "dependencies": {
     "@pyyupsk/storehub": "^0.1.0",

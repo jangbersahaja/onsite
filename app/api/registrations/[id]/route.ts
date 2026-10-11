@@ -1,10 +1,6 @@
-import {
-  auditEvents,
-  outletMemberships,
-  staffDeviceEnrollments,
-  user,
-} from "@/db/schema";
+import { outletMemberships, staffDeviceEnrollments, user } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
+import { recordAudit } from "@/lib/audit";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { deleteProfilePhoto } from "@/lib/profile-photo-storage";
@@ -149,11 +145,12 @@ export async function PATCH(
           )
           .returning({ id: staffDeviceEnrollments.id });
 
-        await tx.insert(auditEvents).values({
+        await recordAudit(tx, {
           actorId: session.user.id,
           action: "registration_approved",
           entityType: "user",
           entityId: target.id,
+          outletId,
           newValues: {
             outletId,
             username: target.username,
@@ -167,11 +164,12 @@ export async function PATCH(
 
     // Reject: remove the pending account. Device enrollments cascade.
     const [rejected] = await db.transaction(async (tx) => {
-      await tx.insert(auditEvents).values({
+      await recordAudit(tx, {
         actorId: session.user.id,
         action: "registration_rejected",
         entityType: "user",
         entityId: target.id,
+        outletId: target.registrationOutletId,
         newValues: {
           outletId: target.registrationOutletId,
           username: target.username,

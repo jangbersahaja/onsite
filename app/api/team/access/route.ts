@@ -1,5 +1,6 @@
-import { auditEvents, outletMemberships, user } from "@/db/schema";
+import { outletMemberships, user } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
+import { recordAudit } from "@/lib/audit";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import {
@@ -131,7 +132,7 @@ export async function PATCH(request: Request) {
           updatedAt: new Date(),
         })
         .where(eq(user.id, target.id));
-      await tx.insert(auditEvents).values({
+      await recordAudit(tx, {
         actorId: session.user.id,
         action: "team_member_app_access_updated",
         entityType: "user",

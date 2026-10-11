@@ -1,5 +1,6 @@
-import { auditEvents, outlets, workBreaks, workSessions } from "@/db/schema";
+import { outlets, workBreaks, workSessions } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
+import { recordAudit } from "@/lib/audit";
 import { getAuth } from "@/lib/auth";
 import { addCalendarDays } from "@/lib/dashboard-data";
 import { getDb } from "@/lib/db";
@@ -10,8 +11,8 @@ import {
 } from "@/lib/outlet-time";
 import { notifyOutletManagers } from "@/lib/push-notifications";
 import {
-  getConfiguredStoreHubOutletId,
   getStoreHubAttendance,
+  mergeStoreHubAttendance,
 } from "@/lib/storehub-attendance";
 import { filterStoreHubTimesheets } from "@/lib/storehub-attendance-data";
 import { getTeamAccess } from "@/lib/team-access";
@@ -124,34 +125,37 @@ export async function GET(request: Request) {
     const onsiteRows = isStoreHubEmployee
       ? []
       : await getTimesheetRows(actor.outletIds, parsed.data);
-    const configuredStoreHubOutletId = getConfiguredStoreHubOutletId();
-    const storeHubOutlet = actor.outlets.find(
+    const storeHubOutlets = actor.outlets.filter(
       (outlet) =>
-        outlet.id === configuredStoreHubOutletId &&
+        outlet.isActive !== false &&
         (!parsed.data.outletId || parsed.data.outletId === outlet.id),
     );
-    const storeHubAttendance = storeHubOutlet
-      ? await getStoreHubAttendance(storeHubOutlet, {
-          from: parsed.data.from
-            ? new Date(
-                outletDateTimeToISOString(
-                  `${parsed.data.from}T06:00`,
-                  storeHubOutlet.timezone,
-                ),
-              )
-            : undefined,
-          to: parsed.data.to
-            ? new Date(
-                new Date(
+    const storeHubAttendance = mergeStoreHubAttendance(
+      await Promise.all(
+        storeHubOutlets.map((storeHubOutlet) =>
+          getStoreHubAttendance(storeHubOutlet, {
+            from: parsed.data.from
+              ? new Date(
                   outletDateTimeToISOString(
-                    `${addCalendarDays(parsed.data.to, 1)}T06:00`,
+                    `${parsed.data.from}T06:00`,
                     storeHubOutlet.timezone,
                   ),
-                ).getTime() - 1,
-              )
-            : undefined,
-        })
-      : { status: "not_configured" as const, rows: [], fetchedAt: null };
+                )
+              : undefined,
+            to: parsed.data.to
+              ? new Date(
+                  new Date(
+                    outletDateTimeToISOString(
+                      `${addCalendarDays(parsed.data.to, 1)}T06:00`,
+                      storeHubOutlet.timezone,
+                    ),
+                  ).getTime() - 1,
+                )
+              : undefined,
+          }),
+        ),
+      ),
+    );
     const storeHubRows =
       storeHubAttendance.status === "available"
         ? filterStoreHubTimesheets(storeHubAttendance.rows, parsed.data).map(
@@ -673,11 +677,12 @@ export async function PATCH(request: Request) {
       }
       const auditedBreaks = parsed.data.breaks ? savedBreaks : nextBreaks;
 
-      await tx.insert(auditEvents).values({
+      await recordAudit(tx, {
         actorId: actor.userId,
         action: "timesheet_edit",
         entityType: "work_session",
         entityId: current.id,
+        outletId: current.outletId,
         previousValues: {
           clockInAt: current.clockInAt.toISOString(),
           clockOutAt: current.clockOutAt?.toISOString() ?? null,

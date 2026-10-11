@@ -1,12 +1,13 @@
 import { user } from "@/db/schema";
+import { recordAudit } from "@/lib/audit";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
+import { MAX_PROFILE_PHOTO_BYTES } from "@/lib/profile-photo";
 import {
   deleteProfilePhoto,
   ProfilePhotoValidationError,
   uploadProfilePhoto,
 } from "@/lib/profile-photo-storage";
-import { MAX_PROFILE_PHOTO_BYTES } from "@/lib/profile-photo";
 import { eq } from "drizzle-orm";
 
 const maximumRequestBytes = MAX_PROFILE_PHOTO_BYTES + 64 * 1024;
@@ -50,11 +51,21 @@ export async function POST(request: Request) {
       return Response.json({ error: "Account not found." }, { status: 404 });
     }
 
-    const [updated] = await db
-      .update(user)
-      .set({ profilePhotoPath: uploadedPath, updatedAt: new Date() })
-      .where(eq(user.id, session.user.id))
-      .returning({ id: user.id });
+    const updated = await db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(user)
+        .set({ profilePhotoPath: uploadedPath, updatedAt: new Date() })
+        .where(eq(user.id, session.user.id))
+        .returning({ id: user.id });
+      if (!row) return null;
+      await recordAudit(tx, {
+        actorId: session.user.id,
+        action: "profile_photo_updated",
+        entityType: "user",
+        entityId: session.user.id,
+      });
+      return row;
+    });
     if (!updated) {
       await deleteProfilePhoto(uploadedPath).catch(() => undefined);
       return Response.json({ error: "Account not found." }, { status: 404 });
@@ -98,10 +109,20 @@ export async function DELETE(request: Request) {
     if (!current)
       return Response.json({ error: "Account not found." }, { status: 404 });
 
-    await db
-      .update(user)
-      .set({ profilePhotoPath: null, updatedAt: new Date() })
-      .where(eq(user.id, session.user.id));
+    await db.transaction(async (tx) => {
+      await tx
+        .update(user)
+        .set({ profilePhotoPath: null, updatedAt: new Date() })
+        .where(eq(user.id, session.user.id));
+      if (current.profilePhotoPath) {
+        await recordAudit(tx, {
+          actorId: session.user.id,
+          action: "profile_photo_removed",
+          entityType: "user",
+          entityId: session.user.id,
+        });
+      }
+    });
     if (current.profilePhotoPath) {
       await deleteProfilePhoto(current.profilePhotoPath).catch(() => undefined);
     }

@@ -1,11 +1,11 @@
 import {
-  auditEvents,
   outletMemberships,
   outlets,
   staffDeviceEnrollments,
   user,
 } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
+import { recordAudit } from "@/lib/audit";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { describeDeviceFromUserAgent } from "@/lib/device-name";
@@ -255,7 +255,7 @@ export async function POST(request: Request) {
         })
         .returning({ id: staffDeviceEnrollments.id });
 
-      await tx.insert(auditEvents).values({
+      await recordAudit(tx, {
         actorId: session.user.id,
         action: "staff_device_enrollment_requested",
         entityType: "staff_device_enrollment",

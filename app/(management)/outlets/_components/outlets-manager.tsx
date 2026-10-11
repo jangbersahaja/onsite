@@ -2,6 +2,7 @@
 
 import { useConfirmDialog } from "@/app/_components/confirm-dialog";
 import { ModalDialog } from "@/app/_components/modal-dialog";
+import { PasswordInput } from "@/app/_components/password-input";
 import { useEffect, useState, type FormEvent } from "react";
 
 type OutletSummary = {
@@ -12,6 +13,8 @@ type OutletSummary = {
   longitude: number;
   radiusMeters: number;
   timezone: string;
+  /** Only present for super admins. Never contains the API token. */
+  storeHub?: { storeName: string; posStoreId: string } | null;
 };
 
 type OutletsData = {
@@ -32,6 +35,29 @@ async function loadOutletsData() {
   return body as OutletsData;
 }
 
+type StoreHubPayload = {
+  storeName: string;
+  posStoreId: string;
+  token?: string;
+};
+
+/**
+ * undefined leaves the link untouched, null unlinks, and an object links or updates it.
+ * A blank token on an existing link keeps the stored token.
+ */
+function buildStoreHubPayload(
+  formData: FormData,
+  options: { enabled: boolean; wasLinked: boolean },
+): StoreHubPayload | null | undefined {
+  if (!options.enabled) return options.wasLinked ? null : undefined;
+  const token = String(formData.get("storeHubToken") ?? "").trim();
+  return {
+    storeName: String(formData.get("storeHubStoreName") ?? "").trim(),
+    posStoreId: String(formData.get("storeHubPosStoreId") ?? "").trim(),
+    ...(token ? { token } : {}),
+  };
+}
+
 export function OutletsManager() {
   const [data, setData] = useState<OutletsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -39,6 +65,7 @@ export function OutletsManager() {
   const [isOutletDialogOpen, setIsOutletDialogOpen] = useState(false);
   const [editingOutletId, setEditingOutletId] = useState("");
   const [outletMessage, setOutletMessage] = useState("");
+  const [storeHubEnabled, setStoreHubEnabled] = useState(false);
   const [message, setMessage] = useState("");
   const [assignmentKey, setAssignmentKey] = useState("");
   const [accessUserId, setAccessUserId] = useState("");
@@ -96,6 +123,14 @@ export function OutletsManager() {
           longitude: Number(formData.get("longitude")),
           radiusMeters: Number(formData.get("radiusMeters")),
           timezone: formData.get("timezone"),
+          ...(data?.isSuperAdmin
+            ? {
+                storeHub: buildStoreHubPayload(formData, {
+                  enabled: storeHubEnabled,
+                  wasLinked: false,
+                }),
+              }
+            : {}),
         }),
       });
       const body = await response.json();
@@ -142,6 +177,16 @@ export function OutletsManager() {
           longitude: Number(formData.get("longitude")),
           radiusMeters: Number(formData.get("radiusMeters")),
           timezone: formData.get("timezone"),
+          ...(data?.isSuperAdmin
+            ? {
+                storeHub: buildStoreHubPayload(formData, {
+                  enabled: storeHubEnabled,
+                  wasLinked: Boolean(
+                    data.outlets.find((outlet) => outlet.id === id)?.storeHub,
+                  ),
+                }),
+              }
+            : {}),
         }),
       });
       const body = await response.json();
@@ -314,6 +359,7 @@ export function OutletsManager() {
                 onClick={() => {
                   setEditingOutletId("");
                   setOutletMessage("");
+                  setStoreHubEnabled(false);
                   setIsOutletDialogOpen(true);
                 }}
               >
@@ -345,6 +391,16 @@ export function OutletsManager() {
                     <dt>Timezone</dt>
                     <dd>{outlet.timezone}</dd>
                   </div>
+                  {outlet.storeHub !== undefined && (
+                    <div className="outlet-card-meta-wide">
+                      <dt>StoreHub</dt>
+                      <dd>
+                        {outlet.storeHub
+                          ? `${outlet.storeHub.storeName} (store ${outlet.storeHub.posStoreId})`
+                          : "Not linked"}
+                      </dd>
+                    </div>
+                  )}
                   <div className="outlet-card-meta-wide">
                     <dt>Coordinates</dt>
                     <dd>
@@ -361,6 +417,7 @@ export function OutletsManager() {
                     onClick={() => {
                       setEditingOutletId(outlet.id);
                       setOutletMessage("");
+                      setStoreHubEnabled(Boolean(outlet.storeHub));
                       setIsOutletDialogOpen(true);
                     }}
                   >
@@ -472,6 +529,56 @@ export function OutletsManager() {
                   maxLength={100}
                 />
               </label>
+              {data.isSuperAdmin && (
+                <fieldset className="dialog-wide-field">
+                  <legend>StoreHub link</legend>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={storeHubEnabled}
+                      onChange={(event) =>
+                        setStoreHubEnabled(event.currentTarget.checked)
+                      }
+                    />{" "}
+                    Link this outlet to StoreHub
+                  </label>
+                  <label>
+                    StoreHub account name
+                    <input
+                      name="storeHubStoreName"
+                      defaultValue={editingOutlet?.storeHub?.storeName}
+                      disabled={!storeHubEnabled}
+                      required={storeHubEnabled}
+                      maxLength={120}
+                    />
+                  </label>
+                  <label>
+                    POS store ID
+                    <input
+                      name="storeHubPosStoreId"
+                      defaultValue={editingOutlet?.storeHub?.posStoreId}
+                      disabled={!storeHubEnabled}
+                      required={storeHubEnabled}
+                      maxLength={120}
+                    />
+                  </label>
+                  <label>
+                    API token
+                    <PasswordInput
+                      name="storeHubToken"
+                      autoComplete="off"
+                      disabled={!storeHubEnabled}
+                      required={storeHubEnabled && !editingOutlet?.storeHub}
+                      maxLength={500}
+                      placeholder={
+                        editingOutlet?.storeHub
+                          ? "Leave blank to keep current token"
+                          : undefined
+                      }
+                    />
+                  </label>
+                </fieldset>
+              )}
               {editingOutlet && (
                 <div className="dialog-danger-zone dialog-wide-field">
                   <label>

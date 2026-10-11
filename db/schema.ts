@@ -148,6 +148,41 @@ export const outlets = pgTable("outlets", {
     .defaultNow(),
 });
 
+export const outletStorehubConnections = pgTable(
+  "outlet_storehub_connections",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    outletId: uuid("outlet_id")
+      .notNull()
+      .references(() => outlets.id, { onDelete: "cascade" }),
+    storeName: text("store_name").notNull(),
+    posStoreId: text("pos_store_id").notNull(),
+    tokenCiphertext: text("token_ciphertext").notNull(),
+    tokenIv: text("token_iv").notNull(),
+    tokenTag: text("token_tag").notNull(),
+    keyVersion: integer("key_version").notNull().default(1),
+    createdBy: text("created_by").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: text("updated_by").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("outlet_storehub_connections_outlet_uq").on(table.outletId),
+    uniqueIndex("outlet_storehub_connections_store_uq").on(
+      table.storeName,
+      table.posStoreId,
+    ),
+  ],
+);
+
 export const outletMemberships = pgTable(
   "outlet_memberships",
   {
@@ -416,9 +451,13 @@ export const auditEvents = pgTable(
     actorId: text("actor_id").references(() => user.id, {
       onDelete: "set null",
     }),
+    actorName: text("actor_name"),
     action: text("action").notNull(),
     entityType: text("entity_type").notNull(),
     entityId: text("entity_id").notNull(),
+    outletId: uuid("outlet_id").references(() => outlets.id, {
+      onDelete: "set null",
+    }),
     previousValues: jsonb("previous_values"),
     newValues: jsonb("new_values"),
     reason: text("reason"),
@@ -429,5 +468,9 @@ export const auditEvents = pgTable(
   (table) => [
     index("audit_events_entity_idx").on(table.entityType, table.entityId),
     index("audit_events_actor_created_idx").on(table.actorId, table.createdAt),
+    index("audit_events_outlet_created_idx").on(
+      table.outletId,
+      table.createdAt,
+    ),
   ],
 );

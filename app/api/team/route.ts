@@ -7,6 +7,7 @@ import {
 import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
+import { getStoreHubLinkSummaries } from "@/lib/storehub-connections";
 import { canManageTargetAccess, getTeamAccess } from "@/lib/team-access";
 import { and, eq, inArray } from "drizzle-orm";
 
@@ -140,9 +141,17 @@ export async function GET(request: Request) {
       isSuperAdmin: access.isSuperAdmin,
     };
 
+    const storeHubLinks = access.isSuperAdmin
+      ? await getStoreHubLinkSummaries(access.outletIds)
+      : null;
+
     return Response.json({
       isSuperAdmin: access.isSuperAdmin,
-      outlets: access.outlets,
+      outlets: access.outlets.map((outlet) =>
+        storeHubLinks
+          ? { ...outlet, storeHub: storeHubLinks.get(outlet.id) ?? null }
+          : outlet,
+      ),
       members: members.map((member) => {
         const canManage = canManageTargetAccess(
           actor,
