@@ -61,6 +61,8 @@ export async function PATCH(
     const db = getDb();
     const authorizedConditions = [
       eq(staffDeviceEnrollments.id, id),
+      // Pending registrations are approved through the registration flow only.
+      eq(user.approvalStatus, "approved"),
       eq(user.canAccessClock, true),
       eq(outletMemberships.isActive, true),
       eq(outlets.isActive, true),

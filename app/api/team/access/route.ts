@@ -2,7 +2,11 @@ import { auditEvents, outletMemberships, user } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { canManageTargetAccess, getTeamAccess } from "@/lib/team-access";
+import {
+  canGrantBackoffice,
+  canManageTargetAccess,
+  getTeamAccess,
+} from "@/lib/team-access";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
@@ -56,6 +60,17 @@ export async function PATCH(request: Request) {
     if (parsed.data.userId === session.user.id)
       return Response.json(
         { error: "You cannot change your own app access." },
+        { status: 403 },
+      );
+    if (
+      parsed.data.canAccessBackoffice &&
+      !canGrantBackoffice({
+        id: session.user.id,
+        isSuperAdmin: access.isSuperAdmin,
+      })
+    )
+      return Response.json(
+        { error: "Only a super admin can grant Backoffice access." },
         { status: 403 },
       );
 

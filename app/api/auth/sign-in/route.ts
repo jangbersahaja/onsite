@@ -71,6 +71,7 @@ export async function POST(request: Request) {
       accountType: user.accountType,
       canAccessClock: user.canAccessClock,
       canAccessBackoffice: user.canAccessBackoffice,
+      approvalStatus: user.approvalStatus,
     })
     .from(user)
     .where(
@@ -113,6 +114,20 @@ export async function POST(request: Request) {
   await db
     .delete(authLoginAttempts)
     .where(eq(authLoginAttempts.key, attemptKey));
+
+  // Registrations stay pending until a manager approves them. No session is
+  // created for a pending account.
+  if (account.approvalStatus !== "approved") {
+    return Response.json(
+      {
+        error:
+          "Your account is waiting for admin approval. Please contact your manager/supervisor to approve for registration.",
+        code: "pending_approval",
+      },
+      { status: 403 },
+    );
+  }
+
   const newSession = await createSession(account.id);
   return Response.json(
     {

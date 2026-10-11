@@ -8,6 +8,7 @@ import {
 import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
+import { describeDeviceFromUserAgent } from "@/lib/device-name";
 import { createOneTimeToken } from "@/lib/one-time-token";
 import { getPinPepper } from "@/lib/pin";
 import {
@@ -75,6 +76,7 @@ export async function GET(request: Request) {
         .where(
           and(
             eq(staffDeviceEnrollments.status, "pending"),
+            eq(user.approvalStatus, "approved"),
             eq(user.canAccessClock, true),
             eq(outletMemberships.isActive, true),
             eq(outlets.isActive, true),
@@ -244,7 +246,13 @@ export async function POST(request: Request) {
     const created = await db.transaction(async (tx) => {
       const [enrollment] = await tx
         .insert(staffDeviceEnrollments)
-        .values({ userId: session.user.id, tokenHash: credential.tokenHash })
+        .values({
+          userId: session.user.id,
+          tokenHash: credential.tokenHash,
+          deviceName: describeDeviceFromUserAgent(
+            request.headers.get("user-agent"),
+          ),
+        })
         .returning({ id: staffDeviceEnrollments.id });
 
       await tx.insert(auditEvents).values({

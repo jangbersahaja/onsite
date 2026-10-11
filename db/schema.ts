@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  AnyPgColumn,
   boolean,
   check,
   doublePrecision,
@@ -30,6 +31,10 @@ export const staffDeviceStatusEnum = pgEnum("staff_device_status", [
   "active",
   "revoked",
 ]);
+export const userApprovalStatusEnum = pgEnum("user_approval_status", [
+  "pending",
+  "approved",
+]);
 
 export const user = pgTable(
   "user",
@@ -45,6 +50,17 @@ export const user = pgTable(
     canAccessBackoffice: boolean("can_access_backoffice")
       .notNull()
       .default(false),
+    approvalStatus: userApprovalStatusEnum("approval_status")
+      .notNull()
+      .default("approved"),
+    registrationOutletId: uuid("registration_outlet_id").references(
+      () => outlets.id,
+      { onDelete: "set null" },
+    ),
+    approvedBy: text("approved_by").references((): AnyPgColumn => user.id, {
+      onDelete: "set null",
+    }),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -90,6 +106,7 @@ export const staffDeviceEnrollments = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     tokenHash: text("token_hash").notNull().unique(),
     pinHash: text("pin_hash"),
+    deviceName: text("device_name"),
     status: staffDeviceStatusEnum("status").notNull().default("pending"),
     approvedBy: text("approved_by").references(() => user.id, {
       onDelete: "set null",
@@ -159,6 +176,29 @@ export const outletMemberships = pgTable(
     ),
     index("outlet_memberships_outlet_idx").on(table.outletId),
     index("outlet_memberships_user_idx").on(table.userId),
+  ],
+);
+
+export const registrationLinks = pgTable(
+  "registration_links",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    outletId: uuid("outlet_id")
+      .notNull()
+      .references(() => outlets.id, { onDelete: "cascade" }),
+    token: text("token").notNull().unique(),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("registration_links_one_active_per_outlet_uq")
+      .on(table.outletId)
+      .where(sql`${table.revokedAt} IS NULL`),
   ],
 );
 

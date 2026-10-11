@@ -30,3 +30,8 @@ export function canManageTargetAccess(
   if (!sharesOutlet) return false;
   return target.accountType === "user" && !target.canAccessBackoffice;
 }
+
+/** Only super admins may grant Backoffice access. */
+export function canGrantBackoffice(actor: TeamActor) {
+  return actor.isSuperAdmin;
+}

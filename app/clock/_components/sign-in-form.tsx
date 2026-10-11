@@ -22,6 +22,7 @@ export function SignInForm() {
     () => null,
   );
   const [isPasswordMode, setIsPasswordMode] = useState(false);
+  const [isPendingApproval, setIsPendingApproval] = useState(false);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -47,6 +48,10 @@ export function SignInForm() {
         },
       );
       const body = await response.json();
+      if (response.status === 403 && body.code === "pending_approval") {
+        setIsPendingApproval(true);
+        return;
+      }
       if (!response.ok) throw new Error(body.error ?? "Sign-in failed.");
       const authUser = body.user as {
         id: string;
@@ -75,6 +80,43 @@ export function SignInForm() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  if (isPendingApproval) {
+    return (
+      <main className="auth-screen">
+        <section
+          className="auth-panel"
+          aria-labelledby="pending-approval-title"
+        >
+          <Link className="brand-lockup auth-brand" href="/">
+            <Image
+              className="brand-mark"
+              src="/onsite%20logo.png"
+              alt=""
+              width={128}
+              height={128}
+            />
+            <span>OnSITE</span>
+          </Link>
+          <p className="eyebrow">REGISTRATION PENDING</p>
+          <h1 id="pending-approval-title">Waiting for admin approval.</h1>
+          <p className="auth-description">
+            Please contact your manager/supervisor to approve for registration.
+          </p>
+          <button
+            className="auth-mode-toggle"
+            type="button"
+            onClick={() => {
+              setIsPendingApproval(false);
+              setErrorMessage("");
+            }}
+          >
+            Back to sign in
+          </button>
+        </section>
+      </main>
+    );
   }
 
   return (
@@ -168,7 +210,7 @@ export function SignInForm() {
           </button>
         )}
         <p className="auth-footnote">
-          Accounts are created through a staff invitation.
+          New here? Ask your outlet manager for a registration QR code or link.
         </p>
       </section>
     </main>

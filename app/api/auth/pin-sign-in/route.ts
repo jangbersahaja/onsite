@@ -131,10 +131,22 @@ export async function POST(request: Request) {
         email: user.email,
         canAccessClock: user.canAccessClock,
         canAccessBackoffice: user.canAccessBackoffice,
+        approvalStatus: user.approvalStatus,
       })
       .from(user)
       .where(eq(user.id, userId))
       .limit(1);
+
+    if (account && account.approvalStatus !== "approved") {
+      return Response.json(
+        {
+          error:
+            "Your account is waiting for admin approval. Please contact your manager/supervisor to approve for registration.",
+          code: "pending_approval",
+        },
+        { status: 403 },
+      );
+    }
 
     const [enrollment] = account?.canAccessClock
       ? await db

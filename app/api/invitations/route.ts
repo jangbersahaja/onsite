@@ -3,7 +3,7 @@ import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { createOneTimeToken } from "@/lib/one-time-token";
-import { getTeamAccess } from "@/lib/team-access";
+import { canGrantBackoffice, getTeamAccess } from "@/lib/team-access";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
@@ -58,6 +58,18 @@ export async function POST(request: Request) {
       return Response.json(
         { error: "At least one app access grant is required." },
         { status: 400 },
+      );
+    }
+    if (
+      input.canAccessBackoffice &&
+      !canGrantBackoffice({
+        id: session.user.id,
+        isSuperAdmin: access.isSuperAdmin,
+      })
+    ) {
+      return Response.json(
+        { error: "Only a super admin can grant Backoffice access." },
+        { status: 403 },
       );
     }
     if (input.accountType === "super_admin" && !access.isSuperAdmin) {

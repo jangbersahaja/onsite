@@ -2,7 +2,10 @@ import { outletMemberships, outlets, user } from "@/db/schema";
 import { getDb } from "@/lib/db";
 import { and, eq } from "drizzle-orm";
 
-export { canManageTargetAccess } from "@/lib/team-access-rules";
+export {
+  canGrantBackoffice,
+  canManageTargetAccess,
+} from "@/lib/team-access-rules";
 export type { TeamActor, TeamTarget } from "@/lib/team-access-rules";
 
 export async function getTeamAccess(userId: string) {

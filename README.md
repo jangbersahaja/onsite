@@ -12,7 +12,7 @@ OnSITE is a multi-outlet workforce app built with Next.js, Drizzle, and Postgres
 
 2. Create a Postgres database and copy `.env.example` to `.env.local`. Set `DATABASE_URL` to the database connection string. Authentication uses random opaque session tokens stored as hashes in the database; no auth signing secret is required.
 
-3. Set the bootstrap admin and optional initial outlet values in `.env.local`. Use a real outlet address, coordinates, and IANA timezone. Invitations and password-reset links are copied and shared from the Team screen; no email service is required.
+3. Set the bootstrap admin and optional initial outlet values in `.env.local`. Use a real outlet address, coordinates, and IANA timezone. Outlet registration links (QR code or URL) and password-reset links are copied and shared from the Team screen; no email service is required.
 
 4. Apply the database migrations and create the initial super admin:
 
@@ -21,7 +21,7 @@ OnSITE is a multi-outlet workforce app built with Next.js, Drizzle, and Postgres
    npm run bootstrap-admin
    ```
 
-   Bootstrap is a one-time command for the first super admin. It can also create an initial outlet. Public account registration remains disabled; invitations are one-use and expire after seven days.
+   Bootstrap is a one-time command for the first super admin. It can also create an initial outlet. Account registration is only possible through an outlet registration link created by a backoffice user. New accounts start with clock access only, and each registration must be approved by a backoffice user for that outlet before sign-in is allowed. Backoffice access is granted only by a super admin.
 
 5. Start the app:
 

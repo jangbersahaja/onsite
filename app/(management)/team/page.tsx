@@ -5,7 +5,8 @@ import { useConfirmDialog } from "@/app/_components/confirm-dialog";
 import { ModalDialog } from "@/app/_components/modal-dialog";
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState, type FormEvent } from "react";
+import QRCode from "qrcode";
+import { useEffect, useState } from "react";
 
 type TeamMember = {
   userId: string;
@@ -32,17 +33,25 @@ type TeamPerson = {
   canAccessBackoffice: boolean;
   canManageAccess: boolean;
   canReset: boolean;
+  pendingDevice: StaffDevice | undefined;
+  activeDevice: StaffDevice | undefined;
 };
 
-type TeamInvitation = {
+type PendingRegistration = {
   id: string;
+  name: string;
+  username: string;
   email: string;
-  accountType: "super_admin" | "user";
-  canAccessClock: boolean;
-  canAccessBackoffice: boolean;
-  outletIds: string[];
-  outletNames: string[];
-  expiresAt: string;
+  requestedAt: string;
+  outletId: string | null;
+  outletName: string | null;
+  photoUrl: string;
+};
+
+type RegistrationLinkOutlet = {
+  outletId: string;
+  outletName: string;
+  link: { id: string; url: string; createdAt: string } | null;
 };
 
 type TeamOutlet = {
@@ -59,6 +68,7 @@ type StaffDevice = {
   id: string;
   userId: string;
   status: "pending" | "active";
+  deviceName: string | null;
   createdAt: string;
   approvedAt: string | null;
 };
@@ -67,7 +77,6 @@ type TeamData = {
   isSuperAdmin: boolean;
   outlets: TeamOutlet[];
   members: TeamMember[];
-  invitations: TeamInvitation[];
   staffDevices: StaffDevice[];
 };
 
@@ -77,6 +86,61 @@ async function loadTeamData(outletId?: string) {
   const body = await response.json();
   if (!response.ok) throw new Error(body.error ?? "Could not load team data.");
   return body as TeamData;
+}
+
+async function loadRegistrations() {
+  const response = await fetch("/api/registrations", { cache: "no-store" });
+  const body = await response.json();
+  if (!response.ok)
+    throw new Error(body.error ?? "Could not load registrations.");
+  return body.requests as PendingRegistration[];
+}
+
+async function loadRegistrationLinks() {
+  const response = await fetch("/api/registration-links", {
+    cache: "no-store",
+  });
+  const body = await response.json();
+  if (!response.ok)
+    throw new Error(body.error ?? "Could not load registration links.");
+  return body.outlets as RegistrationLinkOutlet[];
+}
+
+function RegistrationQr({ url, label }: { url: string; label: string }) {
+  const [src, setSrc] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    QRCode.toDataURL(url, { margin: 1, width: 240 })
+      .then((dataUrl) => {
+        if (active) setSrc(dataUrl);
+      })
+      .catch(() => {
+        if (active) setSrc("");
+      });
+    return () => {
+      active = false;
+    };
+  }, [url]);
+
+  if (!src) {
+    return (
+      <span className="registration-qr-placeholder" aria-hidden="true">
+        QR
+      </span>
+    );
+  }
+
+  return (
+    <Image
+      className="registration-qr"
+      src={src}
+      alt={`QR code for ${label}`}
+      width={240}
+      height={240}
+      unoptimized
+    />
+  );
 }
 
 function formatExpiry(value: string) {
@@ -147,35 +211,39 @@ function TeamCardMenuButton({
   );
 }
 
-type TeamView = "people" | "invitations" | "devices";
+function deviceStatusLabel(person: TeamPerson) {
+  if (!person.canAccessClock) return "Not required";
+  if (person.pendingDevice)
+    return person.activeDevice
+      ? "Replacement awaiting approval"
+      : "Awaiting approval";
+  return person.activeDevice
+    ? (person.activeDevice.deviceName ?? "Unknown device")
+    : "Not enrolled";
+}
+
+type TeamView = "people" | "approvals" | "registration";
 
 export default function TeamPage() {
   const [data, setData] = useState<TeamData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isInviting, setIsInviting] = useState(false);
-  const [isInviteDialogOpen, setIsInviteDialogOpen] = useState(false);
   const [selectedOutletId, setSelectedOutletId] = useState("");
   const outletId = selectedOutletId || undefined;
-  const [email, setEmail] = useState("");
-  const [inviteType, setInviteType] = useState<"super_admin" | "user">("user");
-  const [outletIds, setOutletIds] = useState<string[]>([]);
-  const [canAccessClock, setCanAccessClock] = useState(true);
-  const [canAccessBackoffice, setCanAccessBackoffice] = useState(false);
-  const [issuedInvite, setIssuedInvite] = useState("");
+  const [pendingRegistrations, setPendingRegistrations] = useState<
+    PendingRegistration[]
+  >([]);
+  const [registrationOutlets, setRegistrationOutlets] = useState<
+    RegistrationLinkOutlet[]
+  >([]);
+  const [registrationBusyKey, setRegistrationBusyKey] = useState("");
   const [issuedResetLink, setIssuedResetLink] = useState("");
   const [message, setMessage] = useState("");
-  const [inviteMessage, setInviteMessage] = useState("");
   const [resettingUserId, setResettingUserId] = useState("");
   const [resetUserId, setResetUserId] = useState("");
-  const [revokingInvitationId, setRevokingInvitationId] = useState("");
   const [deviceActionId, setDeviceActionId] = useState("");
   const [permissionUserId, setPermissionUserId] = useState("");
   const [activeTeamView, setActiveTeamView] = useState<TeamView>("people");
-  const [showAllStaffDevices, setShowAllStaffDevices] = useState(false);
-  const [openActionMenu, setOpenActionMenu] = useState<{
-    view: "people" | "devices";
-    userId: string;
-  } | null>(null);
+  const [openActionMenu, setOpenActionMenu] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -200,50 +268,86 @@ export default function TeamPage() {
     };
   }, [outletId]);
 
+  useEffect(() => {
+    let active = true;
+    loadRegistrations()
+      .then((requests) => {
+        if (active) setPendingRegistrations(requests);
+      })
+      .catch((error: unknown) => {
+        if (active)
+          setMessage(
+            error instanceof Error
+              ? error.message
+              : "Could not load registrations.",
+          );
+      });
+    loadRegistrationLinks()
+      .then((outletLinks) => {
+        if (active) setRegistrationOutlets(outletLinks);
+      })
+      .catch((error: unknown) => {
+        if (active)
+          setMessage(
+            error instanceof Error
+              ? error.message
+              : "Could not load registration links.",
+          );
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
   const { confirm, confirmDialog } = useConfirmDialog();
 
-  async function handleInvite(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (isInviting || (inviteType === "user" && !outletIds.length)) return;
+  async function refreshRegistrations() {
+    const [requests, outletLinks] = await Promise.all([
+      loadRegistrations(),
+      loadRegistrationLinks(),
+    ]);
+    setPendingRegistrations(requests);
+    setRegistrationOutlets(outletLinks);
+  }
+
+  async function handleCreateLink(targetOutletId: string, rotate: boolean) {
+    if (registrationBusyKey) return;
     if (
+      rotate &&
       !(await confirm({
-        title: `Create invitation for ${email}?`,
+        title: "Replace registration link?",
         description:
-          "A link will be created for this person to set up their account.",
-        confirmLabel: "Create invitation",
+          "The current link and QR code will stop working straight away.",
+        confirmLabel: "Replace link",
+        tone: "danger",
       }))
     )
       return;
-    setIsInviting(true);
-    setInviteMessage("");
-    setIssuedInvite("");
+    setRegistrationBusyKey(`outlet:${targetOutletId}`);
+    setMessage("");
     try {
-      const response = await fetch("/api/invitations", {
+      const response = await fetch("/api/registration-links", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          accountType: inviteType,
-          canAccessClock,
-          canAccessBackoffice,
-          outletIds,
-        }),
+        body: JSON.stringify({ outletId: targetOutletId, rotate }),
       });
-      const body = await response.json();
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
       if (!response.ok)
-        throw new Error(body.error ?? "Could not create invitation.");
-      setIssuedInvite(body.inviteUrl);
-      setInviteMessage(
-        `Link created for ${email}. It expires ${formatExpiry(body.expiresAt)}.`,
+        throw new Error(body.error ?? "Could not create registration link.");
+      await refreshRegistrations();
+      setMessage(
+        rotate ? "Registration link replaced." : "Registration link created.",
       );
-      setEmail("");
-      setData(await loadTeamData(outletId));
     } catch (error) {
-      setInviteMessage(
-        error instanceof Error ? error.message : "Could not create invitation.",
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not create registration link.",
       );
     } finally {
-      setIsInviting(false);
+      setRegistrationBusyKey("");
     }
   }
 
@@ -359,43 +463,98 @@ export default function TeamPage() {
     }
   }
 
-  async function handleRevoke(invitationId: string) {
-    if (revokingInvitationId) return;
+  async function handleRevokeLink(linkId: string) {
+    if (registrationBusyKey) return;
     if (
       !(await confirm({
-        title: "Revoke invitation?",
-        description: "Its link will stop working straight away.",
-        confirmLabel: "Revoke invitation",
+        title: "Revoke registration link?",
+        description:
+          "Anyone with this link or QR code will no longer be able to register.",
+        confirmLabel: "Revoke link",
         tone: "danger",
       }))
     )
       return;
-    setRevokingInvitationId(invitationId);
+    setRegistrationBusyKey(`link:${linkId}`);
     setMessage("");
     try {
-      const response = await fetch(`/api/invitations/${invitationId}`, {
+      const response = await fetch(`/api/registration-links/${linkId}`, {
         method: "DELETE",
       });
-      const body = await response.json();
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
       if (!response.ok)
-        throw new Error(body.error ?? "Could not revoke invitation.");
-      setData(await loadTeamData(outletId));
-      setMessage("Invitation revoked. Its link can no longer be used.");
+        throw new Error(body.error ?? "Could not revoke registration link.");
+      await refreshRegistrations();
+      setMessage("Registration link revoked.");
     } catch (error) {
       setMessage(
-        error instanceof Error ? error.message : "Could not revoke invitation.",
+        error instanceof Error
+          ? error.message
+          : "Could not revoke registration link.",
       );
     } finally {
-      setRevokingInvitationId("");
+      setRegistrationBusyKey("");
     }
   }
 
-  async function copyInvite() {
+  async function handleRegistrationDecision(
+    registration: PendingRegistration,
+    action: "approve" | "reject",
+  ) {
+    if (registrationBusyKey) return;
+    const approving = action === "approve";
+    if (
+      !(await confirm({
+        title: approving
+          ? `Approve ${registration.name}?`
+          : `Reject ${registration.name}?`,
+        description: approving
+          ? "They will get clock access to this outlet and their device will be approved."
+          : "Their registration will be removed.",
+        confirmLabel: approving ? "Approve" : "Reject",
+        tone: approving ? "default" : "danger",
+      }))
+    )
+      return;
+    setRegistrationBusyKey(`reg:${registration.id}:${action}`);
+    setMessage("");
     try {
-      await navigator.clipboard.writeText(issuedInvite);
-      setInviteMessage("Invitation link copied.");
+      const response = await fetch(`/api/registrations/${registration.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      if (!response.ok)
+        throw new Error(body.error ?? "Could not update registration.");
+      await refreshRegistrations();
+      setData(await loadTeamData(outletId));
+      setMessage(
+        approving
+          ? `${registration.name} approved.`
+          : `Registration from ${registration.name} rejected.`,
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not update registration.",
+      );
+    } finally {
+      setRegistrationBusyKey("");
+    }
+  }
+
+  async function copyRegistrationLink(url: string) {
+    try {
+      await navigator.clipboard.writeText(url);
+      setMessage("Registration link copied.");
     } catch {
-      setInviteMessage("Copy failed. Select and copy the invitation link.");
+      setMessage("Copy failed. Select and copy the registration link.");
     }
   }
 
@@ -441,6 +600,9 @@ export default function TeamPage() {
       person.canReset ||= member.canReset;
       person.canManageAccess ||= member.canManageAccess;
     } else {
+      const devices = data.staffDevices.filter(
+        (device) => device.userId === member.userId,
+      );
       peopleById.set(member.userId, {
         userId: member.userId,
         name: member.name,
@@ -451,6 +613,8 @@ export default function TeamPage() {
         canAccessBackoffice: member.canAccessBackoffice,
         canManageAccess: member.canManageAccess,
         canReset: member.canReset,
+        pendingDevice: devices.find((device) => device.status === "pending"),
+        activeDevice: devices.find((device) => device.status === "active"),
       });
     }
   }
@@ -459,61 +623,28 @@ export default function TeamPage() {
   const resetPerson = visiblePeople.find(
     (person) => person.userId === resetUserId,
   );
-  const staffMembers = Array.from(
-    new Map(
-      data.members
-        .filter((member) => member.canAccessClock)
-        .map((member) => [member.userId, member]),
-    ).values(),
-  );
-  const visibleStaffMembers = staffMembers
-    .filter(
-      (member) =>
-        showAllStaffDevices ||
-        data.staffDevices.some((device) => device.userId === member.userId),
-    )
-    .sort((left, right) => {
-      const leftPending = data.staffDevices.some(
-        (device) =>
-          device.userId === left.userId && device.status === "pending",
-      );
-      const rightPending = data.staffDevices.some(
-        (device) =>
-          device.userId === right.userId && device.status === "pending",
-      );
-      return (
-        Number(rightPending) - Number(leftPending) ||
-        left.name.localeCompare(right.name)
-      );
-    });
   const pendingDeviceCount = data.staffDevices.filter(
     (device) => device.status === "pending",
   ).length;
-  const actionPerson =
-    openActionMenu?.view === "people"
-      ? visiblePeople.find((person) => person.userId === openActionMenu.userId)
-      : undefined;
-  const actionStaff =
-    openActionMenu?.view === "devices"
-      ? staffMembers.find((member) => member.userId === openActionMenu.userId)
-      : undefined;
-  const actionDevices = data.staffDevices.filter(
-    (device) => device.userId === actionStaff?.userId,
+  const actionPerson = visiblePeople.find(
+    (person) => person.userId === openActionMenu,
   );
-  const actionPending = actionDevices.find(
-    (device) => device.status === "pending",
+  const actionPending = actionPerson?.pendingDevice;
+  const actionActive = actionPerson?.activeDevice;
+  const visiblePendingRegistrations = pendingRegistrations.filter(
+    (registration) => !outletId || registration.outletId === outletId,
   );
-  const actionActive = actionDevices.find(
-    (device) => device.status === "active",
+  const visibleRegistrationOutlets = registrationOutlets.filter(
+    (outlet) => !outletId || outlet.outletId === outletId,
   );
   const visibleTeamViews: { id: TeamView; label: string; count?: number }[] = [
-    { id: "people", label: "People" },
+    { id: "people", label: "People", count: pendingDeviceCount },
     {
-      id: "invitations",
-      label: "Invitations",
-      count: data.invitations.length,
+      id: "approvals",
+      label: "Approvals",
+      count: visiblePendingRegistrations.length,
     },
-    { id: "devices", label: "Devices", count: pendingDeviceCount },
+    { id: "registration", label: "Registration" },
   ];
 
   return (
@@ -526,7 +657,7 @@ export default function TeamPage() {
           <h1>Team</h1>
           <p className="subheading">
             {outletId
-              ? "Manage people, invitations, and clock-in access for this outlet."
+              ? "Manage people, registrations, and clock-in access for this outlet."
               : "Manage people and access across all your outlets."}
           </p>
         </div>
@@ -573,31 +704,23 @@ export default function TeamPage() {
       )}
 
       <ModalDialog
-        open={Boolean(actionPerson || actionStaff)}
+        open={Boolean(actionPerson)}
         onOpenChange={(open) => {
           if (!open) setOpenActionMenu(null);
         }}
         labelledBy="team-action-title"
       >
-        {(actionPerson || actionStaff) && (
+        {actionPerson && (
           <div className="dialog-panel">
             <header className="dialog-header">
               <div className="team-action-heading">
                 <TeamAvatar
-                  name={actionPerson?.name ?? actionStaff?.name ?? ""}
-                  photoUrl={
-                    actionPerson?.profilePhotoUrl ??
-                    actionStaff?.profilePhotoUrl ??
-                    null
-                  }
+                  name={actionPerson.name}
+                  photoUrl={actionPerson.profilePhotoUrl}
                 />
                 <div>
-                  <p className="eyebrow">
-                    {actionPerson ? "PERSON" : "STAFF DEVICE"}
-                  </p>
-                  <h2 id="team-action-title">
-                    {actionPerson?.name ?? actionStaff?.name}
-                  </h2>
+                  <p className="eyebrow">PERSON</p>
+                  <h2 id="team-action-title">{actionPerson.name}</h2>
                 </div>
               </div>
               <button
@@ -649,152 +772,6 @@ export default function TeamPage() {
             </div>
           </div>
         )}
-      </ModalDialog>
-
-      <ModalDialog
-        open={isInviteDialogOpen}
-        onOpenChange={setIsInviteDialogOpen}
-        labelledBy="invite-team-title"
-      >
-        <div className="dialog-panel">
-          <header className="dialog-header">
-            <div>
-              <p className="eyebrow">NEW ACCESS</p>
-              <h2 id="invite-team-title">Invite a person</h2>
-            </div>
-            <button
-              className="dialog-close"
-              type="button"
-              aria-label="Close dialog"
-              onClick={() => setIsInviteDialogOpen(false)}
-            >
-              ×
-            </button>
-          </header>
-          {data.outlets.length || data.isSuperAdmin ? (
-            <form
-              className="team-dialog-form invite-dialog-form"
-              onSubmit={handleInvite}
-            >
-              <label>
-                Work email
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  required
-                />
-              </label>
-              {data.isSuperAdmin && (
-                <label>
-                  Account type
-                  <select
-                    value={inviteType}
-                    onChange={(event) => {
-                      const nextType = event.target.value as typeof inviteType;
-                      setInviteType(nextType);
-                      if (nextType === "super_admin")
-                        setCanAccessBackoffice(true);
-                    }}
-                  >
-                    <option value="user">User</option>
-                    <option value="super_admin">Super admin</option>
-                  </select>
-                </label>
-              )}
-              <fieldset className="dialog-access-options">
-                <legend>App access</legend>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={canAccessClock}
-                    onChange={(event) =>
-                      setCanAccessClock(event.target.checked)
-                    }
-                  />
-                  Clock
-                </label>
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={canAccessBackoffice}
-                    onChange={(event) =>
-                      setCanAccessBackoffice(event.target.checked)
-                    }
-                  />
-                  Backoffice
-                </label>
-              </fieldset>
-              {data.outlets.length > 0 && (
-                <fieldset className="dialog-access-options dialog-outlet-options">
-                  <legend>Outlet assignments</legend>
-                  {data.outlets.map((outlet) => (
-                    <label key={outlet.id}>
-                      <input
-                        type="checkbox"
-                        checked={outletIds.includes(outlet.id)}
-                        onChange={(event) =>
-                          setOutletIds((current) =>
-                            event.target.checked
-                              ? [...current, outlet.id]
-                              : current.filter((id) => id !== outlet.id),
-                          )
-                        }
-                      />
-                      {outlet.name}
-                    </label>
-                  ))}
-                </fieldset>
-              )}
-              <div className="dialog-actions">
-                <button
-                  className="team-secondary-action"
-                  type="button"
-                  onClick={() => setIsInviteDialogOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="team-primary-action"
-                  type="submit"
-                  disabled={isInviting}
-                >
-                  {isInviting ? "Creating…" : "Create invite link"}
-                </button>
-              </div>
-            </form>
-          ) : (
-            <p className="auth-description">
-              No active outlets are available for your account.
-            </p>
-          )}
-          {inviteMessage && (
-            <p className="team-message" role="status" aria-live="polite">
-              {inviteMessage}
-            </p>
-          )}
-          {issuedInvite && (
-            <div className="issued-invite">
-              <input
-                aria-label="Invitation link"
-                readOnly
-                value={issuedInvite}
-                onFocus={(event) => event.currentTarget.select()}
-              />
-              <button
-                className="copy-invite-button"
-                type="button"
-                onClick={copyInvite}
-              >
-                Copy link
-              </button>
-              <p>
-                This link works once and expires after seven days. Share it only
-                with the invited person.
-              </p>
-            </div>
-          )}
-        </div>
       </ModalDialog>
 
       {confirmDialog}
@@ -862,29 +839,11 @@ export default function TeamPage() {
               <p className="eyebrow">TEAM ACCESS</p>
               <h2 id="team-members-title">People</h2>
               <p className="team-section-description">
-                Manage people and their outlet access.
+                Manage people, outlet access, and clock-in devices.
               </p>
             </div>
             <div className="team-heading-actions">
               <span className="team-count">{visiblePeople.length}</span>
-              <button
-                className="team-primary-action"
-                type="button"
-                disabled={!data.outlets.length && !data.isSuperAdmin}
-                onClick={() => {
-                  setInviteMessage("");
-                  setOutletIds(
-                    outletId
-                      ? [outletId]
-                      : data.outlets[0]
-                        ? [data.outlets[0].id]
-                        : [],
-                  );
-                  setIsInviteDialogOpen(true);
-                }}
-              >
-                Add person
-              </button>
             </div>
           </div>
           <div className="team-table-wrap">
@@ -894,6 +853,7 @@ export default function TeamPage() {
                   <th>PERSON</th>
                   <th>OUTLET ACCESS</th>
                   <th>APP ACCESS</th>
+                  <th>DEVICE</th>
                   <th>ACTIONS</th>
                 </tr>
               </thead>
@@ -911,15 +871,12 @@ export default function TeamPage() {
                           <small>{person.email}</small>
                         </div>
                       </div>
-                      {person.canReset && (
+                      {(person.canReset ||
+                        person.pendingDevice ||
+                        person.activeDevice) && (
                         <TeamCardMenuButton
                           name={person.name}
-                          onOpen={() =>
-                            setOpenActionMenu({
-                              view: "people",
-                              userId: person.userId,
-                            })
-                          }
+                          onOpen={() => setOpenActionMenu(person.userId)}
                         />
                       )}
                     </td>
@@ -982,6 +939,20 @@ export default function TeamPage() {
                         </label>
                       </div>
                     </td>
+                    <td data-label="Device">
+                      {deviceStatusLabel(person)}
+                      {person.pendingDevice ? (
+                        <small>
+                          {person.pendingDevice.deviceName ?? "Unknown device"}
+                          {" · "}
+                          {formatExpiry(person.pendingDevice.createdAt)}
+                        </small>
+                      ) : person.activeDevice?.approvedAt ? (
+                        <small>
+                          {formatExpiry(person.activeDevice.approvedAt)}
+                        </small>
+                      ) : null}
+                    </td>
                     <td data-label="Actions">
                       {person.canReset && (
                         <button
@@ -992,12 +963,37 @@ export default function TeamPage() {
                           Reset password
                         </button>
                       )}
+                      {person.pendingDevice && (
+                        <Link
+                          className="reset-link-button"
+                          href="/corrections/review"
+                        >
+                          Review request
+                        </Link>
+                      )}
+                      {person.activeDevice && (
+                        <button
+                          className="reset-link-button is-danger"
+                          type="button"
+                          disabled={Boolean(deviceActionId)}
+                          onClick={() =>
+                            void handleStaffDeviceAction(
+                              person.activeDevice!.id,
+                              "revoke",
+                            )
+                          }
+                        >
+                          {deviceActionId === person.activeDevice.id
+                            ? "Saving…"
+                            : "Revoke device"}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
                 {!visiblePeople.length && (
                   <tr>
-                    <td colSpan={4} className="empty-table">
+                    <td colSpan={5} className="empty-table">
                       No team members found.
                     </td>
                   </tr>
@@ -1005,6 +1001,13 @@ export default function TeamPage() {
               </tbody>
             </table>
           </div>
+          {visiblePeople.some(
+            (person) => person.pendingDevice && person.activeDevice,
+          ) && (
+            <p className="auth-description">
+              Approving a replacement immediately revokes the previous device.
+            </p>
+          )}
           {issuedResetLink && (
             <div className="issued-invite">
               <input
@@ -1029,183 +1032,209 @@ export default function TeamPage() {
         </section>
       )}
 
-      {activeTeamView === "devices" && (
+      {activeTeamView === "approvals" && (
         <section
           className="team-list-section"
-          aria-labelledby="staff-devices-title"
+          aria-labelledby="pending-registrations-title"
         >
           <div className="section-heading">
             <div>
-              <p className="eyebrow">CLOCK-IN ACCESS</p>
-              <h2 id="staff-devices-title">Staff devices</h2>
+              <p className="eyebrow">REGISTRATION</p>
+              <h2 id="pending-registrations-title">Pending approvals</h2>
+              <p className="team-section-description">
+                Approving grants clock access to the outlet and activates the
+                applicant&apos;s device.
+              </p>
             </div>
-            <div className="team-heading-actions">
-              <label className="device-all-staff-toggle">
-                <input
-                  type="checkbox"
-                  checked={showAllStaffDevices}
-                  onChange={(event) =>
-                    setShowAllStaffDevices(event.target.checked)
-                  }
-                />
-                Show all clock users
-              </label>
-              <span className="team-count">{visibleStaffMembers.length}</span>
-            </div>
+            <span className="team-count">
+              {visiblePendingRegistrations.length}
+            </span>
           </div>
           <div className="team-table-wrap">
             <table className="team-table">
               <thead>
                 <tr>
                   <th>PERSON</th>
-                  <th>DEVICE STATUS</th>
+                  <th>OUTLET</th>
                   <th>REQUESTED</th>
                   <th>ACTIONS</th>
                 </tr>
               </thead>
               <tbody>
-                {visibleStaffMembers.map((member) => {
-                  const devices = data.staffDevices.filter(
-                    (device) => device.userId === member.userId,
-                  );
-                  const pending = devices.find(
-                    (device) => device.status === "pending",
-                  );
-                  const active = devices.find(
-                    (device) => device.status === "active",
-                  );
-                  return (
-                    <tr key={member.userId}>
-                      <td className="team-person-cell">
-                        <div className="team-person">
-                          <TeamAvatar
-                            name={member.name}
-                            photoUrl={member.profilePhotoUrl}
-                          />
-                          <div className="team-person-text">
-                            <strong>{member.name}</strong>
-                            <small>{member.email}</small>
-                          </div>
+                {visiblePendingRegistrations.map((registration) => (
+                  <tr key={registration.id}>
+                    <td className="team-person-cell">
+                      <div className="team-person">
+                        <TeamAvatar
+                          name={registration.name}
+                          photoUrl={registration.photoUrl}
+                        />
+                        <div className="team-person-text">
+                          <strong>{registration.name}</strong>
+                          <small>
+                            {registration.username} · {registration.email}
+                          </small>
                         </div>
-                        {(pending || active) && (
-                          <TeamCardMenuButton
-                            name={member.name}
-                            onOpen={() =>
-                              setOpenActionMenu({
-                                view: "devices",
-                                userId: member.userId,
-                              })
-                            }
-                          />
-                        )}
-                      </td>
-                      <td data-label="Device status">
-                        {pending
-                          ? active
-                            ? "Replacement awaiting approval"
-                            : "Awaiting approval"
-                          : active
-                            ? "Approved"
-                            : "Not enrolled"}
-                      </td>
-                      <td data-label="Requested">
-                        {pending
-                          ? formatExpiry(pending.createdAt)
-                          : active?.approvedAt
-                            ? formatExpiry(active.approvedAt)
-                            : "—"}
-                      </td>
-                      <td data-label="Actions">
-                        {pending && (
-                          <Link
-                            className="reset-link-button"
-                            href="/corrections/review"
-                          >
-                            Review request
-                          </Link>
-                        )}
-                        {active && (
-                          <button
-                            className="reset-link-button"
-                            type="button"
-                            disabled={Boolean(deviceActionId)}
-                            onClick={() =>
-                              void handleStaffDeviceAction(active.id, "revoke")
-                            }
-                          >
-                            {deviceActionId === active.id
-                              ? "Saving…"
-                              : "Revoke"}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-                {!visibleStaffMembers.length && (
+                      </div>
+                    </td>
+                    <td data-label="Outlet">
+                      {registration.outletName ?? "—"}
+                    </td>
+                    <td data-label="Requested">
+                      {formatExpiry(registration.requestedAt)}
+                    </td>
+                    <td
+                      data-label="Actions"
+                      className="registration-action-cell"
+                    >
+                      <div className="registration-actions">
+                        <button
+                          className="team-primary-action"
+                          type="button"
+                          disabled={Boolean(registrationBusyKey)}
+                          onClick={() =>
+                            void handleRegistrationDecision(
+                              registration,
+                              "approve",
+                            )
+                          }
+                        >
+                          {registrationBusyKey ===
+                          `reg:${registration.id}:approve`
+                            ? "Saving…"
+                            : "Approve"}
+                        </button>
+                        <button
+                          className="reset-link-button"
+                          type="button"
+                          disabled={Boolean(registrationBusyKey)}
+                          onClick={() =>
+                            void handleRegistrationDecision(
+                              registration,
+                              "reject",
+                            )
+                          }
+                        >
+                          {registrationBusyKey ===
+                          `reg:${registration.id}:reject`
+                            ? "Saving…"
+                            : "Reject"}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {!visiblePendingRegistrations.length && (
                   <tr>
                     <td colSpan={4} className="empty-table">
-                      {showAllStaffDevices
-                        ? "No clock users found."
-                        : "No device requests or enrolled devices."}
+                      No pending registrations.
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
-          {data.staffDevices.some((device) => device.status === "pending") && (
-            <p className="auth-description">
-              Approving a replacement immediately revokes the previous device.
-            </p>
-          )}
         </section>
       )}
 
-      {activeTeamView === "invitations" && (
+      {activeTeamView === "registration" && (
         <section
           className="team-list-section"
-          aria-labelledby="pending-invites-title"
+          aria-labelledby="registration-links-title"
         >
           <div className="section-heading">
             <div>
-              <p className="eyebrow">UNACCEPTED LINKS</p>
-              <h2 id="pending-invites-title">Pending invitations</h2>
+              <p className="eyebrow">JOIN LINK</p>
+              <h2 id="registration-links-title">Registration links</h2>
+              <p className="team-section-description">
+                Share the QR code or link with a new person. They fill in their
+                own details, and a backoffice user for the outlet approves them.
+                Links work until revoked.
+              </p>
             </div>
-            <span className="team-count">{data.invitations.length}</span>
           </div>
-          <div className="pending-invite-list">
-            {data.invitations.map((invitation) => (
-              <div className="pending-invite-row" key={invitation.id}>
-                <strong>{invitation.email}</strong>
-                <span>
-                  {invitation.accountType === "super_admin"
-                    ? "Super admin"
-                    : "User"}{" "}
-                  ·{" "}
-                  {[
-                    invitation.canAccessClock && "Clock",
-                    invitation.canAccessBackoffice && "Backoffice",
-                  ]
-                    .filter(Boolean)
-                    .join(" + ")}{" "}
-                  · {invitation.outletNames.join(", ") || "No outlets yet"}
-                </span>
-                <small>Expires {formatExpiry(invitation.expiresAt)}</small>
-                <button
-                  className="reset-link-button"
-                  type="button"
-                  disabled={Boolean(revokingInvitationId)}
-                  onClick={() => void handleRevoke(invitation.id)}
+          <div className="registration-link-list">
+            {visibleRegistrationOutlets.map((outlet) => {
+              const link = outlet.link;
+              const isBusy = registrationBusyKey.length > 0;
+              return (
+                <article
+                  className="registration-link-card"
+                  key={outlet.outletId}
                 >
-                  {revokingInvitationId === invitation.id
-                    ? "Revoking…"
-                    : "Revoke link"}
-                </button>
-              </div>
-            ))}
-            {!data.invitations.length && (
-              <p className="auth-description">No pending invitations.</p>
+                  {link && (
+                    <RegistrationQr url={link.url} label={outlet.outletName} />
+                  )}
+                  <div className="registration-link-details">
+                    <strong>{outlet.outletName}</strong>
+                    {link ? (
+                      <>
+                        <input
+                          aria-label={`Registration link for ${outlet.outletName}`}
+                          readOnly
+                          value={link.url}
+                          onFocus={(event) => event.currentTarget.select()}
+                        />
+                        <small>Created {formatExpiry(link.createdAt)}</small>
+                        <div className="registration-actions">
+                          <button
+                            className="copy-invite-button"
+                            type="button"
+                            onClick={() => void copyRegistrationLink(link.url)}
+                          >
+                            Copy link
+                          </button>
+                          <button
+                            className="reset-link-button"
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() =>
+                              void handleCreateLink(outlet.outletId, true)
+                            }
+                          >
+                            {registrationBusyKey === `outlet:${outlet.outletId}`
+                              ? "Saving…"
+                              : "Replace link"}
+                          </button>
+                          <button
+                            className="reset-link-button"
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() => void handleRevokeLink(link.id)}
+                          >
+                            {registrationBusyKey === `link:${link.id}`
+                              ? "Revoking…"
+                              : "Revoke"}
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <small>No active registration link.</small>
+                        <div className="registration-actions">
+                          <button
+                            className="team-primary-action"
+                            type="button"
+                            disabled={isBusy}
+                            onClick={() =>
+                              void handleCreateLink(outlet.outletId, false)
+                            }
+                          >
+                            {registrationBusyKey === `outlet:${outlet.outletId}`
+                              ? "Creating…"
+                              : "Create link"}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+            {!visibleRegistrationOutlets.length && (
+              <p className="auth-description">
+                No outlets are available for registration links.
+              </p>
             )}
           </div>
         </section>

@@ -1,6 +1,4 @@
 import {
-  invitationOutlets,
-  invitations,
   outletMemberships,
   outlets,
   staffDeviceEnrollments,
@@ -10,7 +8,7 @@ import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { canManageTargetAccess, getTeamAccess } from "@/lib/team-access";
-import { and, desc, eq, gt, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 function unavailable() {
   return Response.json(
@@ -47,8 +45,8 @@ export async function GET(request: Request) {
       : access.outletIds;
 
     const db = getDb();
-    const [members, invitationRows, backofficeUsers, backofficeAssignments] =
-      await Promise.all([
+    const [members, backofficeUsers, backofficeAssignments] = await Promise.all(
+      [
         db
           .select({
             userId: user.id,
@@ -74,32 +72,6 @@ export async function GET(request: Request) {
           )
           .orderBy(user.name)
           .limit(200),
-        db
-          .select({
-            id: invitations.id,
-            email: invitations.email,
-            accountType: invitations.accountType,
-            canAccessClock: invitations.canAccessClock,
-            canAccessBackoffice: invitations.canAccessBackoffice,
-            outletId: invitationOutlets.outletId,
-            outletName: outlets.name,
-            expiresAt: invitations.expiresAt,
-          })
-          .from(invitations)
-          .leftJoin(
-            invitationOutlets,
-            eq(invitationOutlets.invitationId, invitations.id),
-          )
-          .leftJoin(outlets, eq(invitationOutlets.outletId, outlets.id))
-          .where(
-            and(
-              isNull(invitations.acceptedAt),
-              isNull(invitations.revokedAt),
-              gt(invitations.expiresAt, new Date()),
-            ),
-          )
-          .orderBy(desc(invitations.createdAt))
-          .limit(300),
         access.isSuperAdmin
           ? db
               .selectDistinct({
@@ -134,47 +106,7 @@ export async function GET(request: Request) {
                 ),
               )
           : Promise.resolve([]),
-      ]);
-
-    const invitationMap = new Map<
-      string,
-      {
-        id: string;
-        email: string;
-        accountType: "super_admin" | "user";
-        canAccessClock: boolean;
-        canAccessBackoffice: boolean;
-        outletIds: string[];
-        outletNames: string[];
-        expiresAt: Date;
-      }
-    >();
-    for (const row of invitationRows) {
-      const invitation = invitationMap.get(row.id) ?? {
-        id: row.id,
-        email: row.email,
-        accountType: row.accountType,
-        canAccessClock: row.canAccessClock,
-        canAccessBackoffice: row.canAccessBackoffice,
-        outletIds: [],
-        outletNames: [],
-        expiresAt: row.expiresAt,
-      };
-      if (row.outletId && !invitation.outletIds.includes(row.outletId)) {
-        invitation.outletIds.push(row.outletId);
-        if (row.outletName) invitation.outletNames.push(row.outletName);
-      }
-      invitationMap.set(row.id, invitation);
-    }
-    const pendingInvitations = Array.from(invitationMap.values()).filter(
-      (invitation) =>
-        (!requestedOutletId ||
-          invitation.outletIds.includes(requestedOutletId)) &&
-        (access.isSuperAdmin ||
-          (invitation.outletIds.length > 0 &&
-            invitation.outletIds.every((outletId) =>
-              access.outletIds.includes(outletId),
-            ))),
+      ],
     );
 
     const staffUserIds = Array.from(
@@ -190,6 +122,7 @@ export async function GET(request: Request) {
             id: staffDeviceEnrollments.id,
             userId: staffDeviceEnrollments.userId,
             status: staffDeviceEnrollments.status,
+            deviceName: staffDeviceEnrollments.deviceName,
             createdAt: staffDeviceEnrollments.createdAt,
             approvedAt: staffDeviceEnrollments.approvedAt,
           })
@@ -230,7 +163,6 @@ export async function GET(request: Request) {
           canReset: canManage,
         };
       }),
-      invitations: pendingInvitations,
       backofficeUsers,
       backofficeAssignments,
       staffDevices,

@@ -1,9 +1,9 @@
 import { outletMemberships, user } from "@/db/schema";
-import { get } from "@vercel/blob";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { PROFILE_PHOTO_CONTENT_TYPES } from "@/lib/profile-photo";
 import { getTeamAccess } from "@/lib/team-access";
+import { get } from "@vercel/blob";
 import { and, eq, inArray } from "drizzle-orm";
 
 export async function GET(
@@ -19,7 +19,11 @@ export async function GET(
       return new Response("Not found.", { status: 404 });
     const db = getDb();
     const [target] = await db
-      .select({ profilePhotoPath: user.profilePhotoPath })
+      .select({
+        profilePhotoPath: user.profilePhotoPath,
+        approvalStatus: user.approvalStatus,
+        registrationOutletId: user.registrationOutletId,
+      })
       .from(user)
       .where(eq(user.id, userId))
       .limit(1);
@@ -34,18 +38,28 @@ export async function GET(
       const access = await getTeamAccess(session.user.id);
       if (!access?.outletIds.length)
         return new Response("Forbidden.", { status: 403 });
-      const [membership] = await db
-        .select({ userId: outletMemberships.userId })
-        .from(outletMemberships)
-        .where(
-          and(
-            eq(outletMemberships.userId, userId),
-            eq(outletMemberships.isActive, true),
-            inArray(outletMemberships.outletId, access.outletIds),
-          ),
-        )
-        .limit(1);
-      if (!membership) return new Response("Forbidden.", { status: 403 });
+
+      // Managers review a pending applicant's photo before approving them.
+      if (target.approvalStatus === "pending") {
+        const reviewable =
+          access.isSuperAdmin ||
+          (target.registrationOutletId !== null &&
+            access.outletIds.includes(target.registrationOutletId));
+        if (!reviewable) return new Response("Forbidden.", { status: 403 });
+      } else {
+        const [membership] = await db
+          .select({ userId: outletMemberships.userId })
+          .from(outletMemberships)
+          .where(
+            and(
+              eq(outletMemberships.userId, userId),
+              eq(outletMemberships.isActive, true),
+              inArray(outletMemberships.outletId, access.outletIds),
+            ),
+          )
+          .limit(1);
+        if (!membership) return new Response("Forbidden.", { status: 403 });
+      }
     }
 
     const result = await get(target.profilePhotoPath, { access: "private" });

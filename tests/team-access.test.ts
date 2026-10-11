@@ -1,4 +1,7 @@
-import { canManageTargetAccess } from "@/lib/team-access-rules";
+import {
+  canGrantBackoffice,
+  canManageTargetAccess,
+} from "@/lib/team-access-rules";
 import assert from "node:assert/strict";
 import test from "node:test";
 
@@ -25,6 +28,11 @@ test("super admin can manage any other account, including other super admins", (
   assert.equal(canManageTargetAccess(superAdmin, clockOnly, false), true);
   assert.equal(canManageTargetAccess(superAdmin, otherBackoffice, false), true);
   assert.equal(canManageTargetAccess(superAdmin, otherSuperAdmin, false), true);
+});
+
+test("only super admins can grant Backoffice access", () => {
+  assert.equal(canGrantBackoffice(superAdmin), true);
+  assert.equal(canGrantBackoffice(backoffice), false);
 });
 
 test("backoffice user manages clock-only users that share an outlet", () => {
