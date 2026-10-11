@@ -4429,15 +4429,14 @@ small,
   font-size: 12px;
 }
 .pin-digit-group {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  display: flex;
+  justify-content: center;
   gap: 8px;
-  padding: 0px 80px;
 }
 .pin-digit-group input {
-  width: 100%;
-  min-width: 0;
-  height: 54px;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 56px;
   border: 1px solid #c8c7f4;
   border-radius: 5px;
   background: #f8f7ff;
@@ -4504,9 +4503,6 @@ small,
 .pin-setup-field {
   min-width: 0;
 }
-.pin-setup-field .pin-digit-group input {
-  height: 48px;
-}
 .pin-setup-actions {
   display: flex;
   align-items: center;
@@ -4554,6 +4550,7 @@ small,
     gap: 6px;
   }
   .pin-digit-group input {
+    width: 40px;
     height: 48px;
     font-size: 19px;
   }
