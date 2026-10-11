@@ -1,5 +1,6 @@
 "use client";
 
+import { useConfirmDialog } from "@/app/_components/confirm-dialog";
 import { ModalDialog } from "@/app/_components/modal-dialog";
 import {
   formatOutletDateTime,
@@ -60,12 +61,22 @@ export function CorrectionDialog({
   const [reason, setReason] = useState("");
   const [message, setMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { confirm, confirmDialog } = useConfirmDialog();
   const selectedOutlet = outlets.find((outlet) => outlet.id === outletId);
   const relevantShifts = shifts.filter((shift) => shift.outletId === outletId);
 
   async function handleSubmit(formEvent: FormEvent<HTMLFormElement>) {
     formEvent.preventDefault();
     if (!selectedOutlet || isSubmitting) return;
+    if (
+      !(await confirm({
+        title: "Submit correction request?",
+        description:
+          "Your manager will review this request before it changes your time.",
+        confirmLabel: "Submit request",
+      }))
+    )
+      return;
     setIsSubmitting(true);
     setMessage("");
     try {
@@ -227,6 +238,7 @@ export function CorrectionDialog({
           </div>
         </form>
       </div>
+      {confirmDialog}
     </ModalDialog>
   );
 }

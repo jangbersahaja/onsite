@@ -1,5 +1,6 @@
 "use client";
 
+import { useConfirmDialog } from "@/app/_components/confirm-dialog";
 import { ModalDialog } from "@/app/_components/modal-dialog";
 import { useEffect, useState, type FormEvent } from "react";
 
@@ -41,6 +42,7 @@ export function OutletsManager() {
   const [message, setMessage] = useState("");
   const [assignmentKey, setAssignmentKey] = useState("");
   const [accessUserId, setAccessUserId] = useState("");
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   useEffect(() => {
     let active = true;
@@ -72,6 +74,15 @@ export function OutletsManager() {
     if (isCreatingOutlet) return;
     const form = event.currentTarget;
     const formData = new FormData(form);
+    if (
+      !(await confirm({
+        title: `Create ${String(formData.get("name") ?? "").trim() || "this outlet"}?`,
+        description:
+          "The outlet will be available for clocking and team assignments.",
+        confirmLabel: "Create outlet",
+      }))
+    )
+      return;
     setIsCreatingOutlet(true);
     setOutletMessage("");
     try {
@@ -109,6 +120,15 @@ export function OutletsManager() {
   ) {
     event.preventDefault();
     const formData = new FormData(event.currentTarget);
+    if (
+      !(await confirm({
+        title: `Save changes to ${String(formData.get("name") ?? "this outlet")}?`,
+        description:
+          "Clock-in location and radius will update for staff immediately.",
+        confirmLabel: "Save changes",
+      }))
+    )
+      return;
     setOutletMessage("");
     try {
       const response = await fetch("/api/outlets", {
@@ -145,9 +165,13 @@ export function OutletsManager() {
       return;
     }
     if (
-      !window.confirm(
-        `Deactivate ${outletName ?? "this outlet"}? Its historical shifts will remain available.`,
-      )
+      !(await confirm({
+        title: `Deactivate ${outletName ?? "this outlet"}?`,
+        description:
+          "Its historical shifts will remain available, but staff can no longer clock in here.",
+        confirmLabel: "Deactivate outlet",
+        tone: "danger",
+      }))
     ) {
       return;
     }
@@ -177,6 +201,25 @@ export function OutletsManager() {
     assignedOutletId: string,
     assigned: boolean,
   ) {
+    const personName =
+      data?.backofficeUsers.find((user) => user.id === userId)?.name ??
+      "this user";
+    const outletName =
+      data?.outlets.find((outlet) => outlet.id === assignedOutletId)?.name ??
+      "this outlet";
+    if (
+      !(await confirm({
+        title: assigned
+          ? `Assign ${personName} to ${outletName}?`
+          : `Remove ${personName} from ${outletName}?`,
+        description: assigned
+          ? "They will be able to manage this outlet in backoffice."
+          : "They will lose backoffice access to this outlet.",
+        confirmLabel: assigned ? "Assign" : "Remove",
+        tone: assigned ? "default" : "danger",
+      }))
+    )
+      return;
     const key = `${userId}:${assignedOutletId}`;
     setAssignmentKey(key);
     setMessage("");
@@ -566,6 +609,7 @@ export function OutletsManager() {
           )}
         </ModalDialog>
       </section>
+      {confirmDialog}
     </div>
   );
 }

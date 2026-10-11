@@ -1,5 +1,6 @@
 "use client";
 
+import { useConfirmDialog } from "@/app/_components/confirm-dialog";
 import { ModalDialog } from "@/app/_components/modal-dialog";
 import { SixDigitPinInput } from "@/app/clock/_components/six-digit-pin-input";
 import { forgetPinUser, rememberPinUser } from "@/lib/pin-client";
@@ -31,13 +32,24 @@ export function PinSettingsPanel({
   const [pinFormMode, setPinFormMode] = useState<"remove" | null>(null);
   const [pinMessage, setPinMessage] = useState("");
   const [pinMessageIsError, setPinMessageIsError] = useState(false);
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   async function handlePinAction(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isSavingPin) return;
+    const form = event.currentTarget;
+    if (
+      !(await confirm({
+        title: "Remove PIN sign-in?",
+        description:
+          "This browser will require your password to sign in. You can set up a PIN again later.",
+        confirmLabel: "Remove PIN",
+        tone: "danger",
+      }))
+    )
+      return;
     setIsSavingPin(true);
     setPinMessage("");
-    const form = event.currentTarget;
     const formData = new FormData(form);
     try {
       const response = await fetch("/api/staff-devices/pin", {
@@ -83,6 +95,15 @@ export function PinSettingsPanel({
       return;
     }
 
+    if (
+      !(await confirm({
+        title: "Set up PIN sign-in?",
+        description:
+          "You can sign in on this browser with this PIN. Your password will still work.",
+        confirmLabel: "Set up PIN",
+      }))
+    )
+      return;
     setIsSavingPin(true);
     try {
       const response = await fetch("/api/staff-devices/pin", {
@@ -297,6 +318,7 @@ export function PinSettingsPanel({
           </form>
         </div>
       </ModalDialog>
+      {confirmDialog}
     </>
   );
 }

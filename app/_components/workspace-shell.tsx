@@ -1,5 +1,6 @@
 "use client";
 
+import { useConfirmDialog } from "@/app/_components/confirm-dialog";
 import { authClient } from "@/lib/auth-client";
 import { MAX_PROFILE_PHOTO_BYTES } from "@/lib/profile-photo";
 import Image from "next/image";
@@ -147,6 +148,7 @@ export function WorkspaceShell({
   >(() => new Set());
   const [profilePhotoMessage, setProfilePhotoMessage] = useState("");
   const [isPhotoSaving, setIsPhotoSaving] = useState(false);
+  const { confirm, confirmDialog } = useConfirmDialog();
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const profilePhotoInputRef = useRef<HTMLInputElement>(null);
   const [pendingDeviceRequestCount, setPendingDeviceRequestCount] = useState(0);
@@ -281,6 +283,14 @@ export function WorkspaceShell({
       setProfilePhotoMessage("Profile photos must be 2 MB or smaller.");
       return;
     }
+    if (
+      !(await confirm({
+        title: "Update profile photo?",
+        description: "This photo will replace your current profile photo.",
+        confirmLabel: "Update photo",
+      }))
+    )
+      return;
 
     setIsPhotoSaving(true);
     try {
@@ -309,6 +319,15 @@ export function WorkspaceShell({
 
   async function removeProfilePhoto() {
     setProfilePhotoMessage("");
+    if (
+      !(await confirm({
+        title: "Remove profile photo?",
+        description: "Your profile will show your initials instead.",
+        confirmLabel: "Remove photo",
+        tone: "danger",
+      }))
+    )
+      return;
     setIsPhotoSaving(true);
     try {
       const response = await fetch("/api/profile-photo", { method: "DELETE" });
@@ -330,6 +349,14 @@ export function WorkspaceShell({
   }
 
   async function signOut() {
+    if (
+      !(await confirm({
+        title: "Sign out?",
+        description: "You will need to sign in again to continue.",
+        confirmLabel: "Sign out",
+      }))
+    )
+      return;
     await authClient.signOut();
     router.replace("/");
   }
@@ -610,6 +637,7 @@ export function WorkspaceShell({
           </nav>
         )}
       </section>
+      {confirmDialog}
     </div>
   );
 }

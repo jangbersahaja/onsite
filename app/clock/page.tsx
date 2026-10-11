@@ -1,5 +1,6 @@
 "use client";
 
+import { useConfirmDialog } from "@/app/_components/confirm-dialog";
 import {
   WorkspaceShell,
   type WorkspaceNavigationGroup,
@@ -209,6 +210,7 @@ export default function Home() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [actionMessage, setActionMessage] = useState("");
   const [isCorrectionDialogOpen, setIsCorrectionDialogOpen] = useState(false);
+  const { confirm, confirmDialog } = useConfirmDialog();
   const [clockBlockInfo, setClockBlockInfo] = useState<{
     reason: "poor_accuracy" | "outside_radius";
     distanceMeters: number;
@@ -421,6 +423,15 @@ export default function Home() {
 
   async function handleRequestStaffDevice() {
     if (isRequestingStaffDevice) return;
+    if (
+      !(await confirm({
+        title: "Request device approval?",
+        description:
+          "A manager must approve this browser before you can clock in or out.",
+        confirmLabel: "Request approval",
+      }))
+    )
+      return;
     setIsRequestingStaffDevice(true);
     setActionMessage("");
     try {
@@ -463,6 +474,15 @@ export default function Home() {
       return;
     }
 
+    if (
+      !(await confirm({
+        title: isClockedIn ? "Clock out now?" : "Clock in now?",
+        description:
+          "Your location will be checked and recorded with this action.",
+        confirmLabel: isClockedIn ? "Clock out" : "Clock in",
+      }))
+    )
+      return;
     setIsCheckingLocation(true);
     setClockBlockInfo(null);
     setActionMessage("Checking your location…");
@@ -534,6 +554,14 @@ export default function Home() {
   async function handleBreakAction() {
     if (!selectedOutlet || !activeSession || isCheckingLocation) return;
     const action = isOnBreak ? "end_break" : "start_break";
+    if (
+      !(await confirm({
+        title: isOnBreak ? "End break now?" : "Start break now?",
+        description: "Your location will be recorded with this action.",
+        confirmLabel: isOnBreak ? "End break" : "Start break",
+      }))
+    )
+      return;
     setIsCheckingLocation(true);
     setActionMessage(isOnBreak ? "Ending your break…" : "Starting your break…");
     try {
@@ -1021,6 +1049,7 @@ export default function Home() {
           Browser GPS can be spoofed.
         </p>
       </main>
+      {confirmDialog}
     </WorkspaceShell>
   );
 }

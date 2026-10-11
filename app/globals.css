@@ -1164,8 +1164,8 @@ h2 {
   align-items: center;
   gap: 7px;
   margin: 17px 0 0;
-  color: #7c80a6;
-  font-size: 10px;
+  color: var(--muted);
+  font-size: 12px;
 }
 .preview-note span {
   display: grid;
@@ -2096,7 +2096,7 @@ h2 {
   margin-top: 16px;
 }
 .issued-invite input {
-  font-size: 11px;
+  font-size: 16px;
 }
 .copy-invite-button,
 .reset-link-button {
@@ -2221,6 +2221,92 @@ h2 {
 .team-access-item .team-role {
   color: var(--muted);
   font-size: 10px;
+}
+.team-person {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.team-person-text {
+  display: grid;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.team-avatar {
+  display: grid;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid #c7d2fe;
+  border-radius: 50%;
+  background: #eeedff;
+  color: #4338ca;
+  font-size: 11px;
+  font-weight: 700;
+}
+.team-avatar-photo {
+  object-fit: cover;
+  border-color: var(--line);
+  background: var(--paper);
+}
+.team-card-menu {
+  display: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.team-card-menu:hover {
+  background: var(--paper);
+  color: var(--ink);
+}
+.team-action-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.team-action-heading h2 {
+  overflow-wrap: anywhere;
+}
+.team-action-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+.team-action-item {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 650;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.team-action-item:hover:not(:disabled) {
+  border-color: var(--green);
+}
+.team-action-item.is-danger {
+  color: var(--danger);
+}
+.team-action-item:disabled {
+  cursor: wait;
+  opacity: 0.6;
 }
 .reset-link-button:disabled {
   cursor: wait;
@@ -2359,6 +2445,9 @@ h2 {
 }
 .timesheet-export span {
   font-size: 16px;
+}
+.timesheet-details-toggle {
+  display: none;
 }
 .timesheet-filters {
   display: grid;
@@ -2534,24 +2623,29 @@ h2 {
   padding-right: 14px;
   padding-left: 14px;
 }
+.timesheet-table tfoot tr {
+  background: var(--gradient-brand);
+}
 .timesheet-table tfoot td {
   height: auto;
-  border-top: 1px solid var(--line);
-  background: #f7f9f6;
-  color: var(--muted);
-  padding-top: 11px;
-  padding-bottom: 11px;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.85);
+  padding-top: 12px;
+  padding-bottom: 12px;
   font-size: 10px;
   font-weight: 600;
 }
 .timesheet-table .timesheet-table-total-hours {
   text-align: right;
 }
-.timesheet-table-total-hours span {
+.timesheet-table-total-hours span,
+.timesheet-table tfoot .timesheet-table-total-hours span {
   margin-right: 8px;
+  color: rgba(255, 255, 255, 0.85);
 }
 .timesheet-table-total-hours strong {
-  color: var(--ink);
+  color: #fff;
   font-size: 11px;
   font-weight: 700;
   white-space: nowrap;
@@ -2592,6 +2686,11 @@ h2 {
   color: var(--ink);
   font-size: 12px;
   white-space: nowrap;
+}
+.timesheet-worked-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .timesheet-duration-detail {
   display: block;
@@ -3853,13 +3952,6 @@ small,
 }
 
 @media (max-width: 760px) {
-  .workspace-dialog:has(.correction-dialog-panel) {
-    inset: auto 0 0;
-    width: 100%;
-    max-height: calc(100dvh - env(safe-area-inset-top));
-    margin: 0;
-    border-radius: 12px 12px 0 0;
-  }
   .clock-recent-row {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 9px 12px;
@@ -5244,5 +5336,390 @@ small,
     grid-column: 1 / -1;
     width: 100%;
     min-height: 40px;
+  }
+}
+
+/* Mobile polish: safe areas, input zoom, touch targets, and table cards */
+@media (max-width: 760px) {
+  .top-bar {
+    height: calc(58px + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top);
+  }
+  .side-rail {
+    inset: calc(58px + env(safe-area-inset-top)) auto 0 0;
+    height: calc(100dvh - 58px - env(safe-area-inset-top));
+  }
+  .mobile-nav-backdrop {
+    inset: calc(58px + env(safe-area-inset-top)) 0 0;
+  }
+  .mobile-nav-toggle {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+@media (max-width: 600px) {
+  input:not(
+    [type="hidden"],
+    [type="checkbox"],
+    [type="radio"],
+    [inputmode="numeric"]
+  ),
+  select,
+  textarea {
+    min-height: 44px;
+    font-size: 16px;
+  }
+  .dialog-close,
+  .icon-button {
+    width: 44px;
+    height: 44px;
+  }
+  .history-filter button,
+  .auth-submit,
+  .copy-invite-button,
+  .reset-link-button,
+  .deactivate-outlet-button,
+  .correction-reject-button,
+  .timesheet-export,
+  .timesheet-edit-button,
+  .timesheet-record-cell .timesheet-edit-button,
+  .timesheet-cancel,
+  .team-primary-action,
+  .team-secondary-action,
+  .team-view-tab,
+  #clock .clock-correction-link {
+    min-height: 44px;
+  }
+  .team-table-wrap {
+    overflow: visible;
+  }
+  .team-table,
+  .timesheet-table {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    table-layout: auto;
+  }
+  .team-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .team-table tbody,
+  .team-table tfoot {
+    display: grid;
+    gap: 10px;
+  }
+  .team-table tbody tr,
+  .team-table tfoot tr {
+    display: grid;
+    gap: 10px;
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface);
+    box-shadow: var(--shadow-card);
+  }
+  .team-table td {
+    display: grid;
+    grid-template-columns: minmax(88px, 0.8fr) minmax(0, 1.2fr);
+    align-items: center;
+    gap: 10px;
+    height: auto;
+    border: 0;
+    padding: 0;
+  }
+  .team-table td:not([data-label]) {
+    display: block;
+  }
+  .team-table td[data-label]::before {
+    content: attr(data-label);
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 650;
+  }
+  .team-access-list {
+    min-width: 0;
+  }
+  .team-table tbody tr {
+    position: relative;
+  }
+  .team-table .team-person-cell {
+    padding-right: 44px;
+  }
+  .team-table .team-card-menu {
+    display: grid;
+    position: absolute;
+    top: 6px;
+    right: 6px;
+  }
+  .team-table td[data-label="Actions"] {
+    display: none;
+  }
+  .workspace-shell .team-table td,
+  .workspace-shell .timesheet-table td {
+    font-size: 14px;
+  }
+  .timesheet-table tfoot tr {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px 12px;
+    padding: 12px 14px;
+    border: 0;
+    background: var(--gradient-brand);
+    box-shadow: var(--shadow-card);
+  }
+  .timesheet-table tfoot td {
+    padding: 0;
+  }
+  .workspace-shell .timesheet-table tfoot td {
+    font-size: 12px;
+  }
+  .timesheet-table .timesheet-table-total-hours {
+    margin-left: auto;
+  }
+  .timesheet-table tfoot {
+    margin-top: 10px;
+  }
+  .timesheet-table-total-hours span,
+  .timesheet-table tfoot .timesheet-table-total-hours span {
+    margin-right: 6px;
+  }
+  .timesheet-table-total-hours strong {
+    font-size: 14px;
+  }
+  .timesheet-table .timesheet-empty {
+    height: auto !important;
+  }
+  .timesheet-table tbody tr {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 12px 14px;
+    border-left: 4px solid var(--green);
+  }
+  .timesheet-table tbody tr:has(.manual-adjustment-label) {
+    border-left-color: #945622;
+  }
+  .timesheet-table tbody tr:has(.storehub-source-label) {
+    border-left-color: #176b7a;
+  }
+  .timesheet-table tbody td {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+    align-items: start;
+  }
+  .timesheet-table tbody td[data-label]::before {
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .timesheet-table tbody td:nth-child(1) {
+    grid-row: 1;
+    grid-column: 1;
+  }
+  .timesheet-table tbody td:nth-child(4) {
+    grid-row: 1;
+    grid-column: 2;
+    justify-self: end;
+    text-align: right;
+  }
+  .timesheet-table tbody td:nth-child(2) {
+    grid-row: 2;
+    grid-column: 1;
+  }
+  .timesheet-table tbody td:nth-child(3) {
+    grid-row: 2;
+    grid-column: 2;
+  }
+  .timesheet-table tbody td:nth-child(5) {
+    grid-row: 3;
+    grid-column: 1 / -1;
+  }
+  .timesheet-table tbody td[data-label="Record"]::before,
+  .timesheet-table tbody td[data-label="Worked"]::before {
+    display: none;
+  }
+  .timesheet-table tbody td:nth-child(1),
+  .timesheet-table tbody td:nth-child(4) {
+    align-self: center;
+  }
+  .timesheet-table tbody .timesheet-shift-date {
+    min-height: 44px;
+    align-content: center;
+  }
+  .timesheet-table tbody tr[data-expanded="false"] td:nth-child(2),
+  .timesheet-table tbody tr[data-expanded="false"] td:nth-child(3),
+  .timesheet-table tbody tr[data-expanded="false"] td[data-label="Record"],
+  .timesheet-table tbody tr[data-expanded="false"] .timesheet-duration-detail {
+    display: none;
+  }
+  .timesheet-table tbody tr[data-expanded="true"] td[data-label="Record"] {
+    padding-top: 12px;
+    border-top: 1px dashed var(--line);
+  }
+  .timesheet-table .timesheet-worked-row {
+    justify-content: flex-end;
+    gap: 6px;
+  }
+  .timesheet-table .timesheet-details-toggle {
+    display: inline-grid;
+    width: 44px;
+    height: 44px;
+    margin: -8px -8px -8px 0;
+    place-items: center;
+    border: 1px solid var(--line);
+    border-radius: 50%;
+    background: #fff;
+    color: var(--green);
+  }
+  .timesheet-table .timesheet-details-toggle svg {
+    transition: transform 160ms ease;
+  }
+  .timesheet-table .timesheet-details-toggle[aria-expanded="true"] svg {
+    transform: rotate(180deg);
+  }
+  .timesheet-table .timesheet-record-cell {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .timesheet-table .timesheet-record-cell .timesheet-edit-button {
+    width: 100%;
+    min-height: 44px;
+    font-size: 13px;
+  }
+  .timesheet-table tbody .timesheet-shift-date time {
+    font-size: 16px;
+    font-weight: 650;
+  }
+  .timesheet-table tbody .timesheet-shift-date small,
+  .timesheet-table tbody .timesheet-duration-detail {
+    font-size: 12px;
+  }
+  .timesheet-table tbody .timesheet-clock-time {
+    font-size: 17px;
+    font-weight: 650;
+  }
+  .timesheet-table tbody .timesheet-worked {
+    font-size: 22px;
+    font-weight: 700;
+  }
+}
+
+/* Shared modal system.
+   Desktop: centered dialog. Mobile (<= 600px): bottom sheet with a drag
+   handle, rounded top corners and safe-area padding. Every ModalDialog and
+   ConfirmDialog uses these rules, so keep this block last in the file. */
+.workspace-dialog {
+  animation: workspace-dialog-in 180ms ease-out;
+}
+.workspace-dialog-handle {
+  display: none;
+}
+.confirm-dialog-panel {
+  padding: 24px;
+}
+.confirm-dialog-header {
+  margin-bottom: 0;
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.confirm-dialog-description {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 22px;
+}
+.confirm-dialog-actions button {
+  min-width: 112px;
+  min-height: 40px;
+  border: 1px solid var(--green);
+  border-radius: 6px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.confirm-dialog-cancel {
+  border-color: var(--line) !important;
+  background: #fff;
+  color: var(--ink);
+}
+.confirm-dialog-confirm {
+  background: var(--green);
+  color: #fff;
+}
+.confirm-dialog-confirm.is-danger {
+  border-color: var(--danger);
+  background: var(--danger);
+}
+
+@keyframes workspace-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes workspace-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@media (max-width: 600px) {
+  .workspace-dialog,
+  .workspace-dialog:has(.pin-setup-panel) {
+    inset: auto 0 0;
+    width: 100%;
+    max-width: none;
+    height: auto;
+    max-height: calc(100dvh - env(safe-area-inset-top) - 24px);
+    margin: 0;
+    overscroll-behavior: contain;
+    border: 0;
+    border-radius: 16px 16px 0 0;
+    padding: 0 0 calc(env(safe-area-inset-bottom) + 28px);
+    box-shadow: 0 -12px 40px rgba(20, 37, 46, 0.18);
+    animation: workspace-sheet-in 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .workspace-dialog-handle {
+    display: block;
+    width: 40px;
+    height: 4px;
+    margin: 8px auto 2px;
+    border-radius: 999px;
+    background: #c9d2dc;
+  }
+  .confirm-dialog-actions {
+    flex-direction: column-reverse;
+  }
+  .confirm-dialog-actions button {
+    width: 100%;
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-dialog,
+  .workspace-dialog:has(.pin-setup-panel) {
+    animation: none;
   }
 }

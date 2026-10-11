@@ -58,6 +58,7 @@ export async function GET(request: Request) {
             accountType: user.accountType,
             canAccessClock: user.canAccessClock,
             canAccessBackoffice: user.canAccessBackoffice,
+            profilePhotoPath: user.profilePhotoPath,
             outletId: outlets.id,
             outletName: outlets.name,
           })
@@ -219,8 +220,12 @@ export async function GET(request: Request) {
           },
           true,
         );
+        const { profilePhotoPath, ...publicMember } = member;
         return {
-          ...member,
+          ...publicMember,
+          profilePhotoUrl: profilePhotoPath
+            ? `/api/profile-photos/${encodeURIComponent(member.userId)}`
+            : null,
           canManageAccess: canManage,
           canReset: canManage,
         };

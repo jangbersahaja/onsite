@@ -1,5 +1,6 @@
 "use client";
 
+import { useConfirmDialog } from "@/app/_components/confirm-dialog";
 import { REVIEW_REQUESTS_CHANGED_EVENT } from "@/app/_components/workspace-shell";
 import {
   formatOutletDateTime,
@@ -181,6 +182,8 @@ export default function CorrectionReviewPage() {
     };
   }, [outletId]);
 
+  const { confirm, confirmDialog } = useConfirmDialog();
+
   async function decide(event: FormEvent<HTMLFormElement>, requestId: string) {
     event.preventDefault();
     if (busyId) return;
@@ -207,6 +210,22 @@ export default function CorrectionReviewPage() {
         return;
       }
     }
+
+    if (
+      !(await confirm({
+        title:
+          decision === "adjust"
+            ? "Save adjusted punch?"
+            : "Confirm this punch?",
+        description:
+          decision === "adjust"
+            ? "The punch time will be changed and the request reconciled."
+            : "The punch will be reconciled as recorded.",
+        confirmLabel:
+          decision === "adjust" ? "Save adjustment" : "Confirm punch",
+      }))
+    )
+      return;
 
     const busyKey = `correction:${requestId}`;
     setBusyId(busyKey);
@@ -250,6 +269,19 @@ export default function CorrectionReviewPage() {
 
   async function decideDevice(requestId: string, action: "approve" | "reject") {
     if (busyId) return;
+    if (
+      !(await confirm({
+        title:
+          action === "approve" ? "Approve this device?" : "Reject this device?",
+        description:
+          action === "approve"
+            ? "Any previous device for this staff member will be revoked."
+            : "The staff member will need to request enrollment again.",
+        confirmLabel: action === "approve" ? "Approve device" : "Reject device",
+        tone: action === "reject" ? "danger" : "default",
+      }))
+    )
+      return;
     const busyKey = `device:${requestId}`;
     setBusyId(busyKey);
     setMessage("");
@@ -479,6 +511,7 @@ export default function CorrectionReviewPage() {
             </p>
           )}
       </section>
+      {confirmDialog}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { useConfirmDialog } from "@/app/_components/confirm-dialog";
 import { useEffect, useState } from "react";
 
 function decodeVapidKey(value: string) {
@@ -20,6 +21,7 @@ export function NotificationSettings({ outletId }: { outletId: string }) {
   );
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const { confirm, confirmDialog } = useConfirmDialog();
 
   useEffect(() => {
     let active = true;
@@ -93,6 +95,15 @@ export function NotificationSettings({ outletId }: { outletId: string }) {
 
   async function enableNotifications() {
     if (isSaving) return;
+    if (
+      !(await confirm({
+        title: "Turn on browser notifications?",
+        description:
+          "This browser will receive alerts for this outlet. Your browser may ask for permission.",
+        confirmLabel: "Turn on",
+      }))
+    )
+      return;
     setIsSaving(true);
     setMessage("");
     try {
@@ -151,6 +162,15 @@ export function NotificationSettings({ outletId }: { outletId: string }) {
 
   async function disableNotifications() {
     if (isSaving) return;
+    if (
+      !(await confirm({
+        title: "Turn off browser notifications?",
+        description: "This browser will stop receiving alerts for this outlet.",
+        confirmLabel: "Turn off",
+        tone: "danger",
+      }))
+    )
+      return;
     setIsSaving(true);
     setMessage("");
     try {
@@ -235,6 +255,7 @@ export function NotificationSettings({ outletId }: { outletId: string }) {
           aria-label="Enable browser notifications for this outlet"
         />
       </label>
+      {confirmDialog}
     </section>
   );
 }

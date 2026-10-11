@@ -37,6 +37,7 @@ export function ModalDialog({
       }}
       ref={dialogRef}
     >
+      <span className="workspace-dialog-handle" aria-hidden="true" />
       {children}
     </dialog>
   );

@@ -1,7 +1,9 @@
 "use client";
 
 import { NotificationSettings } from "@/app/(management)/team/_components/notification-settings";
+import { useConfirmDialog } from "@/app/_components/confirm-dialog";
 import { ModalDialog } from "@/app/_components/modal-dialog";
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 
@@ -17,12 +19,14 @@ type TeamMember = {
   outletId: string;
   outletName: string;
   canReset: boolean;
+  profilePhotoUrl: string | null;
 };
 
 type TeamPerson = {
   userId: string;
   name: string;
   email: string;
+  profilePhotoUrl: string | null;
   assignments: TeamMember[];
   canAccessClock: boolean;
   canAccessBackoffice: boolean;
@@ -82,6 +86,67 @@ function formatExpiry(value: string) {
   }).format(new Date(value));
 }
 
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  const first = parts[0]?.charAt(0) ?? "";
+  const last =
+    parts.length > 1 ? (parts[parts.length - 1]?.charAt(0) ?? "") : "";
+  return `${first}${last}`.toUpperCase() || "?";
+}
+
+function TeamAvatar({
+  name,
+  photoUrl,
+}: {
+  name: string;
+  photoUrl: string | null;
+}) {
+  return photoUrl ? (
+    <Image
+      className="team-avatar team-avatar-photo"
+      src={photoUrl}
+      alt=""
+      width={36}
+      height={36}
+      unoptimized
+    />
+  ) : (
+    <span className="team-avatar" aria-hidden="true">
+      {initials(name)}
+    </span>
+  );
+}
+
+function TeamCardMenuButton({
+  name,
+  onOpen,
+}: {
+  name: string;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      className="team-card-menu"
+      type="button"
+      aria-label={`Actions for ${name}`}
+      aria-haspopup="dialog"
+      onClick={onOpen}
+    >
+      <svg
+        aria-hidden="true"
+        viewBox="0 0 24 24"
+        width="20"
+        height="20"
+        fill="currentColor"
+      >
+        <circle cx="12" cy="5" r="2" />
+        <circle cx="12" cy="12" r="2" />
+        <circle cx="12" cy="19" r="2" />
+      </svg>
+    </button>
+  );
+}
+
 type TeamView = "people" | "invitations" | "devices";
 
 export default function TeamPage() {
@@ -107,6 +172,10 @@ export default function TeamPage() {
   const [permissionUserId, setPermissionUserId] = useState("");
   const [activeTeamView, setActiveTeamView] = useState<TeamView>("people");
   const [showAllStaffDevices, setShowAllStaffDevices] = useState(false);
+  const [openActionMenu, setOpenActionMenu] = useState<{
+    view: "people" | "devices";
+    userId: string;
+  } | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -131,9 +200,20 @@ export default function TeamPage() {
     };
   }, [outletId]);
 
+  const { confirm, confirmDialog } = useConfirmDialog();
+
   async function handleInvite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isInviting || (inviteType === "user" && !outletIds.length)) return;
+    if (
+      !(await confirm({
+        title: `Create invitation for ${email}?`,
+        description:
+          "A link will be created for this person to set up their account.",
+        confirmLabel: "Create invitation",
+      }))
+    )
+      return;
     setIsInviting(true);
     setInviteMessage("");
     setIssuedInvite("");
@@ -173,6 +253,21 @@ export default function TeamPage() {
     enabled: boolean,
   ) {
     if (permissionUserId) return;
+    const accessLabel =
+      permission === "canAccessClock" ? "Clock access" : "Backoffice access";
+    if (
+      !(await confirm({
+        title: enabled
+          ? `Grant ${accessLabel} to ${person.name}?`
+          : `Remove ${accessLabel} from ${person.name}?`,
+        description: enabled
+          ? "They will be able to use this area of the app."
+          : "They will lose access to this area of the app.",
+        confirmLabel: enabled ? "Grant access" : "Remove access",
+        tone: enabled ? "default" : "danger",
+      }))
+    )
+      return;
     setPermissionUserId(person.userId);
     setMessage("");
     try {
@@ -231,6 +326,15 @@ export default function TeamPage() {
 
   async function handleStaffDeviceAction(deviceId: string, action: "revoke") {
     if (deviceActionId) return;
+    if (
+      !(await confirm({
+        title: "Revoke device?",
+        description: "This device will no longer be trusted for clocking in.",
+        confirmLabel: "Revoke device",
+        tone: "danger",
+      }))
+    )
+      return;
     setDeviceActionId(deviceId);
     setMessage("");
     try {
@@ -257,6 +361,15 @@ export default function TeamPage() {
 
   async function handleRevoke(invitationId: string) {
     if (revokingInvitationId) return;
+    if (
+      !(await confirm({
+        title: "Revoke invitation?",
+        description: "Its link will stop working straight away.",
+        confirmLabel: "Revoke invitation",
+        tone: "danger",
+      }))
+    )
+      return;
     setRevokingInvitationId(invitationId);
     setMessage("");
     try {
@@ -332,6 +445,7 @@ export default function TeamPage() {
         userId: member.userId,
         name: member.name,
         email: member.email,
+        profilePhotoUrl: member.profilePhotoUrl,
         assignments: [member],
         canAccessClock: member.canAccessClock,
         canAccessBackoffice: member.canAccessBackoffice,
@@ -375,6 +489,23 @@ export default function TeamPage() {
   const pendingDeviceCount = data.staffDevices.filter(
     (device) => device.status === "pending",
   ).length;
+  const actionPerson =
+    openActionMenu?.view === "people"
+      ? visiblePeople.find((person) => person.userId === openActionMenu.userId)
+      : undefined;
+  const actionStaff =
+    openActionMenu?.view === "devices"
+      ? staffMembers.find((member) => member.userId === openActionMenu.userId)
+      : undefined;
+  const actionDevices = data.staffDevices.filter(
+    (device) => device.userId === actionStaff?.userId,
+  );
+  const actionPending = actionDevices.find(
+    (device) => device.status === "pending",
+  );
+  const actionActive = actionDevices.find(
+    (device) => device.status === "active",
+  );
   const visibleTeamViews: { id: TeamView; label: string; count?: number }[] = [
     { id: "people", label: "People" },
     {
@@ -440,6 +571,85 @@ export default function TeamPage() {
           ))}
         </nav>
       )}
+
+      <ModalDialog
+        open={Boolean(actionPerson || actionStaff)}
+        onOpenChange={(open) => {
+          if (!open) setOpenActionMenu(null);
+        }}
+        labelledBy="team-action-title"
+      >
+        {(actionPerson || actionStaff) && (
+          <div className="dialog-panel">
+            <header className="dialog-header">
+              <div className="team-action-heading">
+                <TeamAvatar
+                  name={actionPerson?.name ?? actionStaff?.name ?? ""}
+                  photoUrl={
+                    actionPerson?.profilePhotoUrl ??
+                    actionStaff?.profilePhotoUrl ??
+                    null
+                  }
+                />
+                <div>
+                  <p className="eyebrow">
+                    {actionPerson ? "PERSON" : "STAFF DEVICE"}
+                  </p>
+                  <h2 id="team-action-title">
+                    {actionPerson?.name ?? actionStaff?.name}
+                  </h2>
+                </div>
+              </div>
+              <button
+                className="dialog-close"
+                type="button"
+                aria-label="Close dialog"
+                onClick={() => setOpenActionMenu(null)}
+              >
+                ×
+              </button>
+            </header>
+            <div className="team-action-list">
+              {actionPerson?.canReset && (
+                <button
+                  className="team-action-item"
+                  type="button"
+                  onClick={() => {
+                    setOpenActionMenu(null);
+                    setResetUserId(actionPerson.userId);
+                  }}
+                >
+                  Reset password
+                </button>
+              )}
+              {actionPending && (
+                <Link
+                  className="team-action-item"
+                  href="/corrections/review"
+                  onClick={() => setOpenActionMenu(null)}
+                >
+                  Review request
+                </Link>
+              )}
+              {actionActive && (
+                <button
+                  className="team-action-item is-danger"
+                  type="button"
+                  disabled={Boolean(deviceActionId)}
+                  onClick={async () => {
+                    await handleStaffDeviceAction(actionActive.id, "revoke");
+                    setOpenActionMenu(null);
+                  }}
+                >
+                  {deviceActionId === actionActive.id
+                    ? "Saving…"
+                    : "Revoke device"}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </ModalDialog>
 
       <ModalDialog
         open={isInviteDialogOpen}
@@ -587,6 +797,8 @@ export default function TeamPage() {
         </div>
       </ModalDialog>
 
+      {confirmDialog}
+
       <ModalDialog
         open={Boolean(resetPerson)}
         onOpenChange={(open) => {
@@ -688,11 +900,33 @@ export default function TeamPage() {
               <tbody>
                 {visiblePeople.map((person) => (
                   <tr key={person.userId}>
-                    <td>
-                      <strong>{person.name}</strong>
-                      <small>{person.email}</small>
+                    <td className="team-person-cell">
+                      <div className="team-person">
+                        <TeamAvatar
+                          name={person.name}
+                          photoUrl={person.profilePhotoUrl}
+                        />
+                        <div className="team-person-text">
+                          <strong>{person.name}</strong>
+                          <small>{person.email}</small>
+                        </div>
+                      </div>
+                      {person.canReset && (
+                        <TeamCardMenuButton
+                          name={person.name}
+                          onOpen={() =>
+                            setOpenActionMenu({
+                              view: "people",
+                              userId: person.userId,
+                            })
+                          }
+                        />
+                      )}
                     </td>
-                    <td className="team-assignment-cell">
+                    <td
+                      className="team-assignment-cell"
+                      data-label="Outlet access"
+                    >
                       <div className="team-access-list">
                         {person.assignments.map((assignment) => (
                           <div
@@ -704,7 +938,7 @@ export default function TeamPage() {
                         ))}
                       </div>
                     </td>
-                    <td>
+                    <td data-label="App access">
                       <div className="team-permission-options">
                         <label>
                           <input
@@ -748,7 +982,7 @@ export default function TeamPage() {
                         </label>
                       </div>
                     </td>
-                    <td>
+                    <td data-label="Actions">
                       {person.canReset && (
                         <button
                           className="reset-link-button"
@@ -842,11 +1076,30 @@ export default function TeamPage() {
                   );
                   return (
                     <tr key={member.userId}>
-                      <td>
-                        <strong>{member.name}</strong>
-                        <small>{member.email}</small>
+                      <td className="team-person-cell">
+                        <div className="team-person">
+                          <TeamAvatar
+                            name={member.name}
+                            photoUrl={member.profilePhotoUrl}
+                          />
+                          <div className="team-person-text">
+                            <strong>{member.name}</strong>
+                            <small>{member.email}</small>
+                          </div>
+                        </div>
+                        {(pending || active) && (
+                          <TeamCardMenuButton
+                            name={member.name}
+                            onOpen={() =>
+                              setOpenActionMenu({
+                                view: "devices",
+                                userId: member.userId,
+                              })
+                            }
+                          />
+                        )}
                       </td>
-                      <td>
+                      <td data-label="Device status">
                         {pending
                           ? active
                             ? "Replacement awaiting approval"
@@ -855,14 +1108,14 @@ export default function TeamPage() {
                             ? "Approved"
                             : "Not enrolled"}
                       </td>
-                      <td>
+                      <td data-label="Requested">
                         {pending
                           ? formatExpiry(pending.createdAt)
                           : active?.approvedAt
                             ? formatExpiry(active.approvedAt)
                             : "—"}
                       </td>
-                      <td>
+                      <td data-label="Actions">
                         {pending && (
                           <Link
                             className="reset-link-button"
