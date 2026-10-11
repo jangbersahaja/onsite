@@ -43,7 +43,7 @@ export async function notifyOutletManagers(input: {
         .select({
           id: pushSubscriptions.id,
           userId: outletMemberships.userId,
-          role: outletMemberships.role,
+          canAccessBackoffice: user.canAccessBackoffice,
           isActive: outletMemberships.isActive,
           notificationsEnabled: outletMemberships.notificationsEnabled,
           endpoint: pushSubscriptions.endpoint,
@@ -55,6 +55,7 @@ export async function notifyOutletManagers(input: {
           pushSubscriptions,
           eq(pushSubscriptions.userId, outletMemberships.userId),
         )
+        .innerJoin(user, eq(user.id, outletMemberships.userId))
         .where(eq(outletMemberships.outletId, input.outletId)),
     ]);
 

@@ -31,6 +31,13 @@ export async function GET(request: Request) {
       return Response.json({ error: "Outlet ID is invalid." }, { status: 400 });
     }
 
+    if (!session.user.canAccessBackoffice) {
+      return Response.json(
+        { error: "Active backoffice outlet assignment not found." },
+        { status: 404 },
+      );
+    }
+
     const [membership] = await getDb()
       .select({ enabled: outletMemberships.notificationsEnabled })
       .from(outletMemberships)
@@ -39,7 +46,6 @@ export async function GET(request: Request) {
         and(
           eq(outletMemberships.userId, session.user.id),
           eq(outletMemberships.outletId, outletId),
-          eq(outletMemberships.role, "manager"),
           eq(outletMemberships.isActive, true),
           eq(outlets.isActive, true),
         ),
@@ -48,7 +54,7 @@ export async function GET(request: Request) {
 
     if (!membership) {
       return Response.json(
-        { error: "Active outlet manager assignment not found." },
+        { error: "Active backoffice outlet assignment not found." },
         { status: 404 },
       );
     }
@@ -93,6 +99,12 @@ export async function PATCH(request: Request) {
     }
 
     const db = getDb();
+    if (!session.user.canAccessBackoffice) {
+      return Response.json(
+        { error: "Active backoffice outlet assignment not found." },
+        { status: 404 },
+      );
+    }
     if (parsed.data.enabled) {
       if (
         !process.env.VAPID_PUBLIC_KEY ||
@@ -124,7 +136,6 @@ export async function PATCH(request: Request) {
         and(
           eq(outletMemberships.userId, session.user.id),
           eq(outletMemberships.outletId, parsed.data.outletId),
-          eq(outletMemberships.role, "manager"),
           eq(outletMemberships.isActive, true),
         ),
       )
@@ -132,7 +143,7 @@ export async function PATCH(request: Request) {
 
     if (!membership) {
       return Response.json(
-        { error: "Active outlet manager assignment not found." },
+        { error: "Active backoffice outlet assignment not found." },
         { status: 404 },
       );
     }

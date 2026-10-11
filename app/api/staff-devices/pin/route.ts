@@ -38,6 +38,7 @@ async function getActiveEnrollment(userId: string) {
       tokenHash: staffDeviceEnrollments.tokenHash,
     })
     .from(staffDeviceEnrollments)
+    .innerJoin(user, eq(staffDeviceEnrollments.userId, user.id))
     .innerJoin(
       outletMemberships,
       eq(staffDeviceEnrollments.userId, outletMemberships.userId),
@@ -47,7 +48,7 @@ async function getActiveEnrollment(userId: string) {
       and(
         eq(staffDeviceEnrollments.userId, userId),
         eq(staffDeviceEnrollments.status, "active"),
-        eq(outletMemberships.role, "staff"),
+        eq(user.canAccessClock, true),
         eq(outletMemberships.isActive, true),
         eq(outlets.isActive, true),
       ),

@@ -19,18 +19,7 @@ import {
   isStaffDeviceRequired,
 } from "@/lib/staff-device";
 import { getTeamAccess } from "@/lib/team-access";
-import {
-  and,
-  desc,
-  eq,
-  gt,
-  inArray,
-  isNull,
-  lte,
-  ne,
-  or,
-  sql,
-} from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lte, ne, or } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { z } from "zod";
 
@@ -472,34 +461,21 @@ export async function POST(request: Request) {
     }
 
     const db = getDb();
-    const [assignment] =
-      session.user.accountType === "super_admin"
-        ? await db
-            .select({
-              role: sql<string>`'manager'`.as("role"),
-              timezone: outlets.timezone,
-            })
-            .from(outlets)
-            .where(
-              and(eq(outlets.id, input.outletId), eq(outlets.isActive, true)),
-            )
-            .limit(1)
-        : await db
-            .select({
-              role: outletMemberships.role,
-              timezone: outlets.timezone,
-            })
-            .from(outletMemberships)
-            .innerJoin(outlets, eq(outletMemberships.outletId, outlets.id))
-            .where(
-              and(
-                eq(outletMemberships.userId, session.user.id),
-                eq(outletMemberships.outletId, input.outletId),
-                eq(outletMemberships.isActive, true),
-                eq(outlets.isActive, true),
-              ),
-            )
-            .limit(1);
+    const [assignment] = await db
+      .select({
+        timezone: outlets.timezone,
+      })
+      .from(outletMemberships)
+      .innerJoin(outlets, eq(outletMemberships.outletId, outlets.id))
+      .where(
+        and(
+          eq(outletMemberships.userId, session.user.id),
+          eq(outletMemberships.outletId, input.outletId),
+          eq(outletMemberships.isActive, true),
+          eq(outlets.isActive, true),
+        ),
+      )
+      .limit(1);
 
     if (!assignment) {
       return Response.json(
@@ -508,7 +484,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (isStaffDeviceRequired(assignment.role)) {
+    if (isStaffDeviceRequired(session.user.canAccessClock)) {
       const cookieStore = await cookies();
       const deviceToken = cookieStore.get(
         getStaffDeviceCookieName(session.user.id),

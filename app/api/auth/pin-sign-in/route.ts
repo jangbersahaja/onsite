@@ -153,7 +153,6 @@ export async function POST(request: Request) {
             and(
               eq(staffDeviceEnrollments.userId, userId),
               eq(staffDeviceEnrollments.status, "active"),
-              eq(outletMemberships.role, "staff"),
               eq(outletMemberships.isActive, true),
               eq(outlets.isActive, true),
             ),

@@ -14,16 +14,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-export const accountTypeEnum = pgEnum("account_type", [
-  "super_admin",
-  "admin",
-  "staff",
-]);
-export const membershipRoleEnum = pgEnum("membership_role", [
-  "manager",
-  "supervisor",
-  "staff",
-]);
+export const accountTypeEnum = pgEnum("account_type", ["super_admin", "user"]);
 export const correctionEventEnum = pgEnum("correction_event", [
   "clock_in",
   "clock_out",
@@ -49,7 +40,7 @@ export const user = pgTable(
     email: text("email").notNull().unique(),
     passwordHash: text("password_hash").notNull(),
     profilePhotoPath: text("profile_photo_path"),
-    accountType: accountTypeEnum("account_type").notNull().default("staff"),
+    accountType: accountTypeEnum("account_type").notNull().default("user"),
     canAccessClock: boolean("can_access_clock").notNull().default(true),
     canAccessBackoffice: boolean("can_access_backoffice")
       .notNull()
@@ -150,7 +141,6 @@ export const outletMemberships = pgTable(
     outletId: uuid("outlet_id")
       .notNull()
       .references(() => outlets.id, { onDelete: "cascade" }),
-    role: membershipRoleEnum("role").notNull(),
     notificationsEnabled: boolean("notifications_enabled")
       .notNull()
       .default(false),
@@ -167,7 +157,7 @@ export const outletMemberships = pgTable(
       table.userId,
       table.outletId,
     ),
-    index("outlet_memberships_outlet_role_idx").on(table.outletId, table.role),
+    index("outlet_memberships_outlet_idx").on(table.outletId),
     index("outlet_memberships_user_idx").on(table.userId),
   ],
 );
@@ -197,15 +187,11 @@ export const invitations = pgTable(
   {
     id: uuid("id").defaultRandom().primaryKey(),
     email: text("email").notNull(),
-    accountType: accountTypeEnum("account_type").notNull().default("staff"),
+    accountType: accountTypeEnum("account_type").notNull().default("user"),
     canAccessClock: boolean("can_access_clock").notNull().default(true),
     canAccessBackoffice: boolean("can_access_backoffice")
       .notNull()
       .default(false),
-    role: membershipRoleEnum("role").notNull(),
-    outletId: uuid("outlet_id").references(() => outlets.id, {
-      onDelete: "cascade",
-    }),
     tokenHash: text("token_hash").notNull().unique(),
     invitedBy: text("invited_by")
       .notNull()
@@ -218,9 +204,7 @@ export const invitations = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (table) => [
-    index("invitations_email_outlet_idx").on(table.email, table.outletId),
-  ],
+  (table) => [index("invitations_email_idx").on(table.email)],
 );
 
 export const invitationOutlets = pgTable(

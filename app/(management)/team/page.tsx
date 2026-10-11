@@ -10,13 +10,12 @@ type TeamMember = {
   name: string;
   email: string;
   username: string;
-  accountType: "super_admin" | "admin" | "staff";
+  accountType: "super_admin" | "user";
   canAccessClock: boolean;
   canAccessBackoffice: boolean;
   canManageAccess: boolean;
   outletId: string;
   outletName: string;
-  role: "manager" | "supervisor" | "staff";
   canReset: boolean;
 };
 
@@ -34,10 +33,9 @@ type TeamPerson = {
 type TeamInvitation = {
   id: string;
   email: string;
-  accountType: "admin" | "staff";
+  accountType: "super_admin" | "user";
   canAccessClock: boolean;
   canAccessBackoffice: boolean;
-  role: "manager" | "supervisor" | "staff";
   outletIds: string[];
   outletNames: string[];
   expiresAt: string;
@@ -62,13 +60,10 @@ type StaffDevice = {
 };
 
 type TeamData = {
-  isAdmin: boolean;
   isSuperAdmin: boolean;
   outlets: TeamOutlet[];
   members: TeamMember[];
   invitations: TeamInvitation[];
-  managers: { id: string; name: string; email: string }[];
-  managerAssignments: { userId: string; outletId: string; isActive: boolean }[];
   staffDevices: StaffDevice[];
 };
 
@@ -87,7 +82,6 @@ function formatExpiry(value: string) {
   }).format(new Date(value));
 }
 
-const roleOrder = { manager: 0, supervisor: 1, staff: 2 } as const;
 type TeamView = "people" | "invitations" | "devices";
 
 export default function TeamPage() {
@@ -98,7 +92,7 @@ export default function TeamPage() {
   const [selectedOutletId, setSelectedOutletId] = useState("");
   const outletId = selectedOutletId || undefined;
   const [email, setEmail] = useState("");
-  const [inviteType, setInviteType] = useState<"admin" | "staff">("staff");
+  const [inviteType, setInviteType] = useState<"super_admin" | "user">("user");
   const [outletIds, setOutletIds] = useState<string[]>([]);
   const [canAccessClock, setCanAccessClock] = useState(true);
   const [canAccessBackoffice, setCanAccessBackoffice] = useState(false);
@@ -139,7 +133,7 @@ export default function TeamPage() {
 
   async function handleInvite(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isInviting || (inviteType === "staff" && !outletIds.length)) return;
+    if (isInviting || (inviteType === "user" && !outletIds.length)) return;
     setIsInviting(true);
     setInviteMessage("");
     setIssuedInvite("");
@@ -316,7 +310,7 @@ export default function TeamPage() {
           <p className="eyebrow">TEAM ACCESS</p>
           <h1>Team management</h1>
           <p className="auth-description">
-            {message || "Sign in with an admin or manager account."}
+            {message || "Sign in with a backoffice account."}
           </p>
           <Link className="auth-submit invite-link-button" href="/">
             Return to clock
@@ -347,22 +341,14 @@ export default function TeamPage() {
     }
   }
   const visiblePeople = Array.from(peopleById.values());
-  visiblePeople.sort((left, right) => {
-    const leftRole = Math.min(
-      ...left.assignments.map(({ role }) => roleOrder[role]),
-    );
-    const rightRole = Math.min(
-      ...right.assignments.map(({ role }) => roleOrder[role]),
-    );
-    return leftRole - rightRole || left.name.localeCompare(right.name);
-  });
+  visiblePeople.sort((left, right) => left.name.localeCompare(right.name));
   const resetPerson = visiblePeople.find(
     (person) => person.userId === resetUserId,
   );
   const staffMembers = Array.from(
     new Map(
       data.members
-        .filter((member) => member.role === "staff")
+        .filter((member) => member.canAccessClock)
         .map((member) => [member.userId, member]),
     ).values(),
   );
@@ -497,12 +483,12 @@ export default function TeamPage() {
                     onChange={(event) => {
                       const nextType = event.target.value as typeof inviteType;
                       setInviteType(nextType);
-                      setCanAccessClock(nextType === "staff");
-                      setCanAccessBackoffice(true);
+                      if (nextType === "super_admin")
+                        setCanAccessBackoffice(true);
                     }}
                   >
-                    <option value="admin">Admin</option>
-                    <option value="staff">Staff</option>
+                    <option value="user">User</option>
+                    <option value="super_admin">Super admin</option>
                   </select>
                 </label>
               )}
@@ -714,7 +700,6 @@ export default function TeamPage() {
                             key={assignment.outletId}
                           >
                             <span>{assignment.outletName}</span>
-                            <span className="team-role">{assignment.role}</span>
                           </div>
                         ))}
                       </div>
@@ -829,7 +814,7 @@ export default function TeamPage() {
                     setShowAllStaffDevices(event.target.checked)
                   }
                 />
-                Show all staff
+                Show all clock users
               </label>
               <span className="team-count">{visibleStaffMembers.length}</span>
             </div>
@@ -908,7 +893,7 @@ export default function TeamPage() {
                   <tr>
                     <td colSpan={4} className="empty-table">
                       {showAllStaffDevices
-                        ? "No staff members found."
+                        ? "No clock users found."
                         : "No device requests or enrolled devices."}
                     </td>
                   </tr>
@@ -941,7 +926,10 @@ export default function TeamPage() {
               <div className="pending-invite-row" key={invitation.id}>
                 <strong>{invitation.email}</strong>
                 <span>
-                  {invitation.accountType} ·{" "}
+                  {invitation.accountType === "super_admin"
+                    ? "Super admin"
+                    : "User"}{" "}
+                  ·{" "}
                   {[
                     invitation.canAccessClock && "Clock",
                     invitation.canAccessBackoffice && "Backoffice",

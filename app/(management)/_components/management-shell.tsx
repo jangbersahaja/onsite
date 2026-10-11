@@ -22,14 +22,11 @@ export function ManagementShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
+    // /api/team returns 403 without backoffice access, so a successful
+    // response means the viewer can manage outlets.
     fetch("/api/team", { cache: "no-store" })
-      .then(async (response) => {
-        if (!response.ok) return false;
-        const body = (await response.json()) as { isAdmin?: boolean };
-        return body.isAdmin === true;
-      })
-      .then((isAdmin) => {
-        if (active) setCanManageOutlets(isAdmin);
+      .then((response) => {
+        if (active) setCanManageOutlets(response.ok);
       })
       .catch(() => {
         if (active) setCanManageOutlets(false);

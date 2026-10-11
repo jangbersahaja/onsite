@@ -2,6 +2,9 @@ import { outletMemberships, outlets, user } from "@/db/schema";
 import { getDb } from "@/lib/db";
 import { and, eq } from "drizzle-orm";
 
+export { canManageTargetAccess } from "@/lib/team-access-rules";
+export type { TeamActor, TeamTarget } from "@/lib/team-access-rules";
+
 export async function getTeamAccess(userId: string) {
   const db = getDb();
   const [actor] = await db
@@ -16,7 +19,6 @@ export async function getTeamAccess(userId: string) {
   if (!actor || !actor.canAccessBackoffice) return null;
 
   const isSuperAdmin = actor.accountType === "super_admin";
-  const isAdmin = actor.accountType === "admin" || isSuperAdmin;
   const manageableOutlets = isSuperAdmin
     ? await db
         .select({
@@ -51,7 +53,6 @@ export async function getTeamAccess(userId: string) {
         );
 
   return {
-    isAdmin,
     isSuperAdmin,
     outlets: manageableOutlets,
     outletIds: manageableOutlets.map((outlet) => outlet.id),

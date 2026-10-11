@@ -1,17 +1,16 @@
+import { createOneTimeToken } from "@/lib/one-time-token";
 import {
   getStaffDeviceCookieName,
   isApprovedStaffDevice,
   isStaffDeviceRequired,
   matchesStaffDeviceToken,
 } from "@/lib/staff-device";
-import { createOneTimeToken } from "@/lib/one-time-token";
 import assert from "node:assert/strict";
 import test from "node:test";
 
-test("requires a device only for the staff role", () => {
-  assert.equal(isStaffDeviceRequired("staff"), true);
-  assert.equal(isStaffDeviceRequired("supervisor"), false);
-  assert.equal(isStaffDeviceRequired("manager"), false);
+test("requires a device only for users with clock access", () => {
+  assert.equal(isStaffDeviceRequired(true), true);
+  assert.equal(isStaffDeviceRequired(false), false);
 });
 
 test("accepts only the active device token matching its stored hash", () => {

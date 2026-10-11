@@ -65,6 +65,13 @@ export async function POST(request: Request) {
       );
     }
 
+    if (!session.user.canAccessBackoffice) {
+      return Response.json(
+        { error: "Backoffice access is required for outlet notifications." },
+        { status: 403 },
+      );
+    }
+
     const [membership] = await getDb()
       .select({ id: outletMemberships.id })
       .from(outletMemberships)
@@ -72,7 +79,6 @@ export async function POST(request: Request) {
       .where(
         and(
           eq(outletMemberships.userId, session.user.id),
-          eq(outletMemberships.role, "manager"),
           eq(outletMemberships.isActive, true),
           eq(outlets.isActive, true),
         ),
@@ -80,7 +86,7 @@ export async function POST(request: Request) {
       .limit(1);
     if (!membership) {
       return Response.json(
-        { error: "An active outlet manager assignment is required." },
+        { error: "An active outlet assignment is required." },
         { status: 403 },
       );
     }

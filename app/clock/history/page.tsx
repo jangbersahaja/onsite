@@ -19,7 +19,6 @@ type HistoryOutlet = {
   longitude: number;
   radiusMeters: number;
   timezone: string;
-  role: "manager" | "supervisor" | "staff";
 };
 
 type HistoryShift = {

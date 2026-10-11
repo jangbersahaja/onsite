@@ -30,7 +30,7 @@ export async function DELETE(
 
     const db = getDb();
     const [invitation] = await db
-      .select({ id: invitations.id, outletId: invitations.outletId })
+      .select({ id: invitations.id })
       .from(invitations)
       .where(eq(invitations.id, id))
       .limit(1);
@@ -40,16 +40,12 @@ export async function DELETE(
           .from(invitationOutlets)
           .where(eq(invitationOutlets.invitationId, invitation.id))
       : [];
-    const outletIds = Array.from(
-      new Set([
-        ...linkedOutlets.map((outlet) => outlet.outletId),
-        ...(invitation?.outletId ? [invitation.outletId] : []),
-      ]),
-    );
+    const outletIds = linkedOutlets.map((outlet) => outlet.outletId);
     if (
       !invitation ||
       (!access.isSuperAdmin &&
-        (!outletIds.length || !outletIds.every((outletId) => access.outletIds.includes(outletId))))
+        (!outletIds.length ||
+          !outletIds.every((outletId) => access.outletIds.includes(outletId))))
     ) {
       return Response.json({ error: "Invitation not found." }, { status: 404 });
     }

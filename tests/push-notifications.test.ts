@@ -48,32 +48,41 @@ test("expired push subscriptions are identified for removal", () => {
   assert.equal(isExpiredPushSubscriptionError(null), false);
 });
 
-test("only opted-in active outlet managers other than the actor receive alerts", () => {
-  const manager = {
-    userId: "manager-1",
-    role: "manager",
+test("only opted-in active backoffice users other than the actor receive alerts", () => {
+  const backofficeUser = {
+    userId: "backoffice-1",
+    canAccessBackoffice: true,
     isActive: true,
     notificationsEnabled: true,
   };
 
-  assert.equal(isEligibleOutletManagerRecipient(manager, "staff-1"), true);
-  assert.equal(isEligibleOutletManagerRecipient(manager, "manager-1"), false);
+  assert.equal(
+    isEligibleOutletManagerRecipient(backofficeUser, "clock-1"),
+    true,
+  );
+  assert.equal(
+    isEligibleOutletManagerRecipient(backofficeUser, "backoffice-1"),
+    false,
+  );
   assert.equal(
     isEligibleOutletManagerRecipient(
-      { ...manager, notificationsEnabled: false },
-      "staff-1",
+      { ...backofficeUser, notificationsEnabled: false },
+      "clock-1",
     ),
     false,
   );
   assert.equal(
     isEligibleOutletManagerRecipient(
-      { ...manager, isActive: false },
-      "staff-1",
+      { ...backofficeUser, isActive: false },
+      "clock-1",
     ),
     false,
   );
   assert.equal(
-    isEligibleOutletManagerRecipient({ ...manager, role: "staff" }, "staff-1"),
+    isEligibleOutletManagerRecipient(
+      { ...backofficeUser, canAccessBackoffice: false },
+      "clock-1",
+    ),
     false,
   );
 });

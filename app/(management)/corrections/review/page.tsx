@@ -287,7 +287,7 @@ export default function CorrectionReviewPage() {
     <div className="team-page-content timesheet-content">
       <div className="page-heading">
         <div>
-          <p className="eyebrow">MANAGER REVIEW</p>
+          <p className="eyebrow">BACKOFFICE REVIEW</p>
           <h1>Review requests</h1>
           <p className="subheading">
             Review clock corrections and staff device enrollments.
@@ -365,7 +365,7 @@ export default function CorrectionReviewPage() {
               onSubmit={(event) => void decide(event, request.id)}
             >
               <label>
-                Manager note
+                Reviewer note
                 <textarea
                   name="reason"
                   minLength={3}

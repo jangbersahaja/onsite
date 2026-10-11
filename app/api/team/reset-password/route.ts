@@ -8,7 +8,7 @@ import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { createOneTimeToken } from "@/lib/one-time-token";
-import { getTeamAccess } from "@/lib/team-access";
+import { canManageTargetAccess, getTeamAccess } from "@/lib/team-access";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 
@@ -52,29 +52,41 @@ export async function POST(request: Request) {
       return Response.json({ error: "Team access denied." }, { status: 403 });
 
     const db = getDb();
-    const [target] = access.isAdmin
-      ? await db
-          .select({ id: user.id, email: user.email })
-          .from(user)
-          .where(eq(user.id, parsed.data.userId))
-          .limit(1)
-      : access.outletIds.length > 0
-        ? await db
-            .select({ id: user.id, email: user.email })
-            .from(outletMemberships)
-            .innerJoin(user, eq(outletMemberships.userId, user.id))
-            .where(
-              and(
-                eq(user.id, parsed.data.userId),
-                eq(outletMemberships.isActive, true),
-                inArray(outletMemberships.outletId, access.outletIds),
-                inArray(outletMemberships.role, ["staff", "supervisor"]),
-              ),
-            )
-            .limit(1)
-        : [];
+    const [target] = await db
+      .select({
+        id: user.id,
+        email: user.email,
+        accountType: user.accountType,
+        canAccessBackoffice: user.canAccessBackoffice,
+      })
+      .from(user)
+      .where(eq(user.id, parsed.data.userId))
+      .limit(1);
 
-    if (!target)
+    let sharesOutlet = access.isSuperAdmin;
+    if (target && !access.isSuperAdmin && access.outletIds.length > 0) {
+      const sharedOutlets = await db
+        .select({ outletId: outletMemberships.outletId })
+        .from(outletMemberships)
+        .where(
+          and(
+            eq(outletMemberships.userId, target.id),
+            eq(outletMemberships.isActive, true),
+            inArray(outletMemberships.outletId, access.outletIds),
+          ),
+        )
+        .limit(1);
+      sharesOutlet = sharedOutlets.length > 0;
+    }
+
+    if (
+      !target ||
+      !canManageTargetAccess(
+        { id: session.user.id, isSuperAdmin: access.isSuperAdmin },
+        target,
+        sharesOutlet,
+      )
+    )
       return Response.json(
         { error: "You cannot reset this account." },
         { status: 403 },

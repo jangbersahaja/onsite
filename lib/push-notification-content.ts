@@ -27,14 +27,14 @@ export function notificationBody(
 export function isEligibleOutletManagerRecipient(
   membership: {
     userId: string;
-    role: string;
+    canAccessBackoffice: boolean;
     isActive: boolean;
     notificationsEnabled: boolean;
   },
   actorId: string,
 ) {
   return (
-    membership.role === "manager" &&
+    membership.canAccessBackoffice &&
     membership.isActive &&
     membership.notificationsEnabled &&
     membership.userId !== actorId

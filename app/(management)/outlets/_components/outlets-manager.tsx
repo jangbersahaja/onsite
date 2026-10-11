@@ -1,7 +1,6 @@
 "use client";
 
 import { ModalDialog } from "@/app/_components/modal-dialog";
-import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent } from "react";
 
 type OutletSummary = {
@@ -15,10 +14,14 @@ type OutletSummary = {
 };
 
 type OutletsData = {
-  isAdmin: boolean;
+  isSuperAdmin: boolean;
   outlets: OutletSummary[];
-  managers: { id: string; name: string; email: string }[];
-  managerAssignments: { userId: string; outletId: string; isActive: boolean }[];
+  backofficeUsers: { id: string; name: string; email: string }[];
+  backofficeAssignments: {
+    userId: string;
+    outletId: string;
+    isActive: boolean;
+  }[];
 };
 
 async function loadOutletsData() {
@@ -29,7 +32,6 @@ async function loadOutletsData() {
 }
 
 export function OutletsManager() {
-  const router = useRouter();
   const [data, setData] = useState<OutletsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreatingOutlet, setIsCreatingOutlet] = useState(false);
@@ -38,17 +40,13 @@ export function OutletsManager() {
   const [outletMessage, setOutletMessage] = useState("");
   const [message, setMessage] = useState("");
   const [assignmentKey, setAssignmentKey] = useState("");
-  const [accessManagerId, setAccessManagerId] = useState("");
+  const [accessUserId, setAccessUserId] = useState("");
 
   useEffect(() => {
     let active = true;
     loadOutletsData()
       .then((team) => {
         if (!active) return;
-        if (!team.isAdmin) {
-          router.replace("/manage");
-          return;
-        }
         setData(team);
       })
       .catch((error: unknown) => {
@@ -63,7 +61,7 @@ export function OutletsManager() {
     return () => {
       active = false;
     };
-  }, [router]);
+  }, []);
 
   async function refresh() {
     setData(await loadOutletsData());
@@ -174,12 +172,12 @@ export function OutletsManager() {
     }
   }
 
-  async function handleManagerAssignment(
-    managerId: string,
+  async function handleBackofficeAssignment(
+    userId: string,
     assignedOutletId: string,
     assigned: boolean,
   ) {
-    const key = `${managerId}:${assignedOutletId}`;
+    const key = `${userId}:${assignedOutletId}`;
     setAssignmentKey(key);
     setMessage("");
     try {
@@ -187,7 +185,7 @@ export function OutletsManager() {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          managerId,
+          userId,
           outletId: assignedOutletId,
           assigned,
         }),
@@ -227,13 +225,13 @@ export function OutletsManager() {
   const editingOutlet = data.outlets.find(
     (outlet) => outlet.id === editingOutletId,
   );
-  const accessManager = data.managers.find(
-    (manager) => manager.id === accessManagerId,
+  const accessUser = data.backofficeUsers.find(
+    (person) => person.id === accessUserId,
   );
-  const isAssigned = (managerId: string, outletId: string) =>
-    data.managerAssignments.some(
+  const isAssigned = (userId: string, outletId: string) =>
+    data.backofficeAssignments.some(
       (assignment) =>
-        assignment.userId === managerId &&
+        assignment.userId === userId &&
         assignment.outletId === outletId &&
         assignment.isActive,
     );
@@ -245,11 +243,11 @@ export function OutletsManager() {
           <p className="eyebrow">COMPANY LOCATIONS</p>
           <h1>Outlets</h1>
           <p className="subheading">
-            Manage outlet details, clock-in locations, and manager access.
+            Manage outlet details, clock-in locations, and backoffice access.
           </p>
         </div>
       </div>
-      {message && !accessManager && (
+      {message && !accessUser && (
         <p className="team-message" role="status" aria-live="polite">
           {message}
         </p>
@@ -266,17 +264,19 @@ export function OutletsManager() {
           </div>
           <div className="team-heading-actions">
             <span className="team-count">{data.outlets.length}</span>
-            <button
-              className="team-secondary-action"
-              type="button"
-              onClick={() => {
-                setEditingOutletId("");
-                setOutletMessage("");
-                setIsOutletDialogOpen(true);
-              }}
-            >
-              Add outlet
-            </button>
+            {data.isSuperAdmin && (
+              <button
+                className="team-secondary-action"
+                type="button"
+                onClick={() => {
+                  setEditingOutletId("");
+                  setOutletMessage("");
+                  setIsOutletDialogOpen(true);
+                }}
+              >
+                Add outlet
+              </button>
+            )}
           </div>
         </div>
         <div className="outlet-list" aria-label="Active outlets">
@@ -457,24 +457,24 @@ export function OutletsManager() {
             </form>
           </div>
         </ModalDialog>
-        {data.managers.length > 0 && (
+        {data.backofficeUsers.length > 0 && (
           <div className="manager-assignment-list">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">MANAGER ACCESS</p>
+                <p className="eyebrow">BACKOFFICE ACCESS</p>
                 <h2>Outlet assignments</h2>
               </div>
-              <span className="team-count">{data.managers.length}</span>
+              <span className="team-count">{data.backofficeUsers.length}</span>
             </div>
-            {data.managers.map((manager) => {
+            {data.backofficeUsers.map((person) => {
               const assignedCount = data.outlets.filter((outlet) =>
-                isAssigned(manager.id, outlet.id),
+                isAssigned(person.id, outlet.id),
               ).length;
               return (
-                <div className="manager-assignment-row" key={manager.id}>
+                <div className="manager-assignment-row" key={person.id}>
                   <div className="manager-assignment-person">
-                    <strong>{manager.name}</strong>
-                    <small>{manager.email}</small>
+                    <strong>{person.name}</strong>
+                    <small>{person.email}</small>
                   </div>
                   <div className="manager-assignment-action">
                     <span className="manager-assignment-count">
@@ -484,7 +484,7 @@ export function OutletsManager() {
                       className="team-secondary-action"
                       type="button"
                       onClick={() => {
-                        setAccessManagerId(manager.id);
+                        setAccessUserId(person.id);
                         setMessage("");
                       }}
                     >
@@ -497,27 +497,27 @@ export function OutletsManager() {
           </div>
         )}
         <ModalDialog
-          open={Boolean(accessManager)}
+          open={Boolean(accessUser)}
           onOpenChange={(isOpen) => {
-            if (!isOpen) setAccessManagerId("");
+            if (!isOpen) setAccessUserId("");
           }}
-          labelledBy="manager-access-dialog-title"
+          labelledBy="backoffice-access-dialog-title"
         >
-          {accessManager && (
+          {accessUser && (
             <div className="dialog-panel">
               <header className="dialog-header">
                 <div>
-                  <p className="eyebrow">MANAGER ACCESS</p>
-                  <h2 id="manager-access-dialog-title">Outlet access</h2>
+                  <p className="eyebrow">BACKOFFICE ACCESS</p>
+                  <h2 id="backoffice-access-dialog-title">Outlet access</h2>
                   <p className="dialog-description">
-                    Choose the outlets {accessManager.name} can manage.
+                    Choose the outlets {accessUser.name} can manage.
                   </p>
                 </div>
                 <button
                   className="dialog-close"
                   type="button"
                   aria-label="Close dialog"
-                  onClick={() => setAccessManagerId("")}
+                  onClick={() => setAccessUserId("")}
                 >
                   ×
                 </button>
@@ -529,8 +529,8 @@ export function OutletsManager() {
               )}
               <div className="outlet-access-options">
                 {data.outlets.map((outlet) => {
-                  const key = `${accessManager.id}:${outlet.id}`;
-                  const assigned = isAssigned(accessManager.id, outlet.id);
+                  const key = `${accessUser.id}:${outlet.id}`;
+                  const assigned = isAssigned(accessUser.id, outlet.id);
                   return (
                     <label className="outlet-access-option" key={outlet.id}>
                       <input
@@ -538,8 +538,8 @@ export function OutletsManager() {
                         checked={assigned}
                         disabled={assignmentKey === key}
                         onChange={(event) =>
-                          void handleManagerAssignment(
-                            accessManager.id,
+                          void handleBackofficeAssignment(
+                            accessUser.id,
                             outlet.id,
                             event.target.checked,
                           )
@@ -557,7 +557,7 @@ export function OutletsManager() {
                 <button
                   className="team-primary-action"
                   type="button"
-                  onClick={() => setAccessManagerId("")}
+                  onClick={() => setAccessUserId("")}
                 >
                   Done
                 </button>

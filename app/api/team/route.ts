@@ -9,7 +9,7 @@ import {
 import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { getTeamAccess } from "@/lib/team-access";
+import { canManageTargetAccess, getTeamAccess } from "@/lib/team-access";
 import { and, desc, eq, gt, inArray, isNull } from "drizzle-orm";
 
 function unavailable() {
@@ -47,7 +47,7 @@ export async function GET(request: Request) {
       : access.outletIds;
 
     const db = getDb();
-    const [members, invitationRows, managers, managerAssignments] =
+    const [members, invitationRows, backofficeUsers, backofficeAssignments] =
       await Promise.all([
         db
           .select({
@@ -60,7 +60,6 @@ export async function GET(request: Request) {
             canAccessBackoffice: user.canAccessBackoffice,
             outletId: outlets.id,
             outletName: outlets.name,
-            role: outletMemberships.role,
           })
           .from(outletMemberships)
           .innerJoin(user, eq(outletMemberships.userId, user.id))
@@ -81,7 +80,6 @@ export async function GET(request: Request) {
             accountType: invitations.accountType,
             canAccessClock: invitations.canAccessClock,
             canAccessBackoffice: invitations.canAccessBackoffice,
-            role: invitations.role,
             outletId: invitationOutlets.outletId,
             outletName: outlets.name,
             expiresAt: invitations.expiresAt,
@@ -109,7 +107,12 @@ export async function GET(request: Request) {
                 email: user.email,
               })
               .from(user)
-              .where(inArray(user.accountType, ["admin", "super_admin"]))
+              .where(
+                and(
+                  eq(user.accountType, "user"),
+                  eq(user.canAccessBackoffice, true),
+                ),
+              )
               .orderBy(user.name)
           : Promise.resolve([]),
         access.isSuperAdmin
@@ -124,8 +127,8 @@ export async function GET(request: Request) {
               .innerJoin(outlets, eq(outletMemberships.outletId, outlets.id))
               .where(
                 and(
-                  eq(outletMemberships.role, "manager"),
-                  inArray(user.accountType, ["admin", "super_admin"]),
+                  eq(user.accountType, "user"),
+                  eq(user.canAccessBackoffice, true),
                   inArray(outlets.id, visibleOutletIds),
                 ),
               )
@@ -137,10 +140,9 @@ export async function GET(request: Request) {
       {
         id: string;
         email: string;
-        accountType: "super_admin" | "admin" | "staff";
+        accountType: "super_admin" | "user";
         canAccessClock: boolean;
         canAccessBackoffice: boolean;
-        role: "manager" | "supervisor" | "staff";
         outletIds: string[];
         outletNames: string[];
         expiresAt: Date;
@@ -153,7 +155,6 @@ export async function GET(request: Request) {
         accountType: row.accountType,
         canAccessClock: row.canAccessClock,
         canAccessBackoffice: row.canAccessBackoffice,
-        role: row.role,
         outletIds: [],
         outletNames: [],
         expiresAt: row.expiresAt,
@@ -178,7 +179,7 @@ export async function GET(request: Request) {
     const staffUserIds = Array.from(
       new Set(
         members
-          .filter((member) => member.role === "staff")
+          .filter((member) => member.canAccessClock)
           .map((member) => member.userId),
       ),
     );
@@ -200,20 +201,33 @@ export async function GET(request: Request) {
           )
       : [];
 
+    const actor = {
+      id: session.user.id,
+      isSuperAdmin: access.isSuperAdmin,
+    };
+
     return Response.json({
-      isAdmin: access.isAdmin,
       isSuperAdmin: access.isSuperAdmin,
       outlets: access.outlets,
-      members: members.map((member) => ({
-        ...member,
-        canManageAccess: access.isAdmin && member.accountType === "staff",
-        canReset:
-          access.isAdmin ||
-          (member.userId !== session.user.id && member.role !== "manager"),
-      })),
+      members: members.map((member) => {
+        const canManage = canManageTargetAccess(
+          actor,
+          {
+            id: member.userId,
+            accountType: member.accountType,
+            canAccessBackoffice: member.canAccessBackoffice,
+          },
+          true,
+        );
+        return {
+          ...member,
+          canManageAccess: canManage,
+          canReset: canManage,
+        };
+      }),
       invitations: pendingInvitations,
-      managers,
-      managerAssignments,
+      backofficeUsers,
+      backofficeAssignments,
       staffDevices,
     });
   } catch {

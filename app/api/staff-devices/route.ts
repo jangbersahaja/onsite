@@ -75,7 +75,7 @@ export async function GET(request: Request) {
         .where(
           and(
             eq(staffDeviceEnrollments.status, "pending"),
-            eq(outletMemberships.role, "staff"),
+            eq(user.canAccessClock, true),
             eq(outletMemberships.isActive, true),
             eq(outlets.isActive, true),
             inArray(outletMemberships.outletId, visibleOutletIds),
@@ -120,24 +120,6 @@ export async function GET(request: Request) {
     }
 
     const db = getDb();
-    const [staffAssignment] = await db
-      .select({ id: outletMemberships.id })
-      .from(outletMemberships)
-      .innerJoin(outlets, eq(outletMemberships.outletId, outlets.id))
-      .where(
-        and(
-          eq(outletMemberships.userId, session.user.id),
-          eq(outletMemberships.role, "staff"),
-          eq(outletMemberships.isActive, true),
-          eq(outlets.isActive, true),
-        ),
-      )
-      .limit(1);
-
-    if (!staffAssignment) {
-      return Response.json({ required: false, status: "not_required" });
-    }
-
     const enrollments = await db
       .select({
         status: staffDeviceEnrollments.status,
@@ -216,27 +198,6 @@ export async function POST(request: Request) {
     }
 
     const db = getDb();
-    const [staffAssignment] = await db
-      .select({ id: outletMemberships.id })
-      .from(outletMemberships)
-      .innerJoin(outlets, eq(outletMemberships.outletId, outlets.id))
-      .where(
-        and(
-          eq(outletMemberships.userId, session.user.id),
-          eq(outletMemberships.role, "staff"),
-          eq(outletMemberships.isActive, true),
-          eq(outlets.isActive, true),
-        ),
-      )
-      .limit(1);
-
-    if (!staffAssignment) {
-      return Response.json(
-        { error: "Only staff can enroll a device." },
-        { status: 403 },
-      );
-    }
-
     const cookieStore = await cookies();
     const cookieName = getStaffDeviceCookieName(session.user.id);
     const currentToken = cookieStore.get(cookieName)?.value;

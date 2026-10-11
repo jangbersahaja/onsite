@@ -1,10 +1,10 @@
-import { timingSafeEqual } from "node:crypto";
 import { hashOneTimeToken } from "@/lib/one-time-token";
+import { timingSafeEqual } from "node:crypto";
 
 export type StaffDeviceStatus = "pending" | "active" | "revoked";
 
-export function isStaffDeviceRequired(role: string) {
-  return role === "staff";
+export function isStaffDeviceRequired(canAccessClock: boolean) {
+  return canAccessClock;
 }
 
 export function getStaffDeviceCookieName(userId: string) {

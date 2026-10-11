@@ -1,9 +1,4 @@
-import {
-  auditEvents,
-  invitationOutlets,
-  invitations,
-  user,
-} from "@/db/schema";
+import { auditEvents, invitationOutlets, invitations, user } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
@@ -15,7 +10,7 @@ import { z } from "zod";
 const invitationSchema = z
   .object({
     email: z.email().transform((email) => email.trim().toLowerCase()),
-    accountType: z.enum(["admin", "staff"]),
+    accountType: z.enum(["super_admin", "user"]),
     canAccessClock: z.boolean(),
     canAccessBackoffice: z.boolean(),
     outletIds: z.array(z.string().uuid()).max(50),
@@ -65,25 +60,27 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    if (input.accountType === "admin" && !access.isSuperAdmin) {
+    if (input.accountType === "super_admin" && !access.isSuperAdmin) {
       return Response.json(
-        { error: "Only the super admin can invite admins." },
+        { error: "Only the super admin can invite super admins." },
         { status: 403 },
       );
     }
-    if (input.accountType === "admin" && !input.canAccessBackoffice) {
+    if (input.accountType === "super_admin" && !input.canAccessBackoffice) {
       return Response.json(
-        { error: "Admins must have Backoffice access." },
+        { error: "Super admins must have Backoffice access." },
         { status: 400 },
       );
     }
     if (
-      input.accountType === "staff" &&
+      input.accountType === "user" &&
       (!input.outletIds.length ||
-        input.outletIds.some((outletId) => !access.outletIds.includes(outletId)))
+        input.outletIds.some(
+          (outletId) => !access.outletIds.includes(outletId),
+        ))
     ) {
       return Response.json(
-        { error: "Staff invitations require outlets you can manage." },
+        { error: "Invitations require outlets you can manage." },
         { status: 403 },
       );
     }
@@ -123,8 +120,6 @@ export async function POST(request: Request) {
           accountType: input.accountType,
           canAccessClock: input.canAccessClock,
           canAccessBackoffice: input.canAccessBackoffice,
-          role: input.accountType === "admin" ? "manager" : "staff",
-          outletId: input.outletIds[0] ?? null,
           tokenHash,
           invitedBy: session.user.id,
           expiresAt,

@@ -27,7 +27,6 @@ export const REVIEW_REQUESTS_CHANGED_EVENT = "review-requests-changed";
 export type WorkspaceOutlet = {
   id: string;
   name: string;
-  role?: string;
 };
 
 export function createManagementNavigation(
@@ -368,7 +367,7 @@ export function WorkspaceShell({
             </span>
             <span className="outlet-copy">
               <strong>{selectedOutlet?.name ?? workspaceName}</strong>
-              <small>{selectedOutlet?.role ?? workspaceName}</small>
+              <small>{workspaceName}</small>
             </span>
             <select
               id="workspace-outlet-select"
@@ -391,7 +390,7 @@ export function WorkspaceShell({
             </span>
             <span className="outlet-copy">
               <strong>{selectedOutlet?.name ?? workspaceName}</strong>
-              <small>{selectedOutlet?.role ?? "Current workspace"}</small>
+              <small>Current workspace</small>
             </span>
           </div>
         )}

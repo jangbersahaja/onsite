@@ -2,7 +2,7 @@ import { auditEvents, outletMemberships, user } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { getTeamAccess } from "@/lib/team-access";
+import { canManageTargetAccess, getTeamAccess } from "@/lib/team-access";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 
@@ -60,64 +60,41 @@ export async function PATCH(request: Request) {
       );
 
     const db = getDb();
-    let managerOutletIds = access.outletIds;
-    if (!access.isSuperAdmin) {
-      if (!access.isAdmin)
-        return Response.json(
-          { error: "Only outlet managers can change staff app access." },
-          { status: 403 },
-        );
-      const managerOutlets = await db
+    const [target] = await db
+      .select({
+        id: user.id,
+        accountType: user.accountType,
+        canAccessClock: user.canAccessClock,
+        canAccessBackoffice: user.canAccessBackoffice,
+      })
+      .from(user)
+      .where(eq(user.id, parsed.data.userId))
+      .limit(1);
+
+    let sharesOutlet = access.isSuperAdmin;
+    if (target && !access.isSuperAdmin) {
+      const sharedOutlets = await db
         .select({ outletId: outletMemberships.outletId })
         .from(outletMemberships)
         .where(
           and(
-            eq(outletMemberships.userId, session.user.id),
-            eq(outletMemberships.role, "manager"),
+            eq(outletMemberships.userId, target.id),
             eq(outletMemberships.isActive, true),
             inArray(outletMemberships.outletId, access.outletIds),
           ),
-        );
-      managerOutletIds = managerOutlets.map((outlet) => outlet.outletId);
-      if (!managerOutletIds.length)
-        return Response.json(
-          { error: "Only outlet managers can change staff app access." },
-          { status: 403 },
-        );
+        )
+        .limit(1);
+      sharesOutlet = sharedOutlets.length > 0;
     }
 
-    const targetQuery = db
-      .select({
-        id: user.id,
-        canAccessClock: user.canAccessClock,
-        canAccessBackoffice: user.canAccessBackoffice,
-      })
-      .from(user);
-    const [target] = access.isSuperAdmin
-      ? await targetQuery
-          .where(
-            and(eq(user.id, parsed.data.userId), eq(user.accountType, "staff")),
-          )
-          .limit(1)
-      : await db
-          .select({
-            id: user.id,
-            canAccessClock: user.canAccessClock,
-            canAccessBackoffice: user.canAccessBackoffice,
-          })
-          .from(outletMemberships)
-          .innerJoin(user, eq(outletMemberships.userId, user.id))
-          .where(
-            and(
-              eq(user.id, parsed.data.userId),
-              eq(user.accountType, "staff"),
-              eq(outletMemberships.isActive, true),
-              inArray(outletMemberships.outletId, managerOutletIds),
-            ),
-          )
-          .limit(1);
-
-    if (!target)
+    if (
+      !target ||
+      !canManageTargetAccess(
+        { id: session.user.id, isSuperAdmin: access.isSuperAdmin },
+        target,
+        sharesOutlet,
+      )
+    )
       return Response.json(
         { error: "You cannot change access for this team member." },
         { status: 403 },

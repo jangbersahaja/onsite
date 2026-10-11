@@ -1,16 +1,15 @@
 "use client";
 
+import { MAX_PROFILE_PHOTO_BYTES } from "@/lib/profile-photo";
 import Image from "next/image";
 import Link from "next/link";
-import { MAX_PROFILE_PHOTO_BYTES } from "@/lib/profile-photo";
 import { useEffect, useState } from "react";
 
 type InvitationInfo = {
   email: string;
-  accountType: "admin" | "staff";
+  accountType: "super_admin" | "user";
   canAccessClock: boolean;
   canAccessBackoffice: boolean;
-  role: "manager" | "supervisor" | "staff";
   outletNames: string[];
   expiresAt: string;
 };
@@ -128,7 +127,11 @@ export function InviteAcceptanceForm({ token }: { token: string }) {
         ) : invitation ? (
           <>
             <p className="auth-description">
-              {invitation.email} · {invitation.accountType} ·{" "}
+              {invitation.email} ·{" "}
+              {invitation.accountType === "super_admin"
+                ? "Super admin"
+                : "User"}{" "}
+              ·{" "}
               {[
                 invitation.canAccessClock && "Clock",
                 invitation.canAccessBackoffice && "Backoffice",

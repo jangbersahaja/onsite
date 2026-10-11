@@ -1,9 +1,4 @@
-import {
-  auditEvents,
-  outletMemberships,
-  outlets,
-  workSessions,
-} from "@/db/schema";
+import { auditEvents, outlets, workSessions } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
@@ -49,9 +44,9 @@ export async function POST(request: Request) {
       return Response.json({ error: "Sign in required." }, { status: 401 });
 
     const access = await getTeamAccess(session.user.id);
-    if (!access?.isAdmin) {
+    if (!access?.isSuperAdmin) {
       return Response.json(
-        { error: "Only admins can add outlets." },
+        { error: "Only the super admin can add outlets." },
         { status: 403 },
       );
     }
@@ -83,14 +78,6 @@ export async function POST(request: Request) {
         name: outlets.name,
         address: outlets.address,
       });
-      if (session.user.accountType === "admin") {
-        await tx.insert(outletMemberships).values({
-          userId: session.user.id,
-          outletId: outlet.id,
-          role: "manager",
-          assignedBy: session.user.id,
-        });
-      }
       await tx.insert(auditEvents).values({
         actorId: session.user.id,
         action: "outlet_created",
@@ -124,9 +111,9 @@ export async function PATCH(request: Request) {
     if (!session)
       return Response.json({ error: "Sign in required." }, { status: 401 });
     const access = await getTeamAccess(session.user.id);
-    if (!access?.isAdmin) {
+    if (!access) {
       return Response.json(
-        { error: "Only admins can edit outlets." },
+        { error: "Only backoffice users can edit outlets." },
         { status: 403 },
       );
     }
@@ -216,9 +203,9 @@ export async function DELETE(request: Request) {
     if (!session)
       return Response.json({ error: "Sign in required." }, { status: 401 });
     const access = await getTeamAccess(session.user.id);
-    if (!access?.isAdmin) {
+    if (!access) {
       return Response.json(
-        { error: "Only admins can deactivate outlets." },
+        { error: "Only backoffice users can deactivate outlets." },
         { status: 403 },
       );
     }

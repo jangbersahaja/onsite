@@ -3,6 +3,7 @@ import {
   outletMemberships,
   outlets,
   staffDeviceEnrollments,
+  user,
 } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
@@ -60,7 +61,7 @@ export async function PATCH(
     const db = getDb();
     const authorizedConditions = [
       eq(staffDeviceEnrollments.id, id),
-      eq(outletMemberships.role, "staff"),
+      eq(user.canAccessClock, true),
       eq(outletMemberships.isActive, true),
       eq(outlets.isActive, true),
     ];
@@ -83,6 +84,7 @@ export async function PATCH(
         status: staffDeviceEnrollments.status,
       })
       .from(staffDeviceEnrollments)
+      .innerJoin(user, eq(staffDeviceEnrollments.userId, user.id))
       .innerJoin(
         outletMemberships,
         eq(staffDeviceEnrollments.userId, outletMemberships.userId),

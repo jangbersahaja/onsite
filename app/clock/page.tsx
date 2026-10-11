@@ -25,7 +25,6 @@ type ClockOutlet = {
   longitude: number;
   radiusMeters: number;
   timezone: string;
-  role: "manager" | "supervisor" | "staff";
 };
 
 type ClockRecord = {
@@ -240,7 +239,7 @@ export default function Home() {
     locationError && locationError.outletId === selectedOutlet?.id
       ? locationError.reason
       : null;
-  const isDeviceRequired = selectedOutlet?.role === "staff";
+  const isDeviceRequired = Boolean(authSession.data?.user.canAccessClock);
   const isDeviceBlocked = Boolean(
     isDeviceRequired &&
     (!staffDeviceStatus || !staffDeviceStatus.currentBrowserApproved),
@@ -777,33 +776,32 @@ export default function Home() {
                   {actionMessage}
                 </p>
               )}
-              {selectedOutlet?.role === "staff" &&
-                staffDeviceStatus?.required && (
-                  <div>
-                    {staffDeviceStatus.status === "pending" && (
+              {isDeviceRequired && staffDeviceStatus?.required && (
+                <div>
+                  {staffDeviceStatus.status === "pending" && (
+                    <p className="clock-hint" role="status">
+                      {staffDeviceStatus.currentBrowserHasPendingRequest
+                        ? "This browser is awaiting manager approval."
+                        : "A device request is already awaiting approval. Ask your manager if you need to replace it."}
+                    </p>
+                  )}
+                  {staffDeviceStatus.status === "replacement_pending" && (
+                    <p className="clock-hint" role="status">
+                      {staffDeviceStatus.currentBrowserApproved
+                        ? "This browser remains approved while the replacement request is reviewed."
+                        : staffDeviceStatus.currentBrowserHasPendingRequest
+                          ? "This replacement browser is awaiting manager approval."
+                          : "A replacement request is pending from another browser; the currently approved browser can still clock."}
+                    </p>
+                  )}
+                  {staffDeviceStatus.status === "active" &&
+                    staffDeviceStatus.currentBrowserApproved && (
                       <p className="clock-hint" role="status">
-                        {staffDeviceStatus.currentBrowserHasPendingRequest
-                          ? "This browser is awaiting manager approval."
-                          : "A device request is already awaiting approval. Ask your manager if you need to replace it."}
+                        This browser is approved for staff clock actions.
                       </p>
                     )}
-                    {staffDeviceStatus.status === "replacement_pending" && (
-                      <p className="clock-hint" role="status">
-                        {staffDeviceStatus.currentBrowserApproved
-                          ? "This browser remains approved while the replacement request is reviewed."
-                          : staffDeviceStatus.currentBrowserHasPendingRequest
-                            ? "This replacement browser is awaiting manager approval."
-                            : "A replacement request is pending from another browser; the currently approved browser can still clock."}
-                      </p>
-                    )}
-                    {staffDeviceStatus.status === "active" &&
-                      staffDeviceStatus.currentBrowserApproved && (
-                        <p className="clock-hint" role="status">
-                          This browser is approved for staff clock actions.
-                        </p>
-                      )}
-                  </div>
-                )}
+                </div>
+              )}
               <div
                 className={`clock-location-status${!selectedOutlet || isDeviceBlocked || activeLocationError || clockBlockInfo || (liveGeofence && !liveGeofence.allowed) ? " is-blocked" : liveGeofence?.allowed ? " is-ready" : ""}`}
                 role="status"
@@ -874,7 +872,7 @@ export default function Home() {
                                         "Location is checked for clock in and out; break times use server time."}
                   </span>
                 </div>
-                {selectedOutlet?.role === "staff" &&
+                {isDeviceRequired &&
                 !staffDeviceStatus?.currentBrowserApproved ? (
                   <button
                     className="clock-correction-link"

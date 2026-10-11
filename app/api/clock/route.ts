@@ -86,7 +86,6 @@ export async function GET(request: Request) {
         longitude: outlets.longitude,
         radiusMeters: outlets.radiusMeters,
         timezone: outlets.timezone,
-        role: outletMemberships.role,
       })
       .from(outletMemberships)
       .innerJoin(outlets, eq(outletMemberships.outletId, outlets.id))
@@ -97,24 +96,6 @@ export async function GET(request: Request) {
           eq(outlets.isActive, true),
         ),
       );
-    const assignments =
-      session.user.accountType === "super_admin"
-        ? await db
-            .select({
-              id: outlets.id,
-              name: outlets.name,
-              address: outlets.address,
-              latitude: outlets.latitude,
-              longitude: outlets.longitude,
-              radiusMeters: outlets.radiusMeters,
-              timezone: outlets.timezone,
-            })
-            .from(outlets)
-            .where(eq(outlets.isActive, true))
-            .then((rows) =>
-              rows.map((outlet) => ({ ...outlet, role: "manager" as const })),
-            )
-        : assignedOutlets;
 
     const [activeSession] = await db
       .select({
@@ -224,7 +205,7 @@ export async function GET(request: Request) {
         name: session.user.name,
         email: session.user.email,
       },
-      outlets: assignments,
+      outlets: assignedOutlets,
       activeSession: activeSession ?? null,
       activeBreak: activeBreak ?? null,
       recentSessions: recentSessionsWithBreaks,
@@ -376,34 +357,21 @@ export async function POST(request: Request) {
       });
     }
 
-    const [assignment] =
-      session.user.accountType === "super_admin"
-        ? await db
-            .select({
-              role: sql<string>`'manager'`.as("role"),
-              timezone: outlets.timezone,
-            })
-            .from(outlets)
-            .where(
-              and(eq(outlets.id, input.outletId), eq(outlets.isActive, true)),
-            )
-            .limit(1)
-        : await db
-            .select({
-              role: outletMemberships.role,
-              timezone: outlets.timezone,
-            })
-            .from(outletMemberships)
-            .innerJoin(outlets, eq(outletMemberships.outletId, outlets.id))
-            .where(
-              and(
-                eq(outletMemberships.userId, session.user.id),
-                eq(outletMemberships.outletId, input.outletId),
-                eq(outletMemberships.isActive, true),
-                eq(outlets.isActive, true),
-              ),
-            )
-            .limit(1);
+    const [assignment] = await db
+      .select({
+        timezone: outlets.timezone,
+      })
+      .from(outletMemberships)
+      .innerJoin(outlets, eq(outletMemberships.outletId, outlets.id))
+      .where(
+        and(
+          eq(outletMemberships.userId, session.user.id),
+          eq(outletMemberships.outletId, input.outletId),
+          eq(outletMemberships.isActive, true),
+          eq(outlets.isActive, true),
+        ),
+      )
+      .limit(1);
 
     if (!assignment)
       return Response.json(
@@ -411,7 +379,7 @@ export async function POST(request: Request) {
         { status: 403 },
       );
 
-    if (isStaffDeviceRequired(assignment.role)) {
+    if (isStaffDeviceRequired(session.user.canAccessClock)) {
       const cookieStore = await cookies();
       const deviceToken = cookieStore.get(
         getStaffDeviceCookieName(session.user.id),

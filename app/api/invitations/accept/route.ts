@@ -11,13 +11,13 @@ import { hasServerConfiguration } from "@/lib/app-config";
 import { getDb } from "@/lib/db";
 import { createOneTimeToken, hashOneTimeToken } from "@/lib/one-time-token";
 import { hashPassword } from "@/lib/password";
+import { MAX_PROFILE_PHOTO_BYTES } from "@/lib/profile-photo";
 import {
   deleteProfilePhoto,
   ProfilePhotoValidationError,
   uploadProfilePhoto,
   validateProfilePhotoFile,
 } from "@/lib/profile-photo-storage";
-import { MAX_PROFILE_PHOTO_BYTES } from "@/lib/profile-photo";
 import { getStaffDeviceCookieName } from "@/lib/staff-device";
 import { and, eq, gt, isNull, lt, or, sql } from "drizzle-orm";
 import { cookies } from "next/headers";
@@ -74,11 +74,9 @@ export async function GET(request: Request) {
       .select({
         id: invitations.id,
         email: invitations.email,
-        role: invitations.role,
         accountType: invitations.accountType,
         canAccessClock: invitations.canAccessClock,
         canAccessBackoffice: invitations.canAccessBackoffice,
-        outletId: invitations.outletId,
         expiresAt: invitations.expiresAt,
       })
       .from(invitations)
@@ -102,15 +100,7 @@ export async function GET(request: Request) {
       .from(invitationOutlets)
       .innerJoin(outlets, eq(invitationOutlets.outletId, outlets.id))
       .where(eq(invitationOutlets.invitationId, invitation.id));
-    const outletNames = linkedOutlets.length
-      ? linkedOutlets.map((outlet) => outlet.name)
-      : invitation.outletId
-        ? await getDb()
-            .select({ name: outlets.name })
-            .from(outlets)
-            .where(eq(outlets.id, invitation.outletId))
-            .then((rows) => rows.map((outlet) => outlet.name))
-        : [];
+    const outletNames = linkedOutlets.map((outlet) => outlet.name);
 
     return Response.json(
       { ...invitation, outletNames },
@@ -192,10 +182,8 @@ export async function POST(request: Request) {
     | {
         id: string;
         email: string;
-        role: "manager" | "supervisor" | "staff";
-        outletId: string | null;
         invitedBy: string;
-        accountType: "super_admin" | "admin" | "staff";
+        accountType: "super_admin" | "user";
         canAccessClock: boolean;
         canAccessBackoffice: boolean;
       }
@@ -259,8 +247,6 @@ export async function POST(request: Request) {
       .returning({
         id: invitations.id,
         email: invitations.email,
-        role: invitations.role,
-        outletId: invitations.outletId,
         invitedBy: invitations.invitedBy,
         accountType: invitations.accountType,
         canAccessClock: invitations.canAccessClock,
@@ -277,7 +263,7 @@ export async function POST(request: Request) {
 
     createdUserId = randomUUID();
     const passwordHash = await hashPassword(input.password);
-    const firstDevice = claimed.role === "staff" ? createOneTimeToken() : null;
+    const firstDevice = claimed.canAccessClock ? createOneTimeToken() : null;
     if (profilePhotoFile) {
       uploadedProfilePhotoPath = await uploadProfilePhoto(
         createdUserId,
@@ -318,20 +304,13 @@ export async function POST(request: Request) {
         .from(invitationOutlets)
         .where(eq(invitationOutlets.invitationId, claimed.id));
       const assignedOutletIds = Array.from(
-        new Set([
-          ...linkedOutlets.map((outlet) => outlet.outletId),
-          ...(claimed.outletId ? [claimed.outletId] : []),
-        ]),
+        new Set(linkedOutlets.map((outlet) => outlet.outletId)),
       );
       if (assignedOutletIds.length) {
         await tx.insert(outletMemberships).values(
           assignedOutletIds.map((outletId) => ({
             userId: createdUserId!,
             outletId,
-            role:
-              claimed.accountType === "admin"
-                ? ("manager" as const)
-                : claimed.role,
             assignedBy: claimed.invitedBy,
           })),
         );
@@ -365,7 +344,6 @@ export async function POST(request: Request) {
         newValues: {
           email: claimed.email,
           username,
-          role: claimed.role,
           accountType: claimed.accountType,
           outletIds: assignedOutletIds,
         },
