@@ -5,6 +5,7 @@ import { ModalDialog } from "@/app/_components/modal-dialog";
 import { SixDigitPinInput } from "@/app/clock/_components/six-digit-pin-input";
 import { forgetPinUser, rememberPinUser } from "@/lib/pin-client";
 import { useState, type FormEvent } from "react";
+import { CloseIcon } from "../../_components/icons";
 
 type PinSettingsPanelProps = {
   authUserId?: string;
@@ -190,14 +191,14 @@ export function PinSettingsPanel({
               </label>
               <div className="clock-pin-actions">
                 <button
-                  className="clock-pin-button is-danger"
+                  className="btn btn-danger"
                   type="submit"
                   disabled={isSavingPin}
                 >
                   {isSavingPin ? "Removing…" : "Remove PIN"}
                 </button>
                 <button
-                  className="clock-pin-button"
+                  className="btn btn-secondary"
                   type="button"
                   onClick={() => setPinFormMode(null)}
                   disabled={isSavingPin}
@@ -209,7 +210,7 @@ export function PinSettingsPanel({
           ) : (
             <div className="clock-pin-actions">
               <button
-                className="clock-pin-button is-primary"
+                className="btn btn-primary"
                 type="button"
                 onClick={openPinSetup}
               >
@@ -217,7 +218,7 @@ export function PinSettingsPanel({
               </button>
               {pinEnabled && (
                 <button
-                  className="clock-pin-button is-danger-quiet"
+                  className="btn btn-danger"
                   type="button"
                   onClick={() => {
                     setPinMessage("");
@@ -260,12 +261,13 @@ export function PinSettingsPanel({
               </p>
             </div>
             <button
-              className="dialog-close"
+              className="btn btn-ghost btn-icon"
               type="button"
               aria-label="Close PIN setup"
+              title="Close"
               onClick={() => closePinSetup(false)}
             >
-              ×
+              <CloseIcon />
             </button>
           </header>
           <form className="pin-setup-form" onSubmit={handlePinSetupSubmit}>
@@ -296,7 +298,7 @@ export function PinSettingsPanel({
             )}
             <div className="pin-setup-actions">
               <button
-                className="pin-setup-later"
+                className="btn btn-secondary btn-lg"
                 type="button"
                 onClick={() => closePinSetup(false)}
                 disabled={isSavingPin}
@@ -304,7 +306,7 @@ export function PinSettingsPanel({
                 Maybe later
               </button>
               <button
-                className="auth-submit"
+                className="btn btn-primary btn-lg"
                 type="submit"
                 disabled={
                   isSavingPin ||

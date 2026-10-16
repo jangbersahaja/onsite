@@ -1,10 +1,15 @@
 "use client";
 
 import {
+  TimesheetCreateDialog,
+  type TimesheetCreateValues,
+} from "@/app/(management)/timesheets/_components/timesheet-create-dialog";
+import {
   TimesheetEditDialog,
   type TimesheetEditValues,
 } from "@/app/(management)/timesheets/_components/timesheet-edit-dialog";
 import { useConfirmDialog } from "@/app/_components/confirm-dialog";
+import { EditIcon, TrashIcon } from "@/app/_components/icons";
 import { outletDateTimeToISOString } from "@/lib/outlet-time";
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
@@ -32,15 +37,38 @@ type TimesheetRow = {
 
 type TimesheetStaffGroup = {
   key: string;
+  userId: string | null;
+  outletId: string;
+  outletName: string;
+  timezone: string;
   employeeName: string;
   employeeEmail: string | null;
-  outletName: string;
   rows: TimesheetRow[];
+};
+
+type TimesheetStaff = {
+  userId: string;
+  name: string;
+  email: string;
+  outletId: string;
+  outletName: string;
+  timezone: string;
+};
+
+type ShiftTarget = {
+  userId: string;
+  outletId: string;
+  outletName: string;
+  timezone: string;
+  employeeName: string;
 };
 
 type TimesheetData = {
   outlets: { id: string; name: string; address: string }[];
   employees: { id: string; name: string; email: string }[];
+  staff: TimesheetStaff[];
+  currentUserId: string;
+  isSuperAdmin: boolean;
   rows: TimesheetRow[];
   storeHubStatus: "not_configured" | "available" | "unavailable";
   storeHubFetchedAt: string | null;
@@ -150,6 +178,7 @@ export default function TimesheetsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [editing, setEditing] = useState<TimesheetRow | null>(null);
+  const [creatingFor, setCreatingFor] = useState<ShiftTarget | null>(null);
   const [expandedShiftIds, setExpandedShiftIds] = useState<
     Set<TimesheetRow["id"]>
   >(() => new Set());
@@ -168,7 +197,6 @@ export default function TimesheetsPage() {
 
   async function load(nextFilters: Filters) {
     setIsLoading(true);
-    setMessage("");
     try {
       setData(await fetchTimesheetData(nextFilters));
     } catch (error) {
@@ -209,6 +237,7 @@ export default function TimesheetsPage() {
   function handleFilterSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     saveFilters(filters);
+    setMessage("");
     void load(filters);
   }
 
@@ -260,11 +289,121 @@ export default function TimesheetsPage() {
       if (!response.ok)
         throw new Error(body.error ?? "Could not update this shift.");
       setEditing(null);
-      setMessage("Shift updated and audit record saved.");
+      setMessage("Timesheet entry updated.");
       await load(filters);
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "Could not update this shift.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function canChangeShifts(userId: string | null) {
+    return Boolean(
+      data && userId && (data.isSuperAdmin || userId !== data.currentUserId),
+    );
+  }
+
+  function openCreate(group: TimesheetStaffGroup) {
+    if (!group.userId) return;
+    setCreatingFor({
+      userId: group.userId,
+      outletId: group.outletId,
+      outletName: group.outletName,
+      timezone: group.timezone,
+      employeeName: group.employeeName,
+    });
+  }
+
+  async function saveCreate(values: TimesheetCreateValues) {
+    if (!creatingFor || isSaving) return;
+    const target = creatingFor;
+    const shiftDate = values.clockInAt.slice(0, 10);
+    if (
+      !(await confirm({
+        title: "Add this shift?",
+        description: `A shift on ${formatShiftDate(shiftDate)} will be added for ${target.employeeName} and recorded in the audit log.`,
+        confirmLabel: "Add shift",
+      }))
+    )
+      return;
+    setIsSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/timesheets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          outletId: target.outletId,
+          userId: target.userId,
+          clockInAt: values.clockInAt,
+          clockOutAt: values.clockOutAt,
+          breaks: values.breaks.map((breakInterval) => ({
+            startedAt: outletDateTimeToISOString(
+              breakInterval.startedAt,
+              target.timezone,
+            ),
+            endedAt: outletDateTimeToISOString(
+              breakInterval.endedAt,
+              target.timezone,
+            ),
+          })),
+          reason: values.reason,
+        }),
+      });
+      const body = await response.json();
+      if (!response.ok)
+        throw new Error(body.error ?? "Could not add this shift.");
+      const outsideDateFilter = Boolean(
+        (filters.from && shiftDate < filters.from) ||
+        (filters.to && shiftDate > filters.to),
+      );
+      setCreatingFor(null);
+      setMessage(
+        `Shift added for ${target.employeeName}.${
+          outsideDateFilter
+            ? " It is outside the current date filter, so it is not listed."
+            : ""
+        }`,
+      );
+      await load(filters);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Could not add this shift.",
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function deleteShift(row: TimesheetRow) {
+    if (isSaving) return;
+    if (
+      !(await confirm({
+        title: "Delete this shift?",
+        description: `${row.employeeName}'s shift on ${formatShiftDate(row.clockInLocal.slice(0, 10))} and its breaks will be permanently removed. The deletion is kept in the audit log.`,
+        confirmLabel: "Delete shift",
+        tone: "danger",
+      }))
+    )
+      return;
+    setIsSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch(
+        `/api/timesheets?id=${encodeURIComponent(row.id)}`,
+        { method: "DELETE" },
+      );
+      const body = await response.json();
+      if (!response.ok)
+        throw new Error(body.error ?? "Could not delete this shift.");
+      setMessage(`Shift deleted for ${row.employeeName}.`);
+      await load(filters);
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Could not delete this shift.",
       );
     } finally {
       setIsSaving(false);
@@ -315,13 +454,46 @@ export default function TimesheetsPage() {
     } else {
       staffGroups.push({
         key,
+        userId: row.userId,
+        outletId: row.outletId,
+        outletName: row.outletName,
+        timezone: row.timezone,
         employeeName: row.employeeName,
         employeeEmail: row.employeeEmail,
-        outletName: row.outletName,
         rows: [row],
       });
     }
   }
+  // Staff with no shifts in the current range still get a group so shifts can be added.
+  const groupKeys = new Set(staffGroups.map((group) => group.key));
+  for (const member of data?.staff ?? []) {
+    const key = `${member.outletId}:user:${member.userId}`;
+    if (groupKeys.has(key)) continue;
+    groupKeys.add(key);
+    staffGroups.push({
+      key,
+      userId: member.userId,
+      outletId: member.outletId,
+      outletName: member.outletName,
+      timezone: member.timezone,
+      employeeName: member.name,
+      employeeEmail: member.email,
+      rows: [],
+    });
+  }
+  staffGroups.sort(
+    (left, right) =>
+      left.outletName.localeCompare(right.outletName, "en", {
+        numeric: true,
+        sensitivity: "base",
+      }) ||
+      left.outletId.localeCompare(right.outletId) ||
+      left.employeeName.localeCompare(right.employeeName, "en", {
+        numeric: true,
+        sensitivity: "base",
+      }) ||
+      left.key.localeCompare(right.key),
+  );
   const csvQuery = filterQuery(filters, "csv");
 
   return (
@@ -335,10 +507,10 @@ export default function TimesheetsPage() {
           </p>
         </div>
         <div className="timesheet-heading-actions">
-          <Link className="timesheet-cancel" href="/corrections/review">
+          <Link className="btn btn-secondary" href="/corrections/review">
             Review requests
           </Link>
-          <a className="timesheet-export" href={`/api/timesheets?${csvQuery}`}>
+          <a className="btn btn-secondary" href={`/api/timesheets?${csvQuery}`}>
             <span aria-hidden="true">↓</span> Export CSV
           </a>
         </div>
@@ -397,7 +569,7 @@ export default function TimesheetsPage() {
             }
           />
         </label>
-        <button className="auth-submit" type="submit" disabled={isLoading}>
+        <button className="btn btn-primary" type="submit" disabled={isLoading}>
           Apply filters
         </button>
       </form>
@@ -438,6 +610,19 @@ export default function TimesheetsPage() {
             if (!open) setEditing(null);
           }}
           onSave={saveEdit}
+        />
+      )}
+
+      {creatingFor && (
+        <TimesheetCreateDialog
+          employeeName={creatingFor.employeeName}
+          outletName={creatingFor.outletName}
+          timezone={creatingFor.timezone}
+          isSaving={isSaving}
+          onOpenChange={(open) => {
+            if (!open) setCreatingFor(null);
+          }}
+          onSave={saveCreate}
         />
       )}
 
@@ -558,33 +743,53 @@ export default function TimesheetsPage() {
                               </span>
                             )}
                             {row.source === "onsite" && (
-                              <button
-                                className="timesheet-edit-button"
-                                type="button"
-                                onClick={() => startEdit(row)}
-                              >
-                                <svg
-                                  aria-hidden="true"
-                                  viewBox="0 0 24 24"
-                                  width="14"
-                                  height="14"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="2"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
+                              <div className="timesheet-record-actions">
+                                <button
+                                  className="btn btn-ghost btn-icon btn-sm"
+                                  type="button"
+                                  aria-label="Edit shift"
+                                  title="Edit shift"
+                                  onClick={() => startEdit(row)}
                                 >
-                                  <path d="M12 20h9" />
-                                  <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                                </svg>
-                                Edit
-                              </button>
+                                  <EditIcon />
+                                </button>
+                                {row.clockOutAt &&
+                                  canChangeShifts(row.userId) && (
+                                    <button
+                                      className="btn btn-danger btn-icon btn-sm"
+                                      type="button"
+                                      aria-label="Delete shift"
+                                      title="Delete shift"
+                                      onClick={() => void deleteShift(row)}
+                                    >
+                                      <TrashIcon />
+                                    </button>
+                                  )}
+                              </div>
                             )}
                           </div>
                         </td>
                       </tr>
                     );
                   })}
+                  {group.rows.length === 0 && (
+                    <tr className="timesheet-empty-row">
+                      <td colSpan={5}>No shifts in this range.</td>
+                    </tr>
+                  )}
+                  {group.userId && canChangeShifts(group.userId) && (
+                    <tr className="timesheet-add-row">
+                      <td colSpan={5}>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          type="button"
+                          onClick={() => openCreate(group)}
+                        >
+                          Add shift
+                        </button>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
                 <tfoot>
                   <tr>

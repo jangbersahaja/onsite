@@ -8,6 +8,8 @@ export const AUDIT_ACTIONS = [
   "start_break",
   "end_break",
   "timesheet_edit",
+  "timesheet_create",
+  "timesheet_delete",
   "correction_applied",
   "correction_punch_applied",
   "correction_adjusted",
@@ -77,6 +79,10 @@ const describers: Record<AuditAction, (parts: DescriptionParts) => string> = {
   end_break: ({ actor, atOutlet }) => `${actor} ended a break${atOutlet}`,
   timesheet_edit: ({ actor, atOutlet }) =>
     `${actor} edited a timesheet${atOutlet}`,
+  timesheet_create: ({ actor, target, atOutlet }) =>
+    `${actor} added a shift${target ? ` for ${target}` : ""}${atOutlet}`,
+  timesheet_delete: ({ actor, atOutlet }) =>
+    `${actor} deleted a shift${atOutlet}`,
   correction_applied: ({ actor, atOutlet }) =>
     `${actor} submitted a time correction${atOutlet}`,
   correction_punch_applied: ({ actor, atOutlet }) =>

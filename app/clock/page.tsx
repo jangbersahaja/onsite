@@ -883,7 +883,7 @@ export default function Home() {
                 </button>
                 {isClockedIn && !isOnBreak && (
                   <button
-                    className="clock-break-action"
+                    className="btn btn-secondary btn-block btn-spaced"
                     type="button"
                     onClick={() => void handleBreakAction()}
                     disabled={
@@ -914,7 +914,7 @@ export default function Home() {
                   <ClockCheckItem label="Device" check={deviceCheck}>
                     {!staffDeviceStatus?.currentBrowserApproved && (
                       <button
-                        className="clock-correction-link"
+                        className="btn btn-ghost btn-sm"
                         type="button"
                         disabled={isRequestingStaffDevice}
                         onClick={() => void handleRequestStaffDevice()}

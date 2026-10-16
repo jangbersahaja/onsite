@@ -140,7 +140,10 @@ export function RegisterForm({ token }: { token: string }) {
               for admin approval. Please contact your manager/supervisor to
               approve for registration.
             </p>
-            <Link className="auth-submit invite-link-button" href="/">
+            <Link
+              className="btn btn-primary btn-lg btn-block btn-spaced"
+              href="/"
+            >
               Back to sign in
             </Link>
           </div>
@@ -244,7 +247,7 @@ export function RegisterForm({ token }: { token: string }) {
                 </p>
               )}
               <button
-                className="auth-submit"
+                className="btn btn-primary btn-lg btn-block btn-spaced"
                 type="submit"
                 disabled={isSubmitting}
               >

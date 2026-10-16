@@ -11,7 +11,7 @@ export function PasswordInput(props: PasswordInputProps) {
     <div className="password-field">
       <input {...props} type={isVisible ? "text" : "password"} />
       <button
-        className="password-toggle"
+        className="btn btn-ghost password-toggle"
         type="button"
         aria-label={isVisible ? "Hide password" : "Show password"}
         aria-pressed={isVisible}

@@ -105,7 +105,7 @@ export function SignInForm() {
             Please contact your manager/supervisor to approve for registration.
           </p>
           <button
-            className="auth-mode-toggle"
+            className="btn btn-ghost btn-sm"
             type="button"
             onClick={() => {
               setIsPendingApproval(false);
@@ -179,7 +179,7 @@ export function SignInForm() {
             </p>
           )}
           <button
-            className="auth-submit"
+            className="btn btn-primary btn-lg btn-block btn-spaced"
             type="submit"
             disabled={
               isSubmitting ||
@@ -196,7 +196,7 @@ export function SignInForm() {
         </form>
         {rememberedUserId && (
           <button
-            className="auth-mode-toggle"
+            className="btn btn-ghost btn-sm"
             type="button"
             onClick={() => {
               setErrorMessage("");

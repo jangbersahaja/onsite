@@ -7,6 +7,7 @@ import {
   outletDateTimeToISOString,
 } from "@/lib/outlet-time";
 import { useState, type FormEvent } from "react";
+import { CloseIcon } from "../../_components/icons";
 
 type CorrectionOutlet = {
   id: string;
@@ -127,12 +128,13 @@ export function CorrectionDialog({
             </p>
           </div>
           <button
-            className="dialog-close"
+            className="btn btn-ghost btn-icon"
             type="button"
             aria-label="Close correction request"
+            title="Close"
             onClick={() => onOpenChange(false)}
           >
-            ×
+            <CloseIcon />
           </button>
         </header>
         <form className="correction-form" onSubmit={handleSubmit}>
@@ -222,14 +224,14 @@ export function CorrectionDialog({
           )}
           <div className="correction-dialog-actions">
             <button
-              className="team-secondary-action"
+              className="btn btn-secondary btn-lg"
               type="button"
               onClick={() => onOpenChange(false)}
             >
               Cancel
             </button>
             <button
-              className="auth-submit"
+              className="btn btn-primary btn-lg"
               type="submit"
               disabled={isSubmitting || !selectedOutlet}
             >

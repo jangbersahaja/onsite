@@ -389,7 +389,7 @@ a {
     transform: none;
   }
 }
-.profile-menu button {
+.profile-menu button:not(.btn) {
   min-height: 34px;
   border: 0;
   border-radius: 6px;
@@ -400,7 +400,7 @@ a {
   font-size: 11px;
   text-align: left;
 }
-.profile-menu button:hover {
+.profile-menu button:not(.btn):hover {
   background: #f4f6fb;
 }
 .profile-menu button:disabled {
@@ -473,7 +473,7 @@ a {
 .install-app-button:hover {
   background: var(--paper);
 }
-.mobile-nav-toggle,
+.top-bar .mobile-nav-toggle,
 .mobile-nav-backdrop {
   display: none;
 }
@@ -1296,7 +1296,7 @@ h2 {
     gap: 11px;
     padding: 0 14px;
   }
-  .mobile-nav-toggle {
+  .top-bar .mobile-nav-toggle {
     display: grid;
     flex: none;
     width: 34px;
@@ -2275,7 +2275,7 @@ h2 {
   border-color: var(--line);
   background: var(--paper);
 }
-.team-card-menu {
+.team-table .team-card-menu {
   display: none;
   place-items: center;
   width: 44px;
@@ -2756,6 +2756,39 @@ h2 {
 .timesheet-record-cell .timesheet-edit-button {
   min-height: 30px;
   padding: 0 9px;
+}
+.timesheet-record-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.timesheet-delete-button {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #f1c4bf;
+  border-radius: 4px;
+  background: #fff;
+  padding: 0 9px;
+  color: var(--danger);
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.timesheet-delete-button:hover {
+  background: #fef3f2;
+}
+.timesheet-add-row td {
+  padding: 10px 12px;
+  text-align: left;
+}
+.timesheet-empty-row td {
+  padding: 12px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
 }
 .manual-adjustment-label,
 .gps-source-label,
@@ -3430,7 +3463,7 @@ h2 {
     padding-right: max(14px, env(safe-area-inset-right));
     padding-left: max(14px, env(safe-area-inset-left));
   }
-  .mobile-nav-toggle {
+  .top-bar .mobile-nav-toggle {
     width: 44px;
     height: 44px;
   }
@@ -5829,7 +5862,7 @@ small,
   .mobile-nav-backdrop {
     inset: calc(58px + env(safe-area-inset-top)) 0 0;
   }
-  .mobile-nav-toggle {
+  .top-bar .mobile-nav-toggle {
     width: 44px;
     height: 44px;
   }
@@ -6119,28 +6152,104 @@ small,
   gap: 10px;
   margin-top: 22px;
 }
-.confirm-dialog-actions button {
+.confirm-dialog-actions .btn {
   min-width: 112px;
-  min-height: 40px;
-  border: 1px solid var(--green);
+}
+
+/*
+ * Shared button system.
+ * Base: .btn. Pick one variant: .btn-primary, .btn-secondary, .btn-danger,
+ * .btn-danger-solid, or .btn-ghost. Optional size: .btn-sm, .btn-lg.
+ * Optional shape: .btn-icon (square, icon-only), .btn-block (full width).
+ */
+.btn {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid transparent;
   border-radius: 6px;
-  padding: 0 16px;
-  font-size: 14px;
-  font-weight: 650;
-  cursor: pointer;
-}
-.confirm-dialog-cancel {
-  border-color: var(--line) !important;
-  background: #fff;
+  padding: 0 14px;
+  background: var(--surface);
   color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
 }
-.confirm-dialog-confirm {
-  background: var(--green);
+.btn:focus-visible {
+  outline: 2px solid rgba(99, 91, 255, 0.35);
+  outline-offset: 2px;
+}
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.btn-primary {
+  border-color: transparent;
+  background: linear-gradient(135deg, #635bff 0%, #8b5cf6 100%);
   color: #fff;
 }
-.confirm-dialog-confirm.is-danger {
+.btn-primary:hover:not(:disabled) {
+  background: var(--green-dark);
+}
+.btn-secondary {
+  border-color: var(--line);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: #f4f7f8;
+}
+.btn-danger {
+  border-color: rgba(180, 35, 24, 0.35);
+  color: var(--danger);
+}
+.btn-danger:hover:not(:disabled) {
+  background: #fef3f2;
+}
+.btn-danger-solid {
   border-color: var(--danger);
   background: var(--danger);
+  color: #fff;
+}
+.btn-danger-solid:hover:not(:disabled) {
+  background: #912018;
+}
+.btn-ghost {
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: var(--paper);
+  color: var(--ink);
+}
+.btn-sm {
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 11px;
+}
+.btn-lg {
+  min-height: 42px;
+}
+.btn-icon {
+  width: 32px;
+  padding: 0;
+}
+.btn-icon.btn-sm {
+  width: 30px;
+}
+.btn-block {
+  width: 100%;
+}
+.btn-spaced {
+  margin-top: 11px;
 }
 
 @keyframes workspace-dialog-in {

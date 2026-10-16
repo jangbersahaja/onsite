@@ -61,7 +61,10 @@ export function ResetPasswordForm({ token }: { token: string }) {
             <p>
               Password updated. Your previous sessions have been signed out.
             </p>
-            <Link className="auth-submit invite-link-button" href="/">
+            <Link
+              className="btn btn-primary btn-lg btn-block btn-spaced"
+              href="/"
+            >
               Return to sign in
             </Link>
           </div>
@@ -97,7 +100,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
               </p>
             )}
             <button
-              className="auth-submit"
+              className="btn btn-primary btn-lg btn-block btn-spaced"
               type="submit"
               disabled={isSubmitting}
             >

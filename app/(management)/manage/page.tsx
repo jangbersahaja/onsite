@@ -221,7 +221,7 @@ export default function ManagePage() {
           >
             {(["today", "yesterday", "custom"] as const).map((option) => (
               <button
-                className={view === option ? "is-active" : ""}
+                className={`btn btn-ghost btn-sm${view === option ? " is-active" : ""}`}
                 type="button"
                 key={option}
                 aria-pressed={view === option}
@@ -246,7 +246,7 @@ export default function ManagePage() {
             </label>
           )}
           <button
-            className="dashboard-refresh"
+            className="btn btn-secondary btn-icon"
             type="button"
             aria-label="Refresh schedule"
             title="Refresh schedule"

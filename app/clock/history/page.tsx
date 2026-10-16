@@ -287,7 +287,7 @@ export default function ClockHistoryPage() {
             </p>
           </div>
           <button
-            className="team-primary-action"
+            className="btn btn-primary"
             type="button"
             onClick={() => {
               setCorrectionDefaults({ outletId: selectedOutletId });
@@ -305,7 +305,7 @@ export default function ClockHistoryPage() {
             aria-label="History views"
           >
             <button
-              className={activeTab === "shifts" ? "is-active" : ""}
+              className={`btn btn-ghost btn-sm${activeTab === "shifts" ? " is-active" : ""}`}
               type="button"
               role="tab"
               aria-selected={activeTab === "shifts"}
@@ -314,7 +314,7 @@ export default function ClockHistoryPage() {
               Shifts
             </button>
             <button
-              className={activeTab === "requests" ? "is-active" : ""}
+              className={`btn btn-ghost btn-sm${activeTab === "requests" ? " is-active" : ""}`}
               type="button"
               role="tab"
               aria-selected={activeTab === "requests"}
@@ -408,7 +408,7 @@ export default function ClockHistoryPage() {
                   </small>
                 </strong>
                 <button
-                  className="history-row-action"
+                  className="btn btn-secondary btn-sm"
                   type="button"
                   onClick={() => {
                     setCorrectionDefaults({
@@ -431,7 +431,7 @@ export default function ClockHistoryPage() {
             {isLoading && <p className="history-empty">Loading shifts…</p>}
             {data?.historyPage.hasMore && (
               <button
-                className="history-load-more"
+                className="btn btn-secondary"
                 type="button"
                 onClick={() => void loadMore()}
                 disabled={isLoadingMore}

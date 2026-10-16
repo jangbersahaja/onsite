@@ -541,6 +541,7 @@ export function WorkspaceShell({
                   }}
                 />
                 <button
+                  className="btn btn-secondary btn-block"
                   type="button"
                   disabled={isPhotoSaving}
                   onClick={() => profilePhotoInputRef.current?.click()}
@@ -549,6 +550,7 @@ export function WorkspaceShell({
                 </button>
                 {profilePhotoUrl && (
                   <button
+                    className="btn btn-secondary btn-block"
                     type="button"
                     disabled={isPhotoSaving}
                     onClick={() => void removeProfilePhoto()}
@@ -562,7 +564,7 @@ export function WorkspaceShell({
                   </p>
                 )}
                 <button
-                  className="profile-menu-signout"
+                  className="btn btn-danger btn-block"
                   type="button"
                   disabled={isPhotoSaving}
                   onClick={() => void signOut()}
@@ -578,7 +580,7 @@ export function WorkspaceShell({
       <section className="main-panel">
         <header className="top-bar">
           <button
-            className="mobile-nav-toggle"
+            className="btn btn-ghost btn-icon mobile-nav-toggle"
             type="button"
             aria-label={
               isMobileNavOpen ? "Close navigation" : "Open navigation"
@@ -598,7 +600,7 @@ export function WorkspaceShell({
             {dateLabel && <span className="today-label">{dateLabel}</span>}
             {installPrompt && (
               <button
-                className="install-app-button"
+                className="btn btn-secondary btn-sm"
                 type="button"
                 onClick={() => void installApp()}
               >

@@ -2,6 +2,7 @@
 
 import { NotificationSettings } from "@/app/(management)/team/_components/notification-settings";
 import { useConfirmDialog } from "@/app/_components/confirm-dialog";
+import { CloseIcon } from "@/app/_components/icons";
 import { ModalDialog } from "@/app/_components/modal-dialog";
 import Image from "next/image";
 import Link from "next/link";
@@ -190,7 +191,7 @@ function TeamCardMenuButton({
 }) {
   return (
     <button
-      className="team-card-menu"
+      className="btn btn-ghost btn-icon team-card-menu"
       type="button"
       aria-label={`Actions for ${name}`}
       aria-haspopup="dialog"
@@ -584,7 +585,10 @@ export default function TeamPage() {
           <p className="auth-description">
             {message || "Sign in with a backoffice account."}
           </p>
-          <Link className="auth-submit invite-link-button" href="/">
+          <Link
+            className="btn btn-primary btn-lg btn-block btn-spaced"
+            href="/"
+          >
             Return to clock
           </Link>
         </section>
@@ -724,18 +728,19 @@ export default function TeamPage() {
                 </div>
               </div>
               <button
-                className="dialog-close"
+                className="btn btn-ghost btn-icon btn-sm"
                 type="button"
                 aria-label="Close dialog"
+                title="Close dialog"
                 onClick={() => setOpenActionMenu(null)}
               >
-                ×
+                <CloseIcon />
               </button>
             </header>
             <div className="team-action-list">
               {actionPerson?.canReset && (
                 <button
-                  className="team-action-item"
+                  className="btn btn-secondary btn-block"
                   type="button"
                   onClick={() => {
                     setOpenActionMenu(null);
@@ -747,7 +752,7 @@ export default function TeamPage() {
               )}
               {actionPending && (
                 <Link
-                  className="team-action-item"
+                  className="btn btn-secondary btn-block"
                   href="/corrections/review"
                   onClick={() => setOpenActionMenu(null)}
                 >
@@ -756,7 +761,7 @@ export default function TeamPage() {
               )}
               {actionActive && (
                 <button
-                  className="team-action-item is-danger"
+                  className="btn btn-danger btn-block"
                   type="button"
                   disabled={Boolean(deviceActionId)}
                   onClick={async () => {
@@ -791,12 +796,13 @@ export default function TeamPage() {
                 <h2 id="reset-password-title">Reset password</h2>
               </div>
               <button
-                className="dialog-close"
+                className="btn btn-ghost btn-icon btn-sm"
                 type="button"
                 aria-label="Close dialog"
+                title="Close dialog"
                 onClick={() => setResetUserId("")}
               >
-                ×
+                <CloseIcon />
               </button>
             </header>
             <p className="dialog-description">
@@ -805,7 +811,7 @@ export default function TeamPage() {
             </p>
             <div className="dialog-actions">
               <button
-                className="reset-link-button"
+                className="btn btn-primary"
                 type="button"
                 disabled={Boolean(resettingUserId)}
                 onClick={async () => {
@@ -818,7 +824,7 @@ export default function TeamPage() {
                   : "Create reset link"}
               </button>
               <button
-                className="copy-invite-button"
+                className="btn btn-secondary"
                 type="button"
                 onClick={() => setResetUserId("")}
               >
@@ -958,7 +964,7 @@ export default function TeamPage() {
                         </div>
                         {person.activeDevice && (
                           <button
-                            className="device-revoke-button"
+                            className="btn btn-danger btn-icon btn-sm"
                             type="button"
                             aria-label="Revoke device"
                             title="Revoke device"
@@ -970,18 +976,7 @@ export default function TeamPage() {
                               )
                             }
                           >
-                            <svg
-                              aria-hidden="true"
-                              viewBox="0 0 24 24"
-                              width="12"
-                              height="12"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="2.5"
-                              strokeLinecap="round"
-                            >
-                              <path d="M6 6l12 12M18 6L6 18" />
-                            </svg>
+                            <CloseIcon />
                           </button>
                         )}
                       </div>
@@ -989,7 +984,7 @@ export default function TeamPage() {
                     <td data-label="Actions">
                       {person.canReset && (
                         <button
-                          className="reset-link-button"
+                          className="btn btn-secondary btn-sm"
                           type="button"
                           onClick={() => setResetUserId(person.userId)}
                         >
@@ -998,7 +993,7 @@ export default function TeamPage() {
                       )}
                       {person.pendingDevice && (
                         <Link
-                          className="reset-link-button"
+                          className="btn btn-secondary btn-sm"
                           href="/corrections/review"
                         >
                           Review request
@@ -1033,7 +1028,7 @@ export default function TeamPage() {
                 onFocus={(event) => event.currentTarget.select()}
               />
               <button
-                className="copy-invite-button"
+                className="btn btn-secondary btn-sm"
                 type="button"
                 onClick={copyResetLink}
               >
@@ -1105,7 +1100,7 @@ export default function TeamPage() {
                     >
                       <div className="registration-actions">
                         <button
-                          className="team-primary-action"
+                          className="btn btn-primary btn-sm"
                           type="button"
                           disabled={Boolean(registrationBusyKey)}
                           onClick={() =>
@@ -1121,7 +1116,7 @@ export default function TeamPage() {
                             : "Approve"}
                         </button>
                         <button
-                          className="reset-link-button"
+                          className="btn btn-danger btn-sm"
                           type="button"
                           disabled={Boolean(registrationBusyKey)}
                           onClick={() =>
@@ -1194,14 +1189,14 @@ export default function TeamPage() {
                         <small>Created {formatExpiry(link.createdAt)}</small>
                         <div className="registration-actions">
                           <button
-                            className="copy-invite-button"
+                            className="btn btn-secondary btn-sm"
                             type="button"
                             onClick={() => void copyRegistrationLink(link.url)}
                           >
                             Copy link
                           </button>
                           <button
-                            className="reset-link-button"
+                            className="btn btn-secondary btn-sm"
                             type="button"
                             disabled={isBusy}
                             onClick={() =>
@@ -1213,7 +1208,7 @@ export default function TeamPage() {
                               : "Replace link"}
                           </button>
                           <button
-                            className="reset-link-button"
+                            className="btn btn-danger btn-sm"
                             type="button"
                             disabled={isBusy}
                             onClick={() => void handleRevokeLink(link.id)}
@@ -1229,7 +1224,7 @@ export default function TeamPage() {
                         <small>No active registration link.</small>
                         <div className="registration-actions">
                           <button
-                            className="team-primary-action"
+                            className="btn btn-primary btn-sm"
                             type="button"
                             disabled={isBusy}
                             onClick={() =>

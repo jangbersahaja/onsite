@@ -340,7 +340,7 @@ export default function CorrectionReviewPage() {
           </select>
         </label>
         <button
-          className="timesheet-cancel"
+          className="btn btn-secondary"
           type="button"
           disabled={isLoading}
           onClick={() => void refresh()}
@@ -421,7 +421,7 @@ export default function CorrectionReviewPage() {
               </label>
               <div className="correction-decision-actions">
                 <button
-                  className="team-secondary-action"
+                  className="btn btn-secondary"
                   type="submit"
                   name="decision"
                   value="adjust"
@@ -430,7 +430,7 @@ export default function CorrectionReviewPage() {
                   {busyId === `correction:${request.id}` ? "Saving…" : "Adjust"}
                 </button>
                 <button
-                  className="auth-submit"
+                  className="btn btn-primary"
                   type="submit"
                   name="decision"
                   value="confirm"
@@ -485,7 +485,7 @@ export default function CorrectionReviewPage() {
             </div>
             <div className="correction-decision-actions">
               <button
-                className="correction-reject-button"
+                className="btn btn-danger"
                 type="button"
                 disabled={Boolean(busyId)}
                 onClick={() => void decideDevice(request.id, "reject")}
@@ -493,7 +493,7 @@ export default function CorrectionReviewPage() {
                 {busyId === `device:${request.id}` ? "Saving…" : "Reject"}
               </button>
               <button
-                className="auth-submit"
+                className="btn btn-primary"
                 type="button"
                 disabled={Boolean(busyId)}
                 onClick={() => void decideDevice(request.id, "approve")}

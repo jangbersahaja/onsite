@@ -17,6 +17,8 @@ test("outlet notification copy covers local operational events only", () => {
     "correction_requested",
     "correction_reviewed",
     "timesheet_edited",
+    "timesheet_created",
+    "timesheet_deleted",
   ];
 
   assert.deepEqual(
@@ -29,6 +31,8 @@ test("outlet notification copy covers local operational events only", () => {
       "Sam requested a time correction.",
       "Sam reviewed a time correction.",
       "Sam updated a timesheet.",
+      "Sam added a shift.",
+      "Sam deleted a shift.",
     ],
   );
   assert.equal(

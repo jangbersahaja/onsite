@@ -4,6 +4,7 @@ import { useConfirmDialog } from "@/app/_components/confirm-dialog";
 import { ModalDialog } from "@/app/_components/modal-dialog";
 import { PasswordInput } from "@/app/_components/password-input";
 import { useEffect, useState, type FormEvent } from "react";
+import { CloseIcon, EditIcon } from "../../../_components/icons";
 
 type OutletSummary = {
   id: string;
@@ -354,7 +355,7 @@ export function OutletsManager() {
             <span className="team-count">{data.outlets.length}</span>
             {data.isSuperAdmin && (
               <button
-                className="team-secondary-action"
+                className="btn btn-secondary"
                 type="button"
                 onClick={() => {
                   setEditingOutletId("");
@@ -411,9 +412,10 @@ export function OutletsManager() {
                 </dl>
                 <footer className="outlet-card-footer">
                   <button
-                    className="outlet-card-edit"
+                    className="btn btn-secondary btn-icon btn-sm"
                     type="button"
                     aria-label={`Edit ${outlet.name}`}
+                    title={`Edit ${outlet.name}`}
                     onClick={() => {
                       setEditingOutletId(outlet.id);
                       setOutletMessage("");
@@ -421,7 +423,7 @@ export function OutletsManager() {
                       setIsOutletDialogOpen(true);
                     }}
                   >
-                    Edit outlet
+                    <EditIcon />
                   </button>
                 </footer>
               </article>
@@ -449,12 +451,13 @@ export function OutletsManager() {
                 </h2>
               </div>
               <button
-                className="dialog-close"
+                className="btn btn-ghost btn-icon btn-sm"
                 type="button"
                 aria-label="Close dialog"
+                title="Close dialog"
                 onClick={() => setIsOutletDialogOpen(false)}
               >
-                ×
+                <CloseIcon />
               </button>
             </header>
             <form
@@ -587,7 +590,7 @@ export function OutletsManager() {
                     <input name="deactivationReason" maxLength={500} />
                   </label>
                   <button
-                    className="deactivate-outlet-button"
+                    className="btn btn-danger"
                     type="button"
                     onClick={(event) =>
                       void handleDeactivateOutlet(
@@ -611,14 +614,14 @@ export function OutletsManager() {
               )}
               <div className="dialog-actions dialog-wide-field">
                 <button
-                  className="team-secondary-action"
+                  className="btn btn-secondary"
                   type="button"
                   onClick={() => setIsOutletDialogOpen(false)}
                 >
                   Cancel
                 </button>
                 <button
-                  className="team-primary-action"
+                  className="btn btn-primary"
                   type="submit"
                   disabled={isCreatingOutlet}
                 >
@@ -656,7 +659,7 @@ export function OutletsManager() {
                       {assignedCount} of {data.outlets.length} outlets
                     </span>
                     <button
-                      className="team-secondary-action"
+                      className="btn btn-secondary"
                       type="button"
                       onClick={() => {
                         setAccessUserId(person.id);
@@ -689,12 +692,13 @@ export function OutletsManager() {
                   </p>
                 </div>
                 <button
-                  className="dialog-close"
+                  className="btn btn-ghost btn-icon btn-sm"
                   type="button"
                   aria-label="Close dialog"
+                  title="Close dialog"
                   onClick={() => setAccessUserId("")}
                 >
-                  ×
+                  <CloseIcon />
                 </button>
               </header>
               {message && (
@@ -730,7 +734,7 @@ export function OutletsManager() {
               </div>
               <div className="dialog-actions">
                 <button
-                  className="team-primary-action"
+                  className="btn btn-primary"
                   type="button"
                   onClick={() => setAccessUserId("")}
                 >

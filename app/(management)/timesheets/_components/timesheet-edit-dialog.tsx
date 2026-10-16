@@ -1,14 +1,13 @@
 "use client";
 
+import {
+  BreakEditor,
+  type EditingBreak,
+} from "@/app/(management)/timesheets/_components/break-editor";
+import { CloseIcon } from "@/app/_components/icons";
 import { ModalDialog } from "@/app/_components/modal-dialog";
 import { formatOutletDateTime } from "@/lib/outlet-time";
 import { useState, type FormEvent } from "react";
-
-type EditingBreak = {
-  id: string | null;
-  startedAt: string;
-  endedAt: string;
-};
 
 type EditableTimesheetRow = {
   id: string;
@@ -77,12 +76,13 @@ export function TimesheetEditDialog({
             <h2 id="timesheet-edit-title">Edit shift · {row.employeeName}</h2>
           </div>
           <button
-            className="dialog-close"
+            className="btn btn-ghost btn-icon btn-sm"
             type="button"
             aria-label="Close shift editor"
+            title="Close shift editor"
             onClick={() => onOpenChange(false)}
           >
-            ×
+            <CloseIcon />
           </button>
         </header>
         <form
@@ -106,74 +106,11 @@ export function TimesheetEditDialog({
               onChange={(event) => setClockOutAt(event.target.value)}
             />
           </label>
-          <div className="timesheet-break-editor">
-            <div className="timesheet-break-heading">
-              <strong>Breaks</strong>
-              <button
-                className="team-secondary-action"
-                type="button"
-                onClick={() =>
-                  setEditingBreaks((current) => [
-                    ...current,
-                    { id: null, startedAt: "", endedAt: "" },
-                  ])
-                }
-              >
-                Add break
-              </button>
-            </div>
-            {editingBreaks.map((breakInterval, index) => (
-              <div
-                className="timesheet-break-fields"
-                key={breakInterval.id ?? `new-${index}`}
-              >
-                <label>
-                  Break starts ({row.timezone})
-                  <input
-                    type="datetime-local"
-                    required
-                    value={breakInterval.startedAt}
-                    onChange={(event) =>
-                      setEditingBreaks((current) =>
-                        current.map((item, itemIndex) =>
-                          itemIndex === index
-                            ? { ...item, startedAt: event.target.value }
-                            : item,
-                        ),
-                      )
-                    }
-                  />
-                </label>
-                <label>
-                  Break ends
-                  <input
-                    type="datetime-local"
-                    value={breakInterval.endedAt}
-                    onChange={(event) =>
-                      setEditingBreaks((current) =>
-                        current.map((item, itemIndex) =>
-                          itemIndex === index
-                            ? { ...item, endedAt: event.target.value }
-                            : item,
-                        ),
-                      )
-                    }
-                  />
-                </label>
-                <button
-                  className="timesheet-edit-button"
-                  type="button"
-                  onClick={() =>
-                    setEditingBreaks((current) =>
-                      current.filter((_, itemIndex) => itemIndex !== index),
-                    )
-                  }
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
-          </div>
+          <BreakEditor
+            timezone={row.timezone}
+            breaks={editingBreaks}
+            onChange={setEditingBreaks}
+          />
           <label className="timesheet-reason">
             Reason for change
             <input
@@ -186,13 +123,17 @@ export function TimesheetEditDialog({
           </label>
           <div className="dialog-actions">
             <button
-              className="team-secondary-action"
+              className="btn btn-secondary"
               type="button"
               onClick={() => onOpenChange(false)}
             >
               Cancel
             </button>
-            <button className="auth-submit" type="submit" disabled={isSaving}>
+            <button
+              className="btn btn-primary"
+              type="submit"
+              disabled={isSaving}
+            >
               {isSaving ? "Saving…" : "Save audited edit"}
             </button>
           </div>

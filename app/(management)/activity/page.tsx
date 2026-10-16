@@ -199,7 +199,7 @@ export default function ActivityPage() {
             }
           />
         </label>
-        <button className="auth-submit" type="submit" disabled={isLoading}>
+        <button className="btn btn-primary" type="submit" disabled={isLoading}>
           Apply filters
         </button>
       </form>
@@ -265,7 +265,7 @@ export default function ActivityPage() {
             </p>
           )}
           <button
-            className="activity-load-more"
+            className="btn btn-secondary"
             type="button"
             disabled={isLoadingMore}
             aria-busy={isLoadingMore}

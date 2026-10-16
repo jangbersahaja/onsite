@@ -1,4 +1,10 @@
-import { outlets, workBreaks, workSessions } from "@/db/schema";
+import {
+  outletMemberships,
+  outlets,
+  user,
+  workBreaks,
+  workSessions,
+} from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
 import { recordAudit } from "@/lib/audit";
 import { getAuth } from "@/lib/auth";
@@ -16,6 +22,13 @@ import {
 } from "@/lib/storehub-attendance";
 import { filterStoreHubTimesheets } from "@/lib/storehub-attendance-data";
 import { getTeamAccess } from "@/lib/team-access";
+import {
+  canChangeShiftFor,
+  canDeleteShift,
+  hasOverlap,
+  validateManualShift,
+  type ManualBreak,
+} from "@/lib/timesheet-create-rules";
 import { getTimesheetRows, parseTimesheetFilters } from "@/lib/timesheet-data";
 import {
   getCompletedBreakMinutes,
@@ -364,21 +377,71 @@ export async function GET(request: Request) {
       );
     }
 
-    const employees = Array.from(
-      new Map(
-        rows.map((row) => [
-          row.employeeFilterId,
-          {
-            id: row.employeeFilterId,
-            name: row.employeeName,
-            email: row.employeeEmail ?? "",
-          },
-        ]),
-      ).values(),
+    const staffRows = isStoreHubEmployee
+      ? []
+      : await getDb()
+          .select({
+            userId: user.id,
+            name: user.name,
+            username: user.username,
+            email: user.email,
+            outletId: outlets.id,
+            outletName: outlets.name,
+            timezone: outlets.timezone,
+          })
+          .from(outletMemberships)
+          .innerJoin(user, eq(outletMemberships.userId, user.id))
+          .innerJoin(outlets, eq(outletMemberships.outletId, outlets.id))
+          .where(
+            and(
+              inArray(outletMemberships.outletId, actor.outletIds),
+              eq(outletMemberships.isActive, true),
+              eq(outlets.isActive, true),
+              eq(user.canAccessClock, true),
+              eq(user.approvalStatus, "approved"),
+              parsed.data.outletId
+                ? eq(outletMemberships.outletId, parsed.data.outletId)
+                : undefined,
+              parsed.data.employeeId
+                ? eq(user.id, parsed.data.employeeId)
+                : undefined,
+            ),
+          )
+          .orderBy(user.name);
+    const actorChangeScope = {
+      userId: actor.userId,
+      isSuperAdmin: actor.access.isSuperAdmin,
+    };
+    const staff = staffRows.filter((member) =>
+      canChangeShiftFor(actorChangeScope, member.userId),
     );
+
+    const employeeMap = new Map<
+      string,
+      { id: string; name: string; email: string }
+    >();
+    for (const row of rows) {
+      employeeMap.set(row.employeeFilterId, {
+        id: row.employeeFilterId,
+        name: row.employeeName,
+        email: row.employeeEmail ?? "",
+      });
+    }
+    for (const member of staffRows) {
+      if (!employeeMap.has(member.userId)) {
+        employeeMap.set(member.userId, {
+          id: member.userId,
+          name: member.name,
+          email: member.email,
+        });
+      }
+    }
     return Response.json({
       outlets: actor.outlets,
-      employees,
+      employees: Array.from(employeeMap.values()),
+      staff,
+      currentUserId: actor.userId,
+      isSuperAdmin: actor.access.isSuperAdmin,
       storeHubStatus: storeHubAttendance.status,
       storeHubFetchedAt: storeHubAttendance.fetchedAt,
       rows: rows.map((row) => ({
@@ -721,5 +784,362 @@ export async function PATCH(request: Request) {
       { error: "Could not update timesheet entry." },
       { status: 500 },
     );
+  }
+}
+
+const createSchema = z
+  .object({
+    outletId: z.string().uuid(),
+    userId: z.string().min(1).max(200),
+    clockInAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
+    clockOutAt: z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/),
+    breaks: z
+      .array(
+        z
+          .object({
+            startedAt: z.string().datetime({ offset: true }),
+            endedAt: z.string().datetime({ offset: true }),
+          })
+          .strict(),
+      )
+      .max(30)
+      .optional(),
+    reason: z.string().trim().min(3).max(500),
+  })
+  .strict();
+
+export async function POST(request: Request) {
+  if (!hasServerConfiguration()) return unavailable();
+  try {
+    const actor = await getActor(request);
+    if ("error" in actor) {
+      return Response.json({ error: actor.error }, { status: actor.status });
+    }
+
+    let body: unknown;
+    try {
+      body = await request.json();
+    } catch {
+      return Response.json(
+        { error: "Request body must be valid JSON." },
+        { status: 400 },
+      );
+    }
+    const parsed = createSchema.safeParse(body);
+    if (!parsed.success) {
+      return Response.json(
+        { error: "Shift details are invalid." },
+        { status: 400 },
+      );
+    }
+
+    const outlet = actor.outlets.find(
+      (item) => item.id === parsed.data.outletId,
+    );
+    if (!outlet) {
+      return Response.json(
+        { error: "You cannot access this outlet." },
+        { status: 403 },
+      );
+    }
+    if (outlet.isActive === false) {
+      return Response.json(
+        { error: "This outlet is inactive." },
+        { status: 403 },
+      );
+    }
+    if (
+      !canChangeShiftFor(
+        { userId: actor.userId, isSuperAdmin: actor.access.isSuperAdmin },
+        parsed.data.userId,
+      )
+    ) {
+      return Response.json(
+        { error: "You cannot change your own shifts." },
+        { status: 403 },
+      );
+    }
+
+    const db = getDb();
+    const [target] = await db
+      .select({
+        userId: user.id,
+        username: user.username,
+        isActive: outletMemberships.isActive,
+        canAccessClock: user.canAccessClock,
+        approvalStatus: user.approvalStatus,
+      })
+      .from(outletMemberships)
+      .innerJoin(user, eq(outletMemberships.userId, user.id))
+      .where(
+        and(
+          eq(outletMemberships.outletId, outlet.id),
+          eq(outletMemberships.userId, parsed.data.userId),
+        ),
+      )
+      .limit(1);
+    if (
+      !target ||
+      !target.isActive ||
+      !target.canAccessClock ||
+      target.approvalStatus !== "approved"
+    ) {
+      return Response.json(
+        { error: "This staff member cannot have shifts added at this outlet." },
+        { status: 400 },
+      );
+    }
+
+    let clockInAt: Date;
+    let clockOutAt: Date;
+    try {
+      clockInAt = new Date(
+        outletDateTimeToISOString(parsed.data.clockInAt, outlet.timezone),
+      );
+      clockOutAt = new Date(
+        outletDateTimeToISOString(parsed.data.clockOutAt, outlet.timezone),
+      );
+    } catch (error) {
+      return Response.json(
+        {
+          error:
+            error instanceof Error ? error.message : "Invalid outlet time.",
+        },
+        { status: 400 },
+      );
+    }
+
+    const shiftBreaks: ManualBreak[] = (parsed.data.breaks ?? []).map(
+      (breakInterval) => ({
+        startedAt: new Date(breakInterval.startedAt),
+        endedAt: new Date(breakInterval.endedAt),
+      }),
+    );
+    const validationError = validateManualShift({
+      clockInAt,
+      clockOutAt,
+      breaks: shiftBreaks,
+      now: new Date(),
+    });
+    if (validationError) {
+      return Response.json({ error: validationError }, { status: 400 });
+    }
+
+    const outcome = await db.transaction(async (tx) => {
+      // Lock the staff member's row so concurrent shift writes for them serialise.
+      await tx
+        .select({ id: user.id })
+        .from(user)
+        .where(eq(user.id, target.userId))
+        .limit(1)
+        .for("update");
+
+      const existing = await tx
+        .select({
+          start: workSessions.clockInAt,
+          end: workSessions.clockOutAt,
+        })
+        .from(workSessions)
+        .where(eq(workSessions.userId, target.userId));
+      if (hasOverlap({ start: clockInAt, end: clockOutAt }, existing)) {
+        return {
+          status: 409 as const,
+          error: "This shift overlaps another shift for this staff member.",
+        };
+      }
+
+      const now = new Date();
+      const [created] = await tx
+        .insert(workSessions)
+        .values({
+          userId: target.userId,
+          outletId: outlet.id,
+          timezone: outlet.timezone,
+          clockInAt,
+          clockOutAt,
+          clockInSource: "manual",
+          clockOutSource: "manual",
+          updatedAt: now,
+        })
+        .returning({ id: workSessions.id });
+
+      if (shiftBreaks.length) {
+        await tx.insert(workBreaks).values(
+          shiftBreaks.map((breakInterval) => ({
+            workSessionId: created.id,
+            startedAt: breakInterval.startedAt,
+            endedAt: breakInterval.endedAt,
+            updatedAt: now,
+          })),
+        );
+      }
+
+      await recordAudit(tx, {
+        actorId: actor.userId,
+        action: "timesheet_create",
+        entityType: "work_session",
+        entityId: created.id,
+        outletId: outlet.id,
+        newValues: {
+          username: target.username,
+          clockInAt: clockInAt.toISOString(),
+          clockOutAt: clockOutAt.toISOString(),
+          breaks: shiftBreaks.map((breakInterval) => ({
+            startedAt: breakInterval.startedAt.toISOString(),
+            endedAt: breakInterval.endedAt?.toISOString() ?? null,
+          })),
+        },
+        reason: parsed.data.reason,
+      });
+      return { id: created.id };
+    });
+
+    if ("error" in outcome) {
+      return Response.json(
+        { error: outcome.error },
+        { status: outcome.status },
+      );
+    }
+
+    await notifyOutletManagers({
+      outletId: outlet.id,
+      actorId: actor.userId,
+      event: "timesheet_created",
+    });
+    return Response.json({ success: true, id: outcome.id }, { status: 201 });
+  } catch {
+    return Response.json({ error: "Could not add shift." }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  if (!hasServerConfiguration()) return unavailable();
+  try {
+    const actor = await getActor(request);
+    if ("error" in actor) {
+      return Response.json({ error: actor.error }, { status: actor.status });
+    }
+
+    const idParam = z
+      .string()
+      .uuid()
+      .safeParse(new URL(request.url).searchParams.get("id"));
+    if (!idParam.success) {
+      return Response.json(
+        { error: "Timesheet entry id is invalid." },
+        { status: 400 },
+      );
+    }
+
+    const db = getDb();
+    const [session] = await db
+      .select({
+        id: workSessions.id,
+        userId: workSessions.userId,
+        outletId: workSessions.outletId,
+      })
+      .from(workSessions)
+      .where(eq(workSessions.id, idParam.data))
+      .limit(1);
+    if (!session || !actor.outletIds.includes(session.outletId)) {
+      return Response.json(
+        { error: "Timesheet entry not found." },
+        { status: 404 },
+      );
+    }
+    if (
+      !canChangeShiftFor(
+        { userId: actor.userId, isSuperAdmin: actor.access.isSuperAdmin },
+        session.userId,
+      )
+    ) {
+      return Response.json(
+        { error: "You cannot change your own shifts." },
+        { status: 403 },
+      );
+    }
+
+    const outcome = await db.transaction(async (tx) => {
+      await tx
+        .select({ id: user.id })
+        .from(user)
+        .where(eq(user.id, session.userId))
+        .limit(1)
+        .for("update");
+
+      const [current] = await tx
+        .select({
+          id: workSessions.id,
+          userId: workSessions.userId,
+          outletId: workSessions.outletId,
+          timezone: workSessions.timezone,
+          clockInAt: workSessions.clockInAt,
+          clockOutAt: workSessions.clockOutAt,
+          clockInSource: workSessions.clockInSource,
+          clockOutSource: workSessions.clockOutSource,
+        })
+        .from(workSessions)
+        .where(eq(workSessions.id, session.id))
+        .limit(1)
+        .for("update");
+      if (!current) {
+        return { status: 404 as const, error: "Timesheet entry not found." };
+      }
+      if (!canDeleteShift(current)) {
+        return {
+          status: 409 as const,
+          error: "Open shifts cannot be deleted. Clock out first.",
+        };
+      }
+
+      const breaks = await tx
+        .select({
+          startedAt: workBreaks.startedAt,
+          endedAt: workBreaks.endedAt,
+        })
+        .from(workBreaks)
+        .where(eq(workBreaks.workSessionId, current.id))
+        .orderBy(workBreaks.startedAt);
+
+      await recordAudit(tx, {
+        actorId: actor.userId,
+        action: "timesheet_delete",
+        entityType: "work_session",
+        entityId: current.id,
+        outletId: current.outletId,
+        previousValues: {
+          userId: current.userId,
+          timezone: current.timezone,
+          clockInAt: current.clockInAt.toISOString(),
+          clockOutAt: current.clockOutAt?.toISOString() ?? null,
+          clockInSource: current.clockInSource,
+          clockOutSource: current.clockOutSource,
+          breaks: breaks.map((breakInterval) => ({
+            startedAt: breakInterval.startedAt.toISOString(),
+            endedAt: breakInterval.endedAt?.toISOString() ?? null,
+          })),
+        },
+      });
+
+      // Break rows are removed by the workSessions cascade.
+      await tx.delete(workSessions).where(eq(workSessions.id, current.id));
+      return { deleted: true as const, outletId: current.outletId };
+    });
+
+    if ("error" in outcome) {
+      return Response.json(
+        { error: outcome.error },
+        { status: outcome.status },
+      );
+    }
+
+    await notifyOutletManagers({
+      outletId: outcome.outletId,
+      actorId: actor.userId,
+      event: "timesheet_deleted",
+    });
+    return Response.json({ success: true });
+  } catch {
+    return Response.json({ error: "Could not delete shift." }, { status: 500 });
   }
 }

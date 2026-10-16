@@ -231,7 +231,7 @@ export function NotificationSettings({ outletId }: { outletId: string }) {
           !hasSubscription &&
           permission !== "denied" && (
             <button
-              className="team-secondary-action notification-device-action"
+              className="btn btn-secondary btn-spaced"
               type="button"
               disabled={isSaving || !publicKey}
               onClick={() => void enableNotifications()}

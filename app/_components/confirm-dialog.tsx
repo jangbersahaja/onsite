@@ -73,14 +73,14 @@ function ConfirmDialog({
           </header>
           <div className="confirm-dialog-actions">
             <button
-              className="confirm-dialog-cancel"
+              className="btn btn-secondary btn-lg"
               type="button"
               onClick={() => onSettle(false)}
             >
               {options.cancelLabel ?? "Cancel"}
             </button>
             <button
-              className={`confirm-dialog-confirm${options.tone === "danger" ? " is-danger" : ""}`}
+              className={`btn btn-lg ${options.tone === "danger" ? "btn-danger-solid" : "btn-primary"}`}
               type="button"
               onClick={() => onSettle(true)}
             >
