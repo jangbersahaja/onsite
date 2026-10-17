@@ -28,6 +28,7 @@ type ClockOutlet = {
   longitude: number;
   radiusMeters: number;
   timezone: string;
+  imageUrl?: string | null;
 };
 
 type ClockRecord = {

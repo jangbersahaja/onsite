@@ -1,6 +1,7 @@
 "use client";
 
 import { useLocale } from "@/app/_components/locale-provider";
+import { OutletAvatar } from "@/app/_components/outlet-avatar";
 import { useReportClockWorkspace } from "@/app/clock/_components/clock-workspace";
 import { ShiftCorrectionDialog } from "@/app/clock/_components/shift-correction-dialog";
 import { SignInForm } from "@/app/clock/_components/sign-in-form";
@@ -22,6 +23,7 @@ type HistoryOutlet = {
   longitude: number;
   radiusMeters: number;
   timezone: string;
+  imageUrl?: string | null;
 };
 
 type HistoryShift = {
@@ -366,7 +368,16 @@ export default function ClockHistoryPage() {
             aria-label={messages.history.aria.shifts}
           >
             <div className="history-month-summary">
-              <span>{outlet?.name ?? messages.history.summary.allOutlets}</span>
+              <span className="outlet-inline">
+                {outlet && (
+                  <OutletAvatar
+                    name={outlet.name}
+                    imageUrl={outlet.imageUrl}
+                    className="outlet-avatar outlet-avatar-sm"
+                  />
+                )}
+                {outlet?.name ?? messages.history.summary.allOutlets}
+              </span>
               <strong>
                 {formatMinutes(monthHours, messages.history.units.hoursMinutes)}
               </strong>

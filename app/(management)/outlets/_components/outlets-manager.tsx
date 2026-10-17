@@ -2,8 +2,18 @@
 
 import { useConfirmDialog } from "@/app/_components/confirm-dialog";
 import { ModalDialog } from "@/app/_components/modal-dialog";
+import { OutletAvatar } from "@/app/_components/outlet-avatar";
+import { OutletHero } from "@/app/_components/outlet-hero";
 import { PasswordInput } from "@/app/_components/password-input";
-import { useEffect, useState, type FormEvent } from "react";
+import { MAX_OUTLET_PHOTO_BYTES } from "@/lib/outlet-photo";
+import { PROFILE_PHOTO_CONTENT_TYPES } from "@/lib/profile-photo";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from "react";
 import { CloseIcon, EditIcon } from "../../../_components/icons";
 
 type OutletSummary = {
@@ -14,6 +24,7 @@ type OutletSummary = {
   longitude: number;
   radiusMeters: number;
   timezone: string;
+  imageUrl?: string | null;
   /** Only present for super admins. Never contains the API token. */
   storeHub?: { storeName: string; posStoreId: string } | null;
 };
@@ -34,6 +45,22 @@ async function loadOutletsData() {
   const body = await response.json();
   if (!response.ok) throw new Error(body.error ?? "Could not load outlets.");
   return body as OutletsData;
+}
+
+/** Uploads the photo when a file is given, otherwise removes the current one. */
+async function updateOutletPhoto(outletId: string, file: File | null) {
+  const body = new FormData();
+  if (file) body.append("photo", file);
+  const response = await fetch(
+    `/api/outlets/${encodeURIComponent(outletId)}/photo`,
+    {
+      method: file ? "POST" : "DELETE",
+      body: file ? body : undefined,
+    },
+  );
+  const result = await response.json();
+  if (!response.ok)
+    throw new Error(result.error ?? "Could not update outlet photo.");
 }
 
 type StoreHubPayload = {
@@ -70,7 +97,19 @@ export function OutletsManager() {
   const [message, setMessage] = useState("");
   const [assignmentKey, setAssignmentKey] = useState("");
   const [accessUserId, setAccessUserId] = useState("");
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoRemoved, setPhotoRemoved] = useState(false);
   const { confirm, confirmDialog } = useConfirmDialog();
+  const photoPreviewUrl = useMemo(
+    () => (photoFile ? URL.createObjectURL(photoFile) : ""),
+    [photoFile],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+    };
+  }, [photoPreviewUrl]);
 
   useEffect(() => {
     let active = true;
@@ -95,6 +134,38 @@ export function OutletsManager() {
 
   async function refresh() {
     setData(await loadOutletsData());
+  }
+
+  function resetPhotoDraft() {
+    setPhotoFile(null);
+    setPhotoRemoved(false);
+  }
+
+  function handlePhotoChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = "";
+    if (!file) return;
+    if (
+      !(PROFILE_PHOTO_CONTENT_TYPES as readonly string[]).includes(file.type)
+    ) {
+      setOutletMessage("Choose a JPEG, PNG, or WebP image.");
+      return;
+    }
+    if (file.size > MAX_OUTLET_PHOTO_BYTES) {
+      setOutletMessage("Outlet photos must be 2 MB or smaller.");
+      return;
+    }
+    setOutletMessage("");
+    setPhotoRemoved(false);
+    setPhotoFile(file);
+  }
+
+  function handleRemovePhoto() {
+    if (photoFile) {
+      setPhotoFile(null);
+      return;
+    }
+    setPhotoRemoved(true);
   }
 
   async function handleCreateOutlet(event: FormEvent<HTMLFormElement>) {
@@ -137,10 +208,24 @@ export function OutletsManager() {
       const body = await response.json();
       if (!response.ok)
         throw new Error(body.error ?? "Could not create outlet.");
+      let photoError = "";
+      if (photoFile) {
+        try {
+          await updateOutletPhoto(body.outlet.id, photoFile);
+        } catch (error) {
+          photoError =
+            error instanceof Error ? error.message : "Could not upload photo.";
+        }
+      }
       await refresh();
-      setMessage(`${body.outlet.name} was added.`);
+      setMessage(
+        photoError
+          ? `${body.outlet.name} was added, but its photo was not saved. ${photoError}`
+          : `${body.outlet.name} was added.`,
+      );
       setIsOutletDialogOpen(false);
       form.reset();
+      resetPhotoDraft();
     } catch (error) {
       setOutletMessage(
         error instanceof Error ? error.message : "Could not create outlet.",
@@ -194,6 +279,14 @@ export function OutletsManager() {
       if (!response.ok)
         throw new Error(body.error ?? "Could not update outlet.");
       await refresh();
+      const hadImage = Boolean(
+        data?.outlets.find((outlet) => outlet.id === id)?.imageUrl,
+      );
+      if (photoFile || (photoRemoved && hadImage)) {
+        await updateOutletPhoto(id, photoFile);
+        await refresh();
+      }
+      resetPhotoDraft();
       setEditingOutletId("");
       setIsOutletDialogOpen(false);
       setMessage(`${body.outlet.name} was updated.`);
@@ -361,6 +454,7 @@ export function OutletsManager() {
                   setEditingOutletId("");
                   setOutletMessage("");
                   setStoreHubEnabled(false);
+                  resetPhotoDraft();
                   setIsOutletDialogOpen(true);
                 }}
               >
@@ -373,10 +467,9 @@ export function OutletsManager() {
           {data.outlets.length ? (
             data.outlets.map((outlet) => (
               <article className="outlet-card" key={outlet.id}>
+                <OutletHero name={outlet.name} imageUrl={outlet.imageUrl} />
                 <header className="outlet-card-header">
-                  <span className="outlet-avatar" aria-hidden="true">
-                    {outlet.name.charAt(0).toUpperCase()}
-                  </span>
+                  {!outlet.imageUrl && <OutletAvatar name={outlet.name} />}
                   <div className="outlet-card-title">
                     <h3>{outlet.name}</h3>
                     <p>{outlet.address}</p>
@@ -420,6 +513,7 @@ export function OutletsManager() {
                       setEditingOutletId(outlet.id);
                       setOutletMessage("");
                       setStoreHubEnabled(Boolean(outlet.storeHub));
+                      resetPhotoDraft();
                       setIsOutletDialogOpen(true);
                     }}
                   >
@@ -532,6 +626,40 @@ export function OutletsManager() {
                   maxLength={100}
                 />
               </label>
+              {data.isSuperAdmin && (
+                <fieldset className="dialog-wide-field outlet-photo-field">
+                  <legend>Outlet photo</legend>
+                  <OutletAvatar
+                    name={editingOutlet?.name ?? "Outlet"}
+                    imageUrl={
+                      photoPreviewUrl ||
+                      (photoRemoved ? null : editingOutlet?.imageUrl)
+                    }
+                    className="outlet-avatar outlet-avatar-lg"
+                  />
+                  <div className="outlet-photo-actions">
+                    <input
+                      type="file"
+                      accept={PROFILE_PHOTO_CONTENT_TYPES.join(",")}
+                      aria-label="Choose outlet photo"
+                      onChange={handlePhotoChange}
+                    />
+                    <p className="outlet-photo-hint">
+                      JPEG, PNG, or WebP, up to 2 MB.
+                    </p>
+                    {(photoFile ||
+                      (editingOutlet?.imageUrl && !photoRemoved)) && (
+                      <button
+                        className="btn btn-secondary btn-sm"
+                        type="button"
+                        onClick={handleRemovePhoto}
+                      >
+                        {photoFile ? "Clear selection" : "Remove photo"}
+                      </button>
+                    )}
+                  </div>
+                </fieldset>
+              )}
               {data.isSuperAdmin && (
                 <fieldset className="dialog-wide-field dialog-storehub-fieldset">
                   <legend>StoreHub</legend>

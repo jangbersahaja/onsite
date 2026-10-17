@@ -10,6 +10,7 @@ import {
 } from "@/app/(management)/timesheets/_components/timesheet-edit-dialog";
 import { useConfirmDialog } from "@/app/_components/confirm-dialog";
 import { EditIcon, TrashIcon } from "@/app/_components/icons";
+import { OutletAvatar } from "@/app/_components/outlet-avatar";
 import { outletDateTimeToISOString } from "@/lib/outlet-time";
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
@@ -64,7 +65,12 @@ type ShiftTarget = {
 };
 
 type TimesheetData = {
-  outlets: { id: string; name: string; address: string }[];
+  outlets: {
+    id: string;
+    name: string;
+    address: string;
+    imageUrl?: string | null;
+  }[];
   employees: { id: string; name: string; email: string }[];
   staff: TimesheetStaff[];
   currentUserId: string;
@@ -640,7 +646,17 @@ export default function TimesheetsPage() {
                 </h2>
                 {group.employeeEmail && <small>{group.employeeEmail}</small>}
               </div>
-              <span>{group.outletName}</span>
+              <span className="outlet-inline">
+                <OutletAvatar
+                  name={group.outletName}
+                  imageUrl={
+                    data?.outlets.find((outlet) => outlet.id === group.outletId)
+                      ?.imageUrl
+                  }
+                  className="outlet-avatar outlet-avatar-sm"
+                />
+                {group.outletName}
+              </span>
             </header>
             <div className="team-table-wrap">
               <table className="team-table timesheet-table">

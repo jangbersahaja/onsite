@@ -10,6 +10,7 @@ import { recordAudit } from "@/lib/audit";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { verifyGeofence } from "@/lib/geofence";
+import { outletPhotoUrl } from "@/lib/outlet-photo";
 import { parseDateRange } from "@/lib/outlet-time";
 import { notifyOutletManagers } from "@/lib/push-notifications";
 import {
@@ -86,7 +87,7 @@ export async function GET(request: Request) {
       );
 
     const db = getDb();
-    const assignedOutlets = await db
+    const assignedOutletRows = await db
       .select({
         id: outlets.id,
         name: outlets.name,
@@ -95,6 +96,7 @@ export async function GET(request: Request) {
         longitude: outlets.longitude,
         radiusMeters: outlets.radiusMeters,
         timezone: outlets.timezone,
+        imagePath: outlets.imagePath,
       })
       .from(outletMemberships)
       .innerJoin(outlets, eq(outletMemberships.outletId, outlets.id))
@@ -105,6 +107,12 @@ export async function GET(request: Request) {
           eq(outlets.isActive, true),
         ),
       );
+    const assignedOutlets = assignedOutletRows.map(
+      ({ imagePath, ...outlet }) => ({
+        ...outlet,
+        imageUrl: outletPhotoUrl(outlet.id, imagePath),
+      }),
+    );
 
     const [activeSession] = await db
       .select({

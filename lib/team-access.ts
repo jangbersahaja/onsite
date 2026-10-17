@@ -1,5 +1,6 @@
 import { outletMemberships, outlets, user } from "@/db/schema";
 import { getDb } from "@/lib/db";
+import { outletPhotoUrl } from "@/lib/outlet-photo";
 import { and, eq } from "drizzle-orm";
 
 export {
@@ -22,7 +23,7 @@ export async function getTeamAccess(userId: string) {
   if (!actor || !actor.canAccessBackoffice) return null;
 
   const isSuperAdmin = actor.accountType === "super_admin";
-  const manageableOutlets = isSuperAdmin
+  const rows = isSuperAdmin
     ? await db
         .select({
           id: outlets.id,
@@ -32,6 +33,7 @@ export async function getTeamAccess(userId: string) {
           longitude: outlets.longitude,
           radiusMeters: outlets.radiusMeters,
           timezone: outlets.timezone,
+          imagePath: outlets.imagePath,
         })
         .from(outlets)
         .where(eq(outlets.isActive, true))
@@ -44,6 +46,7 @@ export async function getTeamAccess(userId: string) {
           longitude: outlets.longitude,
           radiusMeters: outlets.radiusMeters,
           timezone: outlets.timezone,
+          imagePath: outlets.imagePath,
         })
         .from(outletMemberships)
         .innerJoin(outlets, eq(outletMemberships.outletId, outlets.id))
@@ -54,6 +57,10 @@ export async function getTeamAccess(userId: string) {
             eq(outlets.isActive, true),
           ),
         );
+  const manageableOutlets = rows.map(({ imagePath, ...outlet }) => ({
+    ...outlet,
+    imageUrl: outletPhotoUrl(outlet.id, imagePath),
+  }));
 
   return {
     isSuperAdmin,

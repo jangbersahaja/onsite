@@ -1,0 +1,1 @@
+ALTER TABLE "outlets" ADD COLUMN "image_path" text;

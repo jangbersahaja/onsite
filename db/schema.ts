@@ -145,6 +145,7 @@ export const outlets = pgTable("outlets", {
   longitude: doublePrecision("longitude").notNull(),
   radiusMeters: integer("radius_meters").notNull().default(100),
   timezone: text("timezone").notNull(),
+  imagePath: text("image_path"),
   isActive: boolean("is_active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()

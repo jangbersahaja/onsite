@@ -25,6 +25,8 @@ export const AUDIT_ACTIONS = [
   "outlet_storehub_linked",
   "outlet_storehub_updated",
   "outlet_storehub_unlinked",
+  "outlet_photo_updated",
+  "outlet_photo_removed",
   "user_assigned_to_outlet",
   "user_unassigned_from_outlet",
   "registration_submitted",
@@ -116,6 +118,10 @@ const describers: Record<AuditAction, (parts: DescriptionParts) => string> = {
     `${actor} updated StoreHub link for outlet${outletName ? ` ${outletName}` : ""}`,
   outlet_storehub_unlinked: ({ actor, outletName }) =>
     `${actor} unlinked StoreHub from outlet${outletName ? ` ${outletName}` : ""}`,
+  outlet_photo_updated: ({ actor, outletName }) =>
+    `${actor} updated the photo for outlet${outletName ? ` ${outletName}` : ""}`,
+  outlet_photo_removed: ({ actor, outletName }) =>
+    `${actor} removed the photo from outlet${outletName ? ` ${outletName}` : ""}`,
   user_assigned_to_outlet: ({ actor, outletName }) =>
     `${actor} assigned a user to ${outletName ?? "an outlet"}`,
   user_unassigned_from_outlet: ({ actor, outletName }) =>

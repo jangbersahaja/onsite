@@ -3,6 +3,7 @@
 import { useConfirmDialog } from "@/app/_components/confirm-dialog";
 import { LanguageSwitcher } from "@/app/_components/language-switcher";
 import { useLocale } from "@/app/_components/locale-provider";
+import { OutletAvatar } from "@/app/_components/outlet-avatar";
 import { authClient } from "@/lib/auth-client";
 import { errorMessage, type ErrorText } from "@/lib/i18n/errors";
 import { MAX_PROFILE_PHOTO_BYTES } from "@/lib/profile-photo";
@@ -31,6 +32,7 @@ export const REVIEW_REQUESTS_CHANGED_EVENT = "review-requests-changed";
 export type WorkspaceOutlet = {
   id: string;
   name: string;
+  imageUrl?: string | null;
 };
 
 export function createManagementNavigation(
@@ -414,9 +416,11 @@ export function WorkspaceShell({
         <p className="workspace-label">{messages.shell.workspaceLabel}</p>
         {outlets.length > 0 && selectedOutletId && onOutletChange ? (
           <label className="outlet-switcher" htmlFor="workspace-outlet-select">
-            <span className="outlet-avatar">
-              {selectedOutlet?.name.slice(0, 1) ?? "O"}
-            </span>
+            <OutletAvatar
+              name={selectedOutlet?.name ?? "O"}
+              imageUrl={selectedOutlet?.imageUrl}
+              fallback={selectedOutlet?.name.slice(0, 1) ?? "O"}
+            />
             <span className="outlet-copy">
               <strong>{selectedOutlet?.name ?? workspaceName}</strong>
               <small>{workspaceName}</small>
@@ -437,9 +441,11 @@ export function WorkspaceShell({
           </label>
         ) : (
           <div className="outlet-switcher workspace-context">
-            <span className="outlet-avatar">
-              {workspaceName.slice(0, 1).toUpperCase()}
-            </span>
+            <OutletAvatar
+              name={workspaceName}
+              imageUrl={selectedOutlet?.imageUrl}
+              fallback={workspaceName.slice(0, 1).toUpperCase()}
+            />
             <span className="outlet-copy">
               <strong>{selectedOutlet?.name ?? workspaceName}</strong>
               <small>{messages.shell.currentWorkspace}</small>

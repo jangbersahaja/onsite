@@ -232,6 +232,7 @@ export async function GET(request: Request) {
           name: outlet.name,
           address: outlet.address,
           timezone: outlet.timezone,
+          imageUrl: outlet.imageUrl ?? null,
           date,
           windowStartAt: startAt,
           windowEndAt: endAt,

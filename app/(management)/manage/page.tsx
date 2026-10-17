@@ -1,5 +1,7 @@
 "use client";
 
+import { OutletAvatar } from "@/app/_components/outlet-avatar";
+import { OutletHero } from "@/app/_components/outlet-hero";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 
@@ -26,6 +28,7 @@ type DashboardOutlet = {
   name: string;
   address: string;
   timezone: string;
+  imageUrl?: string | null;
   date: string;
   windowStartAt: string;
   windowEndAt: string;
@@ -281,10 +284,14 @@ export default function ManagePage() {
 
           return (
             <section className="dashboard-outlet" key={outlet.id}>
+              <OutletHero name={outlet.name} imageUrl={outlet.imageUrl} />
               <header className="dashboard-outlet-heading">
-                <div>
-                  <h2>{outlet.name}</h2>
-                  <p>{outlet.address}</p>
+                <div className="outlet-inline">
+                  {!outlet.imageUrl && <OutletAvatar name={outlet.name} />}
+                  <div>
+                    <h2>{outlet.name}</h2>
+                    <p>{outlet.address}</p>
+                  </div>
                 </div>
                 <div className="dashboard-window">
                   <strong>{formatDate(outlet.date)}</strong>

@@ -10,6 +10,7 @@ import { recordAudit } from "@/lib/audit";
 import { getAuth } from "@/lib/auth";
 import { addCalendarDays } from "@/lib/dashboard-data";
 import { getDb } from "@/lib/db";
+import { outletPhotoUrl } from "@/lib/outlet-photo";
 import {
   csvCell,
   formatOutletTimestamp,
@@ -74,15 +75,21 @@ async function getActor(request: Request) {
     };
   }
   const outletsForAccess = access.isSuperAdmin
-    ? await getDb()
-        .select({
-          id: outlets.id,
-          name: outlets.name,
-          address: outlets.address,
-          timezone: outlets.timezone,
-          isActive: outlets.isActive,
-        })
-        .from(outlets)
+    ? (
+        await getDb()
+          .select({
+            id: outlets.id,
+            name: outlets.name,
+            address: outlets.address,
+            timezone: outlets.timezone,
+            isActive: outlets.isActive,
+            imagePath: outlets.imagePath,
+          })
+          .from(outlets)
+      ).map(({ imagePath, ...outlet }) => ({
+        ...outlet,
+        imageUrl: outletPhotoUrl(outlet.id, imagePath),
+      }))
     : access.outlets.map((outlet) => ({ ...outlet, isActive: true }));
   if (!outletsForAccess.length) {
     return {
