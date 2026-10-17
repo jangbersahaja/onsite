@@ -146,7 +146,10 @@ export default function ActivityPage() {
         </div>
       </div>
 
-      <form className="timesheet-filters" onSubmit={handleFilterSubmit}>
+      <form
+        className="timesheet-filters activity-filters"
+        onSubmit={handleFilterSubmit}
+      >
         <label>
           Outlet
           <select
@@ -242,7 +245,11 @@ export default function ActivityPage() {
                     </td>
                     <td>
                       {event.description}
-                      {event.reason && <small> · Reason: {event.reason}</small>}
+                      {event.reason && (
+                        <small className="activity-event-reason">
+                          Reason: {event.reason}
+                        </small>
+                      )}
                     </td>
                     <td>{event.outletName ?? "—"}</td>
                   </tr>
@@ -265,7 +272,7 @@ export default function ActivityPage() {
             </p>
           )}
           <button
-            className="btn btn-secondary"
+            className="btn btn-secondary activity-more-button"
             type="button"
             disabled={isLoadingMore}
             aria-busy={isLoadingMore}

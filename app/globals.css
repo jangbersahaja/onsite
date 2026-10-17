@@ -1212,6 +1212,9 @@ h2 {
   color: var(--muted);
   font-size: 9px;
 }
+.activity-table .activity-event-reason::before {
+  content: " · ";
+}
 .activity-load-more {
   display: block;
   min-height: 36px;
@@ -6578,5 +6581,112 @@ body input[type="datetime-local"]::-webkit-datetime-edit {
   body select,
   body textarea {
     font-size: 16px;
+  }
+}
+
+/* Activity page on phones: stacked event cards and touch-friendly filters */
+@media (max-width: 760px) {
+  .activity-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .activity-filters > label:nth-child(-n + 2),
+  .activity-filters > button {
+    grid-column: 1 / -1;
+  }
+  .activity-filters > button {
+    width: 100%;
+    min-height: 44px;
+  }
+  .activity-filters input,
+  .activity-filters select {
+    min-height: 44px;
+  }
+  .activity-table-wrap {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+  .activity-table {
+    display: block;
+    width: 100%;
+    min-width: 0;
+    white-space: normal;
+  }
+  .activity-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+  .activity-table tbody {
+    display: grid;
+    gap: 10px;
+  }
+  .activity-table tbody tr {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    grid-template-areas:
+      "time outlet"
+      "activity activity";
+    gap: 6px 12px;
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    background: var(--surface);
+    box-shadow: var(--shadow-card);
+  }
+  .activity-table td {
+    height: auto;
+    min-width: 0;
+    border: 0;
+    padding: 0;
+  }
+  .workspace-shell .activity-table td {
+    font-size: 14px;
+    line-height: 1.45;
+  }
+  .activity-table td:nth-child(1) {
+    grid-area: time;
+  }
+  .activity-table td:nth-child(2) {
+    grid-area: activity;
+    overflow-wrap: anywhere;
+  }
+  .activity-table td:nth-child(3) {
+    grid-area: outlet;
+    align-self: start;
+    justify-self: end;
+    max-width: 100%;
+    text-align: right;
+    overflow-wrap: anywhere;
+  }
+  .workspace-shell .activity-table td:nth-child(3) {
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .workspace-shell .activity-table td:first-child strong {
+    font-size: 15px;
+  }
+  .workspace-shell .activity-table td:first-child small {
+    display: block;
+    margin-top: 2px;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .activity-table .activity-event-reason {
+    display: block;
+    margin-top: 4px;
+    font-size: 12px;
+  }
+  .activity-table .activity-event-reason::before {
+    content: none;
+  }
+  .activity-more-button {
+    width: 100%;
+    min-height: 44px;
+    margin-top: 12px;
   }
 }
