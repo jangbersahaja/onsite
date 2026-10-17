@@ -1,6 +1,5 @@
 "use client";
 
-import { NotificationSettings } from "@/app/(management)/team/_components/notification-settings";
 import { useConfirmDialog } from "@/app/_components/confirm-dialog";
 import { CloseIcon } from "@/app/_components/icons";
 import { ModalDialog } from "@/app/_components/modal-dialog";
@@ -687,17 +686,6 @@ export default function TeamPage() {
           {message}
         </p>
       )}
-
-      {(outletId
-        ? data.outlets.filter((outlet) => outlet.id === outletId)
-        : data.outlets
-      ).map((outlet) => (
-        <NotificationSettings
-          key={outlet.id}
-          outletId={outlet.id}
-          outletName={outlet.name}
-        />
-      ))}
 
       {visibleTeamViews.length > 0 && (
         <nav className="team-view-nav" aria-label="Team sections">

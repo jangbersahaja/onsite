@@ -1990,44 +1990,23 @@ h2 {
   border-top: 1px solid var(--line);
   padding: 21px 0 25px;
 }
-.outlet-notification-settings {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  border-top: 1px solid var(--line);
-  padding: 21px 0 25px;
+.outlet-alert {
+  display: grid;
+  justify-items: end;
+  gap: 6px;
 }
-.outlet-notification-settings h2 {
-  margin: 3px 0 0;
-  font-size: 19px;
+.outlet-alert-bell.is-active {
+  background: var(--mint);
+  border-color: var(--mint);
+  color: var(--green-dark);
 }
-.notification-settings-message {
-  margin: 7px 0 0;
+.outlet-alert-message {
+  max-width: 200px;
+  margin: 0;
   color: var(--muted);
-  font-size: 12px;
-  line-height: 1.45;
-}
-.notification-device-action {
-  margin-top: 10px;
-}
-.notification-setting-toggle {
-  display: flex;
-  min-width: 92px;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  color: var(--ink);
-  font-size: 12px;
-}
-.notification-setting-toggle input {
-  width: 38px;
-  height: 22px;
-  accent-color: var(--green);
-  cursor: pointer;
-}
-.notification-setting-toggle input:disabled {
-  cursor: not-allowed;
+  font-size: 11px;
+  line-height: 1.4;
+  text-align: right;
 }
 .team-invite-section > .section-heading,
 .team-list-section > .section-heading {
@@ -3732,7 +3711,6 @@ small,
     .eyebrow,
     .detail-label,
     .team-message,
-    .outlet-notification-settings,
     .team-section-description,
     .team-table th,
     .team-table td,
@@ -4548,6 +4526,12 @@ small,
   color: var(--muted);
   font-size: 11px;
 }
+.dashboard-outlet-meta {
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  gap: 14px;
+}
 .dashboard-window {
   display: grid;
   flex: none;
@@ -4757,6 +4741,10 @@ small,
   .dashboard-outlet-heading {
     flex-direction: column;
     gap: 10px;
+  }
+  .dashboard-outlet-meta {
+    width: 100%;
+    justify-content: space-between;
   }
   .dashboard-window {
     text-align: left;

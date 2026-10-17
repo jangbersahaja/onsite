@@ -2,6 +2,7 @@
 
 import { OutletAvatar } from "@/app/_components/outlet-avatar";
 import { OutletHero } from "@/app/_components/outlet-hero";
+import { OutletAlertBell } from "@/app/(management)/manage/_components/outlet-alert-bell";
 import Image from "next/image";
 import { useEffect, useState } from "react";
 
@@ -293,9 +294,15 @@ export default function ManagePage() {
                     <p>{outlet.address}</p>
                   </div>
                 </div>
-                <div className="dashboard-window">
-                  <strong>{formatDate(outlet.date)}</strong>
-                  <span>06:00 – 06:00 next day</span>
+                <div className="dashboard-outlet-meta">
+                  <div className="dashboard-window">
+                    <strong>{formatDate(outlet.date)}</strong>
+                    <span>06:00 – 06:00 next day</span>
+                  </div>
+                  <OutletAlertBell
+                    outletId={outlet.id}
+                    outletName={outlet.name}
+                  />
                 </div>
               </header>
 
