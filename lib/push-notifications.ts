@@ -2,6 +2,7 @@ import {
   outletMemberships,
   outlets,
   pushSubscriptions,
+  superAdminOutletNotifications,
   user,
 } from "@/db/schema";
 import { getDb } from "@/lib/db";
@@ -11,7 +12,7 @@ import {
   notificationBody,
   type OutletNotificationEvent,
 } from "@/lib/push-notification-content";
-import { eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import * as webPush from "web-push";
 
 export type { OutletNotificationEvent } from "@/lib/push-notification-content";
@@ -28,40 +29,78 @@ export async function notifyOutletManagers(input: {
 
   try {
     const db = getDb();
-    const [[outlet], [actor], recipients] = await Promise.all([
-      db
-        .select({ name: outlets.name })
-        .from(outlets)
-        .where(eq(outlets.id, input.outletId))
-        .limit(1),
-      db
-        .select({ name: user.name })
-        .from(user)
-        .where(eq(user.id, input.actorId))
-        .limit(1),
-      db
-        .select({
-          id: pushSubscriptions.id,
-          userId: outletMemberships.userId,
-          canAccessBackoffice: user.canAccessBackoffice,
-          isActive: outletMemberships.isActive,
-          notificationsEnabled: outletMemberships.notificationsEnabled,
-          endpoint: pushSubscriptions.endpoint,
-          p256dh: pushSubscriptions.p256dh,
-          auth: pushSubscriptions.auth,
-        })
-        .from(outletMemberships)
-        .innerJoin(
-          pushSubscriptions,
-          eq(pushSubscriptions.userId, outletMemberships.userId),
-        )
-        .innerJoin(user, eq(user.id, outletMemberships.userId))
-        .where(eq(outletMemberships.outletId, input.outletId)),
-    ]);
+    const [[outlet], [actor], membershipRecipients, superAdminRecipients] =
+      await Promise.all([
+        db
+          .select({ name: outlets.name })
+          .from(outlets)
+          .where(eq(outlets.id, input.outletId))
+          .limit(1),
+        db
+          .select({ name: user.name })
+          .from(user)
+          .where(eq(user.id, input.actorId))
+          .limit(1),
+        db
+          .select({
+            id: pushSubscriptions.id,
+            userId: outletMemberships.userId,
+            canAccessBackoffice: user.canAccessBackoffice,
+            isActive: outletMemberships.isActive,
+            notificationsEnabled: outletMemberships.notificationsEnabled,
+            endpoint: pushSubscriptions.endpoint,
+            p256dh: pushSubscriptions.p256dh,
+            auth: pushSubscriptions.auth,
+          })
+          .from(outletMemberships)
+          .innerJoin(
+            pushSubscriptions,
+            eq(pushSubscriptions.userId, outletMemberships.userId),
+          )
+          .innerJoin(user, eq(user.id, outletMemberships.userId))
+          .where(eq(outletMemberships.outletId, input.outletId)),
+        // Super admins have no membership rows, so their per-outlet opt-ins are
+        // read from their own table and merged with membership recipients.
+        db
+          .select({
+            id: pushSubscriptions.id,
+            userId: superAdminOutletNotifications.userId,
+            canAccessBackoffice: user.canAccessBackoffice,
+            isActive: sql<boolean>`true`,
+            notificationsEnabled:
+              superAdminOutletNotifications.notificationsEnabled,
+            endpoint: pushSubscriptions.endpoint,
+            p256dh: pushSubscriptions.p256dh,
+            auth: pushSubscriptions.auth,
+          })
+          .from(superAdminOutletNotifications)
+          .innerJoin(user, eq(user.id, superAdminOutletNotifications.userId))
+          .innerJoin(
+            pushSubscriptions,
+            eq(pushSubscriptions.userId, superAdminOutletNotifications.userId),
+          )
+          .where(
+            and(
+              eq(superAdminOutletNotifications.outletId, input.outletId),
+              eq(user.accountType, "super_admin"),
+            ),
+          ),
+      ]);
 
-    const eligibleRecipients = recipients.filter((recipient) =>
-      isEligibleOutletManagerRecipient(recipient, input.actorId),
-    );
+    // A super admin who is also a member can match twice; send once per
+    // push subscription.
+    const eligibleById = new Map<
+      string,
+      (typeof membershipRecipients)[number]
+    >();
+    for (const recipient of [
+      ...membershipRecipients,
+      ...superAdminRecipients,
+    ]) {
+      if (!isEligibleOutletManagerRecipient(recipient, input.actorId)) continue;
+      eligibleById.set(recipient.id, recipient);
+    }
+    const eligibleRecipients = [...eligibleById.values()];
     if (!outlet || eligibleRecipients.length === 0) return;
 
     const payload = JSON.stringify({

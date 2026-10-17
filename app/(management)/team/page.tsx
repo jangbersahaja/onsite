@@ -688,7 +688,16 @@ export default function TeamPage() {
         </p>
       )}
 
-      {outletId && <NotificationSettings outletId={outletId} />}
+      {(outletId
+        ? data.outlets.filter((outlet) => outlet.id === outletId)
+        : data.outlets
+      ).map((outlet) => (
+        <NotificationSettings
+          key={outlet.id}
+          outletId={outlet.id}
+          outletName={outlet.name}
+        />
+      ))}
 
       {visibleTeamViews.length > 0 && (
         <nav className="team-view-nav" aria-label="Team sections">

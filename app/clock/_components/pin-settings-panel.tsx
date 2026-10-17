@@ -1,8 +1,10 @@
 "use client";
 
 import { useConfirmDialog } from "@/app/_components/confirm-dialog";
+import { useLocale } from "@/app/_components/locale-provider";
 import { ModalDialog } from "@/app/_components/modal-dialog";
 import { SixDigitPinInput } from "@/app/clock/_components/six-digit-pin-input";
+import { errorMessage, type ErrorText } from "@/lib/i18n/errors";
 import { forgetPinUser, rememberPinUser } from "@/lib/pin-client";
 import { useState, type FormEvent } from "react";
 import { CloseIcon } from "../../_components/icons";
@@ -29,10 +31,14 @@ export function PinSettingsPanel({
   const [isSavingPin, setIsSavingPin] = useState(false);
   const [pinSetupValue, setPinSetupValue] = useState("");
   const [pinSetupConfirmation, setPinSetupConfirmation] = useState("");
-  const [pinSetupError, setPinSetupError] = useState("");
+  const [pinSetupError, setPinSetupError] = useState<ErrorText | null>(null);
   const [pinFormMode, setPinFormMode] = useState<"remove" | null>(null);
-  const [pinMessage, setPinMessage] = useState("");
-  const [pinMessageIsError, setPinMessageIsError] = useState(false);
+  const [pinNotice, setPinNotice] = useState<"removed" | "enabled" | null>(
+    null,
+  );
+  const [pinError, setPinError] = useState<ErrorText | null>(null);
+  const { messages } = useLocale();
+  const t = messages.dialogs.pinSettings;
   const { confirm, confirmDialog } = useConfirmDialog();
 
   async function handlePinAction(event: FormEvent<HTMLFormElement>) {
@@ -41,16 +47,16 @@ export function PinSettingsPanel({
     const form = event.currentTarget;
     if (
       !(await confirm({
-        title: "Remove PIN sign-in?",
-        description:
-          "This browser will require your password to sign in. You can set up a PIN again later.",
-        confirmLabel: "Remove PIN",
+        title: t.removeConfirmTitle,
+        description: t.removeConfirmDescription,
+        confirmLabel: t.removeConfirmLabel,
         tone: "danger",
       }))
     )
       return;
     setIsSavingPin(true);
-    setPinMessage("");
+    setPinNotice(null);
+    setPinError(null);
     const formData = new FormData(form);
     try {
       const response = await fetch("/api/staff-devices/pin", {
@@ -62,22 +68,20 @@ export function PinSettingsPanel({
       });
       const body = await response.json();
       if (!response.ok) {
-        throw new Error(body.error ?? "Could not update PIN sign-in.");
+        setPinError({
+          code: body.code ?? null,
+          text: String(body.error ?? t.removeFallbackError),
+        });
+        return;
       }
 
       forgetPinUser();
       form.reset();
       setPinFormMode(null);
       await onStatusRefresh();
-      setPinMessage("PIN sign-in has been removed from this browser.");
-      setPinMessageIsError(false);
-    } catch (error) {
-      setPinMessage(
-        error instanceof Error
-          ? error.message
-          : "Could not update PIN sign-in.",
-      );
-      setPinMessageIsError(true);
+      setPinNotice("removed");
+    } catch {
+      setPinError({ code: null, text: t.removeFallbackError });
     } finally {
       setIsSavingPin(false);
     }
@@ -86,22 +90,21 @@ export function PinSettingsPanel({
   async function handlePinSetupSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isSavingPin || !authUserId) return;
-    setPinSetupError("");
+    setPinSetupError(null);
     if (!/^\d{6}$/.test(pinSetupValue)) {
-      setPinSetupError("Enter all six digits for your PIN.");
+      setPinSetupError({ code: null, text: t.incompletePin });
       return;
     }
     if (pinSetupValue !== pinSetupConfirmation) {
-      setPinSetupError("Those PINs don’t match.");
+      setPinSetupError({ code: null, text: t.pinMismatch });
       return;
     }
 
     if (
       !(await confirm({
-        title: "Set up PIN sign-in?",
-        description:
-          "You can sign in on this browser with this PIN. Your password will still work.",
-        confirmLabel: "Set up PIN",
+        title: t.setupConfirmTitle,
+        description: t.setupConfirmDescription,
+        confirmLabel: t.setupConfirmLabel,
       }))
     )
       return;
@@ -114,7 +117,11 @@ export function PinSettingsPanel({
       });
       const body = await response.json();
       if (!response.ok) {
-        throw new Error(body.error ?? "Could not set up PIN sign-in.");
+        setPinSetupError({
+          code: body.code ?? null,
+          text: String(body.error ?? t.setupFallbackError),
+        });
+        return;
       }
 
       rememberPinUser(authUserId);
@@ -122,14 +129,10 @@ export function PinSettingsPanel({
       setPinSetupValue("");
       setPinSetupConfirmation("");
       onSetupOpenChange(false);
-      setPinMessage("PIN sign-in is enabled on this browser.");
-      setPinMessageIsError(false);
-    } catch (error) {
-      setPinSetupError(
-        error instanceof Error
-          ? error.message
-          : "Could not set up PIN sign-in.",
-      );
+      setPinError(null);
+      setPinNotice("enabled");
+    } catch {
+      setPinSetupError({ code: null, text: t.setupFallbackError });
     } finally {
       setIsSavingPin(false);
     }
@@ -138,7 +141,7 @@ export function PinSettingsPanel({
   function openPinSetup() {
     setPinSetupValue("");
     setPinSetupConfirmation("");
-    setPinSetupError("");
+    setPinSetupError(null);
     onSetupOpenChange(true);
   }
 
@@ -151,28 +154,28 @@ export function PinSettingsPanel({
     onSetupOpenChange(false);
     setPinSetupValue("");
     setPinSetupConfirmation("");
-    setPinSetupError("");
+    setPinSetupError(null);
   }
 
   return (
     <>
       <article className="clock-pin-card">
-        <section className="clock-pin-controls" aria-label="PIN sign-in">
+        <section className="clock-pin-controls" aria-label={t.sectionLabel}>
           <div className="clock-pin-summary">
             <div className="clock-pin-copy">
-              <p className="clock-pin-eyebrow">QUICK SIGN-IN</p>
-              <h3>Sign in with a PIN</h3>
-              <p>Skip your password next time on this browser.</p>
+              <p className="clock-pin-eyebrow">{t.eyebrow}</p>
+              <h3>{t.title}</h3>
+              <p>{t.description}</p>
             </div>
             <span
               className={`clock-pin-status${pinEnabled ? " is-enabled" : ""}`}
             >
-              {pinEnabled ? "Enabled" : "Not set up"}
+              {pinEnabled ? t.statusEnabled : t.statusNotSetUp}
             </span>
           </div>
           {!pinConfigured ? (
             <p className="clock-pin-note" role="status">
-              PIN sign-in isn’t available right now.
+              {t.unavailable}
             </p>
           ) : pinFormMode === "remove" ? (
             <form
@@ -180,7 +183,7 @@ export function PinSettingsPanel({
               onSubmit={(event) => void handlePinAction(event)}
             >
               <label className="clock-pin-password-label">
-                Current password
+                {t.currentPassword}
                 <input
                   name="currentPassword"
                   type="password"
@@ -195,7 +198,7 @@ export function PinSettingsPanel({
                   type="submit"
                   disabled={isSavingPin}
                 >
-                  {isSavingPin ? "Removing…" : "Remove PIN"}
+                  {isSavingPin ? t.removing : t.removePin}
                 </button>
                 <button
                   className="btn btn-secondary"
@@ -203,7 +206,7 @@ export function PinSettingsPanel({
                   onClick={() => setPinFormMode(null)}
                   disabled={isSavingPin}
                 >
-                  Cancel
+                  {t.cancel}
                 </button>
               </div>
             </form>
@@ -214,32 +217,32 @@ export function PinSettingsPanel({
                 type="button"
                 onClick={openPinSetup}
               >
-                {pinEnabled ? "Change PIN" : "Set up PIN"}
+                {pinEnabled ? t.changePin : t.setUpPin}
               </button>
               {pinEnabled && (
                 <button
                   className="btn btn-danger"
                   type="button"
                   onClick={() => {
-                    setPinMessage("");
+                    setPinNotice(null);
+                    setPinError(null);
                     setPinFormMode("remove");
                   }}
                 >
-                  Remove PIN
+                  {t.removePin}
                 </button>
               )}
             </div>
           )}
-          {pinMessage && (
-            <p
-              className={
-                pinMessageIsError ? "form-error" : "clock-pin-feedback"
-              }
-              role={pinMessageIsError ? "alert" : "status"}
-            >
-              {pinMessage}
+          {pinError ? (
+            <p className="form-error" role="alert">
+              {errorMessage(messages, pinError)}
             </p>
-          )}
+          ) : pinNotice ? (
+            <p className="clock-pin-feedback" role="status">
+              {pinNotice === "removed" ? t.removedNotice : t.enabledNotice}
+            </p>
+          ) : null}
         </section>
       </article>
       <ModalDialog
@@ -251,20 +254,16 @@ export function PinSettingsPanel({
           <header className="dialog-header pin-setup-header">
             <div>
               <p className="pin-setup-kicker">
-                <span aria-hidden="true" /> APPROVED BROWSER
+                <span aria-hidden="true" /> {t.setupKicker}
               </p>
-              <h2 id="pin-setup-title">Sign in faster with a PIN</h2>
-              <p className="pin-setup-description">
-                Create a six-digit PIN for this browser. Next time, sign in
-                without typing your password. Your password still works whenever
-                you need it.
-              </p>
+              <h2 id="pin-setup-title">{t.setupTitle}</h2>
+              <p className="pin-setup-description">{t.setupDescription}</p>
             </div>
             <button
               className="btn btn-ghost btn-icon"
               type="button"
-              aria-label="Close PIN setup"
-              title="Close"
+              aria-label={t.closeSetupLabel}
+              title={t.closeTitle}
               onClick={() => closePinSetup(false)}
             >
               <CloseIcon />
@@ -275,7 +274,7 @@ export function PinSettingsPanel({
               <div className="pin-setup-field">
                 <SixDigitPinInput
                   idPrefix="pin-setup-new"
-                  label="New six-digit PIN"
+                  label={t.newPinLabel}
                   name="pin"
                   value={pinSetupValue}
                   onChange={setPinSetupValue}
@@ -284,7 +283,7 @@ export function PinSettingsPanel({
               <div className="pin-setup-field">
                 <SixDigitPinInput
                   idPrefix="pin-setup-confirm"
-                  label="Confirm six-digit PIN"
+                  label={t.confirmPinLabel}
                   name="confirmPin"
                   value={pinSetupConfirmation}
                   onChange={setPinSetupConfirmation}
@@ -293,7 +292,7 @@ export function PinSettingsPanel({
             </div>
             {pinSetupError && (
               <p className="form-error" role="alert">
-                {pinSetupError}
+                {errorMessage(messages, pinSetupError)}
               </p>
             )}
             <div className="pin-setup-actions">
@@ -303,7 +302,7 @@ export function PinSettingsPanel({
                 onClick={() => closePinSetup(false)}
                 disabled={isSavingPin}
               >
-                Maybe later
+                {t.maybeLater}
               </button>
               <button
                 className="btn btn-primary btn-lg"
@@ -314,7 +313,7 @@ export function PinSettingsPanel({
                   pinSetupConfirmation.length !== 6
                 }
               >
-                {isSavingPin ? "Saving PIN…" : "Set up PIN"}
+                {isSavingPin ? t.savingPin : t.setUpPin}
               </button>
             </div>
           </form>

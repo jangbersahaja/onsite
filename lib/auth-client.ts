@@ -1,5 +1,6 @@
 "use client";
 
+import type { Locale } from "@/lib/i18n/config";
 import { useEffect, useState } from "react";
 
 export type AuthUser = {
@@ -11,6 +12,7 @@ export type AuthUser = {
   accountType: "super_admin" | "user";
   canAccessClock: boolean;
   canAccessBackoffice: boolean;
+  locale: Locale | null;
 };
 
 type SessionState = { user: AuthUser } | null;

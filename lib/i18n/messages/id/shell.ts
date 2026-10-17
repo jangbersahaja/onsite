@@ -1,0 +1,42 @@
+import type { enShell } from "../en/shell";
+
+export const idShell: typeof enShell = {
+  workspace: "Ruang kerja",
+  currentWorkspace: "Ruang kerja saat ini",
+  account: "Akun",
+  manageAccount: "Kelola akun",
+  workspaceLabel: "RUANG KERJA",
+  homeLabel: "Beranda OnSITE",
+  mainNavigation: "Navigasi utama",
+  staffNavigation: "Navigasi staf",
+  closeNavigation: "Tutup navigasi",
+  openNavigation: "Buka navigasi",
+  selectOutlet: "Pilih outlet",
+  connectedWorkspace: "Ruang kerja terhubung",
+  installApp: "Pasang aplikasi",
+  signOut: "Keluar",
+  signOutTitle: "Keluar?",
+  signOutDescription: "Anda perlu masuk lagi untuk melanjutkan.",
+  profile: {
+    changePhoto: "Ganti foto",
+    removePhoto: "Hapus foto",
+    choosePhoto: "Pilih foto profil",
+    tooLarge: "Foto profil harus 2 MB atau lebih kecil.",
+    updateTitle: "Perbarui foto profil?",
+    updateDescription: "Foto ini akan menggantikan foto profil Anda saat ini.",
+    updateConfirm: "Perbarui foto",
+    removeTitle: "Hapus foto profil?",
+    removeDescription: "Profil Anda akan menampilkan inisial sebagai gantinya.",
+    removeConfirm: "Hapus foto",
+    updateFailed: "Foto profil tidak dapat diperbarui.",
+    removeFailed: "Foto profil tidak dapat dihapus.",
+  },
+  dialog: {
+    cancel: "Batal",
+    confirm: "Konfirmasi",
+  },
+  password: {
+    show: "Tampilkan kata sandi",
+    hide: "Sembunyikan kata sandi",
+  },
+};

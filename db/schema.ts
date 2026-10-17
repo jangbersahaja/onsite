@@ -19,6 +19,9 @@ export const accountTypeEnum = pgEnum("account_type", ["super_admin", "user"]);
 export const correctionEventEnum = pgEnum("correction_event", [
   "clock_in",
   "clock_out",
+  "break_update",
+  "break_add",
+  "break_delete",
 ]);
 export const correctionStatusEnum = pgEnum("correction_status", [
   "reconciliation",
@@ -35,6 +38,7 @@ export const userApprovalStatusEnum = pgEnum("user_approval_status", [
   "pending",
   "approved",
 ]);
+export const userLocaleEnum = pgEnum("user_locale", ["en", "ms", "id"]);
 
 export const user = pgTable(
   "user",
@@ -50,6 +54,8 @@ export const user = pgTable(
     canAccessBackoffice: boolean("can_access_backoffice")
       .notNull()
       .default(false),
+    // Null until the user picks a language (shows the one-time prompt).
+    locale: userLocaleEnum("locale"),
     approvalStatus: userApprovalStatusEnum("approval_status")
       .notNull()
       .default("approved"),
@@ -237,6 +243,31 @@ export const registrationLinks = pgTable(
   ],
 );
 
+export const superAdminOutletNotifications = pgTable(
+  "super_admin_outlet_notifications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    outletId: uuid("outlet_id")
+      .notNull()
+      .references(() => outlets.id, { onDelete: "cascade" }),
+    notificationsEnabled: boolean("notifications_enabled")
+      .notNull()
+      .default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("super_admin_outlet_notifications_user_outlet_uq").on(
+      table.userId,
+      table.outletId,
+    ),
+  ],
+);
+
 export const pushSubscriptions = pgTable(
   "push_subscriptions",
   {
@@ -419,6 +450,11 @@ export const correctionRequests = pgTable(
     }),
     event: correctionEventEnum("event").notNull(),
     requestedAt: timestamp("requested_at", { withTimezone: true }).notNull(),
+    workBreakId: uuid("work_break_id").references(() => workBreaks.id, {
+      onDelete: "set null",
+    }),
+    breakStartedAt: timestamp("break_started_at", { withTimezone: true }),
+    breakEndedAt: timestamp("break_ended_at", { withTimezone: true }),
     reason: text("reason").notNull(),
     status: correctionStatusEnum("status").notNull().default("reconciliation"),
     appliedAt: timestamp("applied_at", { withTimezone: true }),

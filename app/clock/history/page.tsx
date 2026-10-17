@@ -1,12 +1,15 @@
 "use client";
 
-import {
-  WorkspaceShell,
-  type WorkspaceNavigationGroup,
-} from "@/app/_components/workspace-shell";
-import { CorrectionDialog } from "@/app/clock/_components/correction-dialog";
+import { useLocale } from "@/app/_components/locale-provider";
+import { useReportClockWorkspace } from "@/app/clock/_components/clock-workspace";
+import { ShiftCorrectionDialog } from "@/app/clock/_components/shift-correction-dialog";
 import { SignInForm } from "@/app/clock/_components/sign-in-form";
 import { authClient } from "@/lib/auth-client";
+import type { CorrectionEvent } from "@/lib/break-corrections";
+import { localeTags } from "@/lib/i18n/config";
+import { errorMessage, type ErrorText } from "@/lib/i18n/errors";
+import { format } from "@/lib/i18n/format";
+import type { Messages } from "@/lib/i18n/messages";
 import { getCompletedBreakMinutes, getWorkedMinutes } from "@/lib/work-breaks";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -28,7 +31,7 @@ type HistoryShift = {
   timezone: string;
   clockInAt: string;
   clockOutAt: string | null;
-  breaks: { startedAt: string; endedAt: string | null }[];
+  breaks: { id: string; startedAt: string; endedAt: string | null }[];
 };
 
 type HistoryRequest = {
@@ -36,7 +39,7 @@ type HistoryRequest = {
   outletId: string;
   outletName: string;
   timezone: string;
-  event: "clock_in" | "clock_out";
+  event: CorrectionEvent;
   requestedAt: string;
   reason: string;
   status: "reconciliation" | "approved" | "rejected";
@@ -49,6 +52,21 @@ type HistoryPageData = {
   recentSessions: HistoryShift[];
   historyPage: { hasMore: boolean; nextOffset: number | null };
 };
+
+function correctionEventLabel(event: CorrectionEvent, messages: Messages) {
+  switch (event) {
+    case "clock_in":
+      return messages.history.request.clockIn;
+    case "clock_out":
+      return messages.history.request.clockOut;
+    case "break_update":
+      return messages.dialogs.correction.eventBreakUpdate;
+    case "break_add":
+      return messages.dialogs.correction.eventBreakAdd;
+    case "break_delete":
+      return messages.dialogs.correction.eventBreakDelete;
+  }
+}
 
 function currentMonth() {
   const date = new Date();
@@ -68,15 +86,35 @@ function formatDate(
   value: string,
   timezone: string,
   options: Intl.DateTimeFormatOptions,
+  localeTag: string,
 ) {
-  return new Intl.DateTimeFormat("en-SG", {
+  return new Intl.DateTimeFormat(localeTag, {
     ...options,
     timeZone: timezone,
   }).format(new Date(value));
 }
 
-function formatMinutes(minutes: number) {
-  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
+function formatMinutes(minutes: number, template: string) {
+  return format(template, {
+    hours: Math.floor(minutes / 60),
+    minutes: String(minutes % 60).padStart(2, "0"),
+  });
+}
+
+class HistoryLoadError extends Error {
+  code: string | null;
+
+  constructor(code: string | null, text: string) {
+    super(text);
+    this.code = code;
+  }
+}
+
+function toErrorText(error: unknown): ErrorText {
+  if (error instanceof HistoryLoadError) {
+    return { code: error.code, text: error.message };
+  }
+  return { text: error instanceof Error ? error.message : "" };
 }
 
 function getGrossMinutes(clockInAt: string, clockOutAt: string | null) {
@@ -106,18 +144,28 @@ async function loadHistoryPage(month: string, offset: number) {
     correctionResponse.json(),
   ]);
   if (!clockResponse.ok)
-    throw new Error(clockBody.error ?? "Could not load shift history.");
-  if (!correctionResponse.ok)
-    throw new Error(
-      correctionBody.error ?? "Could not load correction requests.",
+    throw new HistoryLoadError(
+      clockBody.code ?? null,
+      String(clockBody.error ?? ""),
     );
+  const correctionError = correctionResponse.ok
+    ? null
+    : new HistoryLoadError(
+        correctionBody.code ?? null,
+        String(correctionBody.error ?? ""),
+      );
   return {
     ...(clockBody as HistoryPageData),
-    correctionRequests: correctionBody.requests as HistoryRequest[],
+    correctionRequests: correctionResponse.ok
+      ? (correctionBody.requests as HistoryRequest[])
+      : [],
+    correctionError,
   };
 }
 
 export default function ClockHistoryPage() {
+  const { locale, messages } = useLocale();
+  const localeTag = localeTags[locale];
   const authSession = authClient.useSession();
   const router = useRouter();
   const [month, setMonth] = useState(currentMonth);
@@ -128,13 +176,11 @@ export default function ClockHistoryPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [nextOffset, setNextOffset] = useState<number | null>(null);
-  const [message, setMessage] = useState("");
-  const [isCorrectionDialogOpen, setIsCorrectionDialogOpen] = useState(false);
-  const [correctionDefaults, setCorrectionDefaults] = useState<{
-    outletId?: string;
-    shiftId?: string;
-    event?: "clock_in" | "clock_out";
-  }>({});
+  const [message, setMessage] = useState<ErrorText | null>(null);
+  const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
+  const editingShift = data?.recentSessions.find(
+    (shift) => shift.id === editingShiftId,
+  );
 
   useEffect(() => {
     if (!authSession.data?.user.id || !authSession.data.user.canAccessClock)
@@ -145,18 +191,16 @@ export default function ClockHistoryPage() {
         if (!active) return;
         setData(result);
         setRequests(result.correctionRequests);
+        setMessage(
+          result.correctionError ? toErrorText(result.correctionError) : null,
+        );
         setSelectedOutletId(
           (current) => current || result.outlets[0]?.id || "",
         );
         setNextOffset(result.historyPage.nextOffset);
       })
       .catch((error: unknown) => {
-        if (active)
-          setMessage(
-            error instanceof Error
-              ? error.message
-              : "Could not load shift history.",
-          );
+        if (active) setMessage(toErrorText(error));
       })
       .finally(() => {
         if (active) setIsLoading(false);
@@ -173,10 +217,23 @@ export default function ClockHistoryPage() {
     }
   }, [authSession.data?.user, router]);
 
+  const reconciliationCount = requests.filter(
+    (request) => request.status === "reconciliation",
+  ).length;
+  const outlet = data?.outlets.find((item) => item.id === selectedOutletId);
+  useReportClockWorkspace({
+    pageTitle: messages.history.page.title,
+    workspaceName: outlet?.name ?? messages.history.page.fallbackWorkspaceName,
+    outlets: data?.outlets,
+    selectedOutletId,
+    onOutletChange: setSelectedOutletId,
+    reconciliationCount,
+  });
+
   async function loadMore() {
     if (nextOffset === null || isLoadingMore) return;
     setIsLoadingMore(true);
-    setMessage("");
+    setMessage(null);
     try {
       const result = await loadHistoryPage(month, nextOffset);
       setData((current) =>
@@ -192,11 +249,12 @@ export default function ClockHistoryPage() {
           : result,
       );
       setRequests(result.correctionRequests);
+      setMessage(
+        result.correctionError ? toErrorText(result.correctionError) : null,
+      );
       setNextOffset(result.historyPage.nextOffset);
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Could not load more shifts.",
-      );
+      setMessage(toErrorText(error));
     } finally {
       setIsLoadingMore(false);
     }
@@ -206,52 +264,28 @@ export default function ClockHistoryPage() {
     const result = await loadHistoryPage(month, 0);
     setData(result);
     setRequests(result.correctionRequests);
+    setMessage(
+      result.correctionError ? toErrorText(result.correctionError) : null,
+    );
     setNextOffset(result.historyPage.nextOffset);
   }
 
   if (authSession.isPending) {
-    return <main className="loading-screen">Loading your history…</main>;
+    return (
+      <main className="loading-screen">
+        {messages.history.states.loadingHistory}
+      </main>
+    );
   }
   if (!authSession.data) return <SignInForm />;
   if (!authSession.data.user.canAccessClock) {
-    return <main className="loading-screen">Opening Backoffice…</main>;
+    return (
+      <main className="loading-screen">
+        {messages.history.states.openingBackoffice}
+      </main>
+    );
   }
 
-  const canManage = authSession.data.user.canAccessBackoffice;
-  const reconciliationCount = requests.filter(
-    (request) => request.status === "reconciliation",
-  ).length;
-  const navigation: WorkspaceNavigationGroup[] = [
-    {
-      label: "MY TIME",
-      items: [
-        { href: "/clock", label: "Clock", glyph: "◷", requiredAccess: "clock" },
-        {
-          href: "/clock/history",
-          label: "History",
-          glyph: "▤",
-          requiredAccess: "clock",
-          count: reconciliationCount,
-        },
-      ],
-    },
-    ...(canManage
-      ? [
-          {
-            label: "WORKSPACE",
-            items: [
-              {
-                href: "/manage",
-                label: "Backoffice",
-                glyph: "▤",
-                requiredAccess: "backoffice" as const,
-              },
-            ],
-          },
-        ]
-      : []),
-  ];
-  const outlet = data?.outlets.find((item) => item.id === selectedOutletId);
   const visibleShifts = (data?.recentSessions ?? []).filter(
     (shift) => !selectedOutletId || shift.outletId === selectedOutletId,
   );
@@ -268,41 +302,21 @@ export default function ClockHistoryPage() {
   }, 0);
 
   return (
-    <WorkspaceShell
-      activeHref="/clock/history"
-      pageTitle="History"
-      workspaceName={outlet?.name ?? "Timekeeping"}
-      outlets={data?.outlets}
-      selectedOutletId={selectedOutletId}
-      onOutletChange={setSelectedOutletId}
-      navigation={navigation}
-    >
+    <>
       <main className="page-content history-page">
         <div className="page-heading">
           <div>
-            <p className="eyebrow">MY TIME</p>
-            <h1>History</h1>
-            <p className="subheading">
-              Your recorded shifts and time requests.
-            </p>
+            <p className="eyebrow">{messages.history.page.eyebrow}</p>
+            <h1>{messages.history.page.title}</h1>
+            <p className="subheading">{messages.history.page.subheading}</p>
           </div>
-          <button
-            className="btn btn-primary"
-            type="button"
-            onClick={() => {
-              setCorrectionDefaults({ outletId: selectedOutletId });
-              setIsCorrectionDialogOpen(true);
-            }}
-          >
-            Request correction
-          </button>
         </div>
 
         <div className="history-controls">
           <div
             className="history-tabs"
             role="tablist"
-            aria-label="History views"
+            aria-label={messages.history.tabs.label}
           >
             <button
               className={`btn btn-ghost btn-sm${activeTab === "shifts" ? " is-active" : ""}`}
@@ -311,7 +325,7 @@ export default function ClockHistoryPage() {
               aria-selected={activeTab === "shifts"}
               onClick={() => setActiveTab("shifts")}
             >
-              Shifts
+              {messages.history.tabs.shifts}
             </button>
             <button
               className={`btn btn-ghost btn-sm${activeTab === "requests" ? " is-active" : ""}`}
@@ -320,19 +334,19 @@ export default function ClockHistoryPage() {
               aria-selected={activeTab === "requests"}
               onClick={() => setActiveTab("requests")}
             >
-              Requests
+              {messages.history.tabs.requests}
               {reconciliationCount > 0 && <span>{reconciliationCount}</span>}
             </button>
           </div>
           {activeTab === "shifts" && (
             <label className="history-month-control">
-              <span>Month</span>
+              <span>{messages.history.filters.month}</span>
               <input
                 type="month"
                 value={month}
                 onChange={(event) => {
                   setIsLoading(true);
-                  setMessage("");
+                  setMessage(null);
                   setMonth(event.target.value);
                 }}
               />
@@ -342,44 +356,59 @@ export default function ClockHistoryPage() {
 
         {message && (
           <p className="team-message" role="status">
-            {message}
+            {errorMessage(messages, message) ||
+              messages.history.errors.loadFailed}
           </p>
         )}
         {activeTab === "shifts" ? (
-          <section className="history-shifts" aria-label="Recorded shifts">
+          <section
+            className="history-shifts"
+            aria-label={messages.history.aria.shifts}
+          >
             <div className="history-month-summary">
-              <span>{outlet?.name ?? "All outlets"}</span>
-              <strong>{formatMinutes(monthHours)}</strong>
-              <small>worked hours in loaded shifts</small>
+              <span>{outlet?.name ?? messages.history.summary.allOutlets}</span>
+              <strong>
+                {formatMinutes(monthHours, messages.history.units.hoursMinutes)}
+              </strong>
+              <small>{messages.history.summary.workedHours}</small>
             </div>
             {visibleShifts.map((shift) => (
               <article className="history-shift-row" key={shift.id}>
                 <div className="history-shift-date">
                   <strong>
-                    {formatDate(shift.clockInAt, shift.timezone, {
-                      weekday: "short",
-                      day: "numeric",
-                      month: "short",
-                    })}
+                    {formatDate(
+                      shift.clockInAt,
+                      shift.timezone,
+                      {
+                        weekday: "short",
+                        day: "numeric",
+                        month: "short",
+                      },
+                      localeTag,
+                    )}
                   </strong>
                   <span>{shift.outletName}</span>
                 </div>
                 <div className="history-shift-times">
                   <span>
-                    <small>Clock in</small>
-                    {formatDate(shift.clockInAt, shift.timezone, {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    <small>{messages.history.shift.clockIn}</small>
+                    {formatDate(
+                      shift.clockInAt,
+                      shift.timezone,
+                      { hour: "2-digit", minute: "2-digit" },
+                      localeTag,
+                    )}
                   </span>
                   <span>
-                    <small>Clock out</small>
+                    <small>{messages.history.shift.clockOut}</small>
                     {shift.clockOutAt
-                      ? formatDate(shift.clockOutAt, shift.timezone, {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })
-                      : "In progress"}
+                      ? formatDate(
+                          shift.clockOutAt,
+                          shift.timezone,
+                          { hour: "2-digit", minute: "2-digit" },
+                          localeTag,
+                        )
+                      : messages.history.shift.inProgress}
                   </span>
                 </div>
                 <strong className="history-shift-duration">
@@ -394,41 +423,48 @@ export default function ClockHistoryPage() {
                           shift.clockOutAt,
                           shift.breaks,
                         ) ?? 0,
+                        messages.history.units.hoursMinutes,
                       )
-                    : "In progress"}
+                    : messages.history.shift.inProgress}
                   <small>
                     {shift.clockOutAt
-                      ? `${formatMinutes(
-                          getGrossMinutes(shift.clockInAt, shift.clockOutAt) ??
-                            0,
-                        )} gross · `
+                      ? format(messages.history.shift.grossDuration, {
+                          duration: formatMinutes(
+                            getGrossMinutes(
+                              shift.clockInAt,
+                              shift.clockOutAt,
+                            ) ?? 0,
+                            messages.history.units.hoursMinutes,
+                          ),
+                        })
                       : ""}
-                    {formatMinutes(getCompletedBreakMinutes(shift.breaks))}{" "}
-                    break
+                    {format(messages.history.shift.breakDuration, {
+                      duration: formatMinutes(
+                        getCompletedBreakMinutes(shift.breaks),
+                        messages.history.units.hoursMinutes,
+                      ),
+                    })}
                   </small>
                 </strong>
                 <button
                   className="btn btn-secondary btn-sm"
                   type="button"
-                  onClick={() => {
-                    setCorrectionDefaults({
-                      outletId: shift.outletId,
-                      shiftId: shift.id,
-                      event: "clock_in",
-                    });
-                    setIsCorrectionDialogOpen(true);
-                  }}
+                  onClick={() => setEditingShiftId(shift.id)}
                 >
-                  Request correction
+                  {messages.history.actions.requestCorrection}
                 </button>
               </article>
             ))}
             {!isLoading && visibleShifts.length === 0 && (
               <p className="history-empty">
-                No shifts recorded for this month.
+                {messages.history.states.noShifts}
               </p>
             )}
-            {isLoading && <p className="history-empty">Loading shifts…</p>}
+            {isLoading && (
+              <p className="history-empty">
+                {messages.history.states.loadingShifts}
+              </p>
+            )}
             {data?.historyPage.hasMore && (
               <button
                 className="btn btn-secondary"
@@ -436,63 +472,73 @@ export default function ClockHistoryPage() {
                 onClick={() => void loadMore()}
                 disabled={isLoadingMore}
               >
-                {isLoadingMore ? "Loading…" : "Load more shifts"}
+                {isLoadingMore
+                  ? messages.history.actions.loadingMore
+                  : messages.history.actions.loadMore}
               </button>
             )}
           </section>
         ) : (
           <section
             className="history-requests"
-            aria-label="Correction requests"
+            aria-label={messages.history.aria.requests}
           >
             {visibleRequests.map((request) => (
               <article className="history-request-row" key={request.id}>
                 <div>
                   <strong>
-                    {request.event === "clock_in" ? "Clock-in" : "Clock-out"} ·{" "}
+                    {correctionEventLabel(request.event, messages)} ·{" "}
                     {request.outletName}
                   </strong>
                   <span>
-                    {formatDate(request.requestedAt, request.timezone, {
-                      weekday: "short",
-                      day: "numeric",
-                      month: "short",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
+                    {formatDate(
+                      request.requestedAt,
+                      request.timezone,
+                      {
+                        weekday: "short",
+                        day: "numeric",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      },
+                      localeTag,
+                    )}
                   </span>
                   <p>{request.reason}</p>
                   {request.reviewReason && (
-                    <small>Review: {request.reviewReason}</small>
+                    <small>
+                      {format(messages.history.request.review, {
+                        reason: request.reviewReason,
+                      })}
+                    </small>
                   )}
                 </div>
                 <span className={`correction-status ${request.status}`}>
-                  {request.status === "reconciliation"
-                    ? "Needs reconciliation"
-                    : request.status}
+                  {messages.history.status[request.status]}
                 </span>
               </article>
             ))}
             {visibleRequests.length === 0 && (
               <p className="history-empty">
-                No correction requests for this outlet.
+                {messages.history.states.noRequests}
               </p>
             )}
           </section>
         )}
-        {isCorrectionDialogOpen && (
-          <CorrectionDialog
-            open
-            outlets={data?.outlets ?? []}
-            shifts={data?.recentSessions ?? []}
-            initialOutletId={correctionDefaults.outletId}
-            initialShiftId={correctionDefaults.shiftId}
-            initialEvent={correctionDefaults.event}
-            onOpenChange={setIsCorrectionDialogOpen}
-            onSubmitted={refreshHistory}
+        {editingShift && (
+          <ShiftCorrectionDialog
+            key={editingShift.id}
+            shift={editingShift}
+            onOpenChange={(open) => {
+              if (!open) setEditingShiftId(null);
+            }}
+            onSaved={async (error) => {
+              await refreshHistory();
+              if (error) setMessage(error);
+            }}
           />
         )}
       </main>
-    </WorkspaceShell>
+    </>
   );
 }

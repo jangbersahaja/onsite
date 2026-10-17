@@ -1,10 +1,8 @@
 "use client";
 
 import { useConfirmDialog } from "@/app/_components/confirm-dialog";
-import {
-  WorkspaceShell,
-  type WorkspaceNavigationGroup,
-} from "@/app/_components/workspace-shell";
+import { useLocale } from "@/app/_components/locale-provider";
+import { useReportClockWorkspace } from "@/app/clock/_components/clock-workspace";
 import { CorrectionDialog } from "@/app/clock/_components/correction-dialog";
 import { PinSettingsPanel } from "@/app/clock/_components/pin-settings-panel";
 import { SetupScreen } from "@/app/clock/_components/setup-screen";
@@ -12,6 +10,10 @@ import { SignInForm } from "@/app/clock/_components/sign-in-form";
 import { authClient } from "@/lib/auth-client";
 import { requestCurrentLocation } from "@/lib/browser-location";
 import { verifyGeofence } from "@/lib/geofence";
+import { localeTags, type Locale } from "@/lib/i18n/config";
+import { errorMessage, type ErrorText } from "@/lib/i18n/errors";
+import { format } from "@/lib/i18n/format";
+import type { Messages } from "@/lib/i18n/messages";
 import { forgetPinUser, rememberPinUser } from "@/lib/pin-client";
 import { getCompletedBreakMinutes } from "@/lib/work-breaks";
 import Link from "next/link";
@@ -35,7 +37,7 @@ type ClockRecord = {
   timezone: string;
   clockInAt: string;
   clockOutAt: string | null;
-  breaks: { startedAt: string; endedAt: string | null }[];
+  breaks: { id: string; startedAt: string; endedAt: string | null }[];
 };
 
 type CorrectionRequest = {
@@ -77,8 +79,55 @@ type ClockPageData = {
   activeBreak: { id: string; startedAt: string } | null;
   recentSessions: ClockRecord[];
   correctionRequests: CorrectionRequest[];
-  correctionLoadError: string | null;
+  correctionLoadError: boolean;
 };
+
+type NoticeKey = keyof Messages["clock"]["notices"];
+type ActionNotice = { tone: "status" | "blocked" } & (
+  | { key: NoticeKey }
+  | { error: ErrorText }
+);
+
+class ClockRequestError extends Error {
+  notice: ActionNotice;
+
+  constructor(notice: ActionNotice) {
+    super("Clock request failed.");
+    this.notice = notice;
+  }
+}
+
+function serverNotice(
+  body: { code?: unknown; error?: unknown },
+  fallback: NoticeKey,
+): ActionNotice {
+  const code = typeof body.code === "string" ? body.code : null;
+  const text = typeof body.error === "string" ? body.error : "";
+  if (!code && !text) return { tone: "blocked", key: fallback };
+  return { tone: "blocked", error: { code, text } };
+}
+
+function noticeFromError(error: unknown, fallback: NoticeKey): ActionNotice {
+  return error instanceof ClockRequestError
+    ? error.notice
+    : { tone: "blocked", key: fallback };
+}
+
+function locationFailureNotice(error: unknown): ActionNotice {
+  if (!(error instanceof Error))
+    return { tone: "blocked", key: "locationCheckFailed" };
+  if (error.message.includes("timed out"))
+    return { tone: "blocked", key: "locationTimedOut" };
+  if (error.message.includes("permission was denied"))
+    return { tone: "blocked", key: "locationPermissionDenied" };
+  return { tone: "blocked", key: "locationUnreliable" };
+}
+
+function noticeText(messages: Messages, notice: ActionNotice) {
+  return "key" in notice
+    ? messages.clock.notices[notice.key]
+    : errorMessage(messages, notice.error);
+}
 
 async function loadClockData(history?: { from: string; to: string }) {
   const params = new URLSearchParams();
@@ -95,18 +144,19 @@ async function loadClockData(history?: { from: string; to: string }) {
       signal: AbortSignal.timeout(15_000),
     }),
   ]);
-  if (clockResult.status === "rejected") throw clockResult.reason;
+  if (clockResult.status === "rejected") {
+    throw new ClockRequestError({ tone: "blocked", key: "loadFailed" });
+  }
   const clockResponse = clockResult.value;
   const clockBody = await clockResponse.json();
   if (!clockResponse.ok) {
-    throw new Error(clockBody.error ?? "Could not load timekeeping data.");
+    throw new ClockRequestError(serverNotice(clockBody, "loadFailed"));
   }
 
   let correctionRequests: CorrectionRequest[] = [];
-  let correctionLoadError: string | null = null;
+  let correctionLoadError = false;
   if (correctionResult.status === "rejected") {
-    correctionLoadError =
-      "Correction history could not be loaded. Verified GPS clocking remains available; manual corrections may be unavailable.";
+    correctionLoadError = true;
   } else {
     try {
       const correctionResponse = correctionResult.value;
@@ -118,8 +168,7 @@ async function loadClockData(history?: { from: string; to: string }) {
       }
       correctionRequests = correctionBody.requests as CorrectionRequest[];
     } catch {
-      correctionLoadError =
-        "Correction history could not be loaded. Verified GPS clocking remains available; manual corrections may be unavailable.";
+      correctionLoadError = true;
     }
   }
   return {
@@ -137,8 +186,11 @@ async function loadStaffDeviceStatus() {
   return body as StaffDeviceStatus;
 }
 
-function formatMinutes(minutes: number) {
-  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
+function formatMinutes(messages: Messages, minutes: number) {
+  return format(messages.clock.duration, {
+    hours: Math.floor(minutes / 60),
+    minutes: String(minutes % 60).padStart(2, "0"),
+  });
 }
 
 function getElapsedMinutes(start: string, end: Date | string) {
@@ -149,6 +201,7 @@ function getElapsedMinutes(start: string, end: Date | string) {
 }
 
 function formatDuration(
+  messages: Messages,
   start: string,
   end: Date | string,
   breaks: { startedAt: string; endedAt: string | null }[],
@@ -163,15 +216,16 @@ function formatDuration(
     Math.floor((endAt.getTime() - new Date(start).getTime()) / 60_000) -
       getCompletedBreakMinutes(adjustedBreaks),
   );
-  return formatMinutes(minutes);
+  return formatMinutes(messages, minutes);
 }
 
 function formatDate(
+  locale: Locale,
   value: Date | string,
   timezone: string,
   options: Intl.DateTimeFormatOptions,
 ) {
-  return new Intl.DateTimeFormat("en-SG", {
+  return new Intl.DateTimeFormat(localeTags[locale], {
     ...options,
     timeZone: timezone,
   }).format(new Date(value));
@@ -215,6 +269,7 @@ function ClockCheckItem({
 export default function Home() {
   const authSession = authClient.useSession();
   const router = useRouter();
+  const { locale, messages } = useLocale();
   const authUserId = authSession.data?.user.id;
   const [isConfigured, setIsConfigured] = useState<boolean | null>(null);
   const [clockData, setClockData] = useState<ClockPageData | null>(null);
@@ -236,7 +291,7 @@ export default function Home() {
     reason: "permission_denied" | "unavailable";
   } | null>(null);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
-  const [actionMessage, setActionMessage] = useState("");
+  const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
   const [isCorrectionDialogOpen, setIsCorrectionDialogOpen] = useState(false);
   const { confirm, confirmDialog } = useConfirmDialog();
   const [clockBlockInfo, setClockBlockInfo] = useState<{
@@ -284,49 +339,51 @@ export default function Home() {
   );
 
   function getGpsCheck(): ClockCheck {
+    const { checks } = messages.clock;
     if (!selectedOutlet) {
       return clockData
         ? {
             state: "blocked",
-            title: "No outlet assigned",
-            detail:
-              "Ask your manager to add you to an active outlet before clocking.",
+            title: checks.noOutletTitle,
+            detail: checks.noOutletDetail,
           }
         : {
             state: "blocked",
-            title: "Timekeeping unavailable",
-            detail:
-              "Your clock data could not be loaded. Reload the page or contact your manager.",
+            title: checks.unavailableTitle,
+            detail: checks.unavailableDetail,
           };
     }
     if (clockBlockInfo?.reason === "poor_accuracy") {
       return {
         state: "blocked",
-        title: "GPS accuracy too low",
-        detail: `Server measured ±${clockBlockInfo.accuracyMeters} m; it must be 50 m or better.`,
+        title: checks.accuracyLowTitle,
+        detail: format(checks.accuracyServerDetail, {
+          accuracy: clockBlockInfo.accuracyMeters,
+        }),
       };
     }
     if (clockBlockInfo) {
       return {
         state: "blocked",
-        title: "Outside the clocking area",
-        detail: `${clockBlockInfo.distanceMeters} m from the outlet; the limit is ${clockBlockInfo.radiusMeters} m.`,
+        title: checks.outsideTitle,
+        detail: format(checks.outsideServerDetail, {
+          distance: clockBlockInfo.distanceMeters,
+          radius: clockBlockInfo.radiusMeters,
+        }),
       };
     }
     if (activeLocationError === "permission_denied") {
       return {
         state: "blocked",
-        title: "Location access is off",
-        detail:
-          "Enable location access in your browser settings, then try again.",
+        title: checks.permissionTitle,
+        detail: checks.permissionDetail,
       };
     }
     if (activeLocationError === "unavailable") {
       return {
         state: "blocked",
-        title: "No reliable location",
-        detail:
-          "Move near a window or retry when your phone has a clear GPS signal.",
+        title: checks.noLocationTitle,
+        detail: checks.noLocationDetail,
       };
     }
     if (liveGeofence && !liveGeofence.allowed) {
@@ -334,35 +391,43 @@ export default function Home() {
       return liveGeofence.reason === "poor_accuracy"
         ? {
             state: "blocked",
-            title: "GPS accuracy too low",
-            detail: `Accuracy is ±${accuracy} m; it must be 50 m or better.`,
+            title: checks.accuracyLowTitle,
+            detail: format(checks.accuracyLiveDetail, { accuracy }),
           }
         : {
             state: "blocked",
-            title: "Outside the clocking area",
-            detail: `About ${Math.max(0, Math.round(liveGeofence.distanceMeters - selectedOutlet.radiusMeters))} m beyond the ${selectedOutlet.radiusMeters} m outlet radius.`,
+            title: checks.outsideTitle,
+            detail: format(checks.outsideLiveDetail, {
+              distance: Math.max(
+                0,
+                Math.round(
+                  liveGeofence.distanceMeters - selectedOutlet.radiusMeters,
+                ),
+              ),
+              radius: selectedOutlet.radiusMeters,
+            }),
           };
     }
-    if (liveGeofence?.allowed) return { state: "ok", title: "GPS ready" };
-    return { state: "pending", title: "Checking GPS…" };
+    if (liveGeofence?.allowed) return { state: "ok", title: checks.gpsReady };
+    return { state: "pending", title: checks.gpsChecking };
   }
 
   function getDeviceCheck(): ClockCheck {
+    const { checks } = messages.clock;
     if (!staffDeviceStatus) {
       return {
         state: "pending",
-        title: "Checking browser…",
-        detail:
-          "Clock actions stay locked until this browser's approval is verified.",
+        title: checks.browserCheckingTitle,
+        detail: checks.browserCheckingDetail,
       };
     }
     if (!isDeviceBlocked) {
       return {
         state: "ok",
-        title: "Browser approved",
+        title: checks.browserApprovedTitle,
         detail:
           staffDeviceStatus.status === "replacement_pending"
-            ? "Replacement request is under manager review."
+            ? checks.replacementReview
             : undefined,
       };
     }
@@ -372,16 +437,16 @@ export default function Home() {
     ) {
       return {
         state: "pending",
-        title: "Awaiting manager approval",
+        title: checks.awaitingTitle,
         detail: staffDeviceStatus.currentBrowserHasPendingRequest
-          ? "This browser is awaiting manager approval."
-          : "A device request is already awaiting approval. Ask your manager if you need to replace it.",
+          ? checks.awaitingThisBrowser
+          : checks.awaitingOther,
       };
     }
     return {
       state: "blocked",
-      title: "Browser not approved",
-      detail: "Request approval for this browser before clocking.",
+      title: checks.notApprovedTitle,
+      detail: checks.notApprovedDetail,
     };
   }
 
@@ -449,18 +514,17 @@ export default function Home() {
       .then((data) => {
         if (!active) return;
         setClockData(data);
-        setActionMessage(data.correctionLoadError ?? "");
+        setActionNotice(
+          data.correctionLoadError
+            ? { tone: "blocked", key: "correctionHistoryUnavailable" }
+            : null,
+        );
         setSelectedOutletId(
           data.activeSession?.outletId ?? data.outlets[0]?.id ?? "",
         );
       })
       .catch((error: unknown) => {
-        if (active)
-          setActionMessage(
-            error instanceof Error
-              ? error.message
-              : "Could not load timekeeping data.",
-          );
+        if (active) setActionNotice(noticeFromError(error, "loadFailed"));
       })
       .finally(() => {
         if (active) setIsLoadingData(false);
@@ -513,9 +577,7 @@ export default function Home() {
       .catch(() => {
         if (active) {
           setStaffDeviceStatus(null);
-          setActionMessage(
-            "Could not verify this browser’s approval. Reload the page or contact your manager; clocking is disabled until verified.",
-          );
+          setActionNotice({ tone: "blocked", key: "deviceVerifyFailed" });
         }
       });
     return () => {
@@ -530,11 +592,30 @@ export default function Home() {
     return () => window.clearInterval(timer);
   }, []);
 
+  useReportClockWorkspace({
+    pageTitle: messages.clock.pageTitle,
+    workspaceName: selectedOutlet?.name ?? messages.clock.workspaceFallback,
+    outlets: clockData?.outlets,
+    selectedOutletId: selectedOutlet?.id,
+    onOutletChange: setSelectedOutletId,
+    isOutletLocked: isClockedIn,
+    dateLabel:
+      currentTime && selectedOutlet
+        ? formatDate(locale, currentTime, selectedOutlet.timezone, {
+            weekday: "long",
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          })
+        : undefined,
+    reconciliationCount,
+  });
+
   if (isConfigured === false) return <SetupScreen />;
   if (isConfigured === null || authSession.isPending) {
     return (
       <main className="loading-screen" aria-live="polite">
-        Loading OnSITE…
+        {messages.clock.loading.app}
       </main>
     );
   }
@@ -542,14 +623,14 @@ export default function Home() {
   if (!authSession.data.user.canAccessClock) {
     return (
       <main className="loading-screen" aria-live="polite">
-        Opening Backoffice…
+        {messages.clock.loading.backoffice}
       </main>
     );
   }
   if (isLoadingData && !clockData) {
     return (
       <main className="loading-screen" aria-live="polite">
-        Loading your timekeeping data…
+        {messages.clock.loading.timekeeping}
       </main>
     );
   }
@@ -558,34 +639,29 @@ export default function Home() {
     if (isRequestingStaffDevice) return;
     if (
       !(await confirm({
-        title: "Request device approval?",
-        description:
-          "A manager must approve this browser before you can clock in or out.",
-        confirmLabel: "Request approval",
+        title: messages.clock.confirm.deviceTitle,
+        description: messages.clock.confirm.deviceDescription,
+        confirmLabel: messages.clock.confirm.deviceConfirm,
       }))
     )
       return;
     setIsRequestingStaffDevice(true);
-    setActionMessage("");
+    setActionNotice(null);
     try {
       const response = await fetch("/api/staff-devices", { method: "POST" });
       const body = await response.json();
       if (!response.ok)
-        throw new Error(body.error ?? "Could not request this device.");
+        throw new ClockRequestError(serverNotice(body, "deviceRequestFailed"));
       setStaffDeviceStatus(await loadStaffDeviceStatus());
-      setActionMessage(
+      setActionNotice(
         body.status === "active"
-          ? "This browser is already approved for your account."
+          ? { tone: "status", key: "deviceAlreadyApproved" }
           : body.replacement
-            ? "Replacement request is awaiting manager approval."
-            : "Device enrollment request is awaiting manager approval.",
+            ? { tone: "blocked", key: "deviceReplacementAwaiting" }
+            : { tone: "blocked", key: "deviceEnrollmentAwaiting" },
       );
     } catch (error) {
-      setActionMessage(
-        error instanceof Error
-          ? error.message
-          : "Could not request this device.",
-      );
+      setActionNotice(noticeFromError(error, "deviceRequestFailed"));
     } finally {
       setIsRequestingStaffDevice(false);
     }
@@ -594,38 +670,37 @@ export default function Home() {
   async function handleClockAction() {
     if (!selectedOutlet || isCheckingLocation) return;
     if (isDeviceBlocked) {
-      setActionMessage(
-        "This browser is not approved for clock actions. Enroll this browser and ask your manager to approve it.",
-      );
+      setActionNotice({ tone: "blocked", key: "browserNotApproved" });
       return;
     }
     if (!navigator.geolocation) {
       setLocationError({ outletId: selectedOutlet.id, reason: "unavailable" });
-      setActionMessage(
-        "Location is unavailable. Ask your outlet lead to review your time.",
-      );
+      setActionNotice({ tone: "blocked", key: "locationUnavailable" });
       return;
     }
 
     if (
       !(await confirm({
-        title: isClockedIn ? "Clock out now?" : "Clock in now?",
-        description:
-          "Your location will be checked and recorded with this action.",
-        confirmLabel: isClockedIn ? "Clock out" : "Clock in",
+        title: isClockedIn
+          ? messages.clock.confirm.clockOutTitle
+          : messages.clock.confirm.clockInTitle,
+        description: messages.clock.confirm.clockDescription,
+        confirmLabel: isClockedIn
+          ? messages.clock.actions.clockOut
+          : messages.clock.actions.clockIn,
       }))
     )
       return;
     setIsCheckingLocation(true);
     setClockBlockInfo(null);
-    setActionMessage("Checking your location…");
+    setActionNotice({ tone: "status", key: "checkingLocation" });
     let stage: "location" | "recording" | "refreshing" = "location";
     try {
       const fix = await requestCurrentLocation(navigator.geolocation);
       setLocationFix({ ...fix, outletId: selectedOutlet.id });
       setLocationError(null);
       stage = "recording";
-      setActionMessage("Recording your clock action…");
+      setActionNotice({ tone: "status", key: "recordingAction" });
       const response = await fetch("/api/clock", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -650,14 +725,14 @@ export default function Home() {
             radiusMeters: result.radiusMeters,
           });
         }
-        setActionMessage(result.error ?? "Clock action could not be recorded.");
+        setActionNotice(serverNotice(result, "recordFailed"));
         return;
       }
 
       stage = "refreshing";
-      setActionMessage("Refreshing your shift…");
+      setActionNotice({ tone: "status", key: "refreshingShift" });
       setClockData(await loadClockData());
-      setActionMessage("");
+      setActionNotice(null);
     } catch (error) {
       if (stage === "location") {
         setLocationError({
@@ -668,14 +743,12 @@ export default function Home() {
               : "unavailable",
         });
       }
-      setActionMessage(
+      setActionNotice(
         stage === "location"
-          ? error instanceof Error
-            ? error.message
-            : "Could not check your location. Try again."
+          ? locationFailureNotice(error)
           : stage === "refreshing"
-            ? "Clock action recorded, but your shift could not be refreshed. Reload the page to see your current status."
-            : "Could not confirm the clock action with the timekeeping service. Reload the page to check your shift before trying again.",
+            ? { tone: "blocked", key: "refreshFailed" }
+            : { tone: "blocked", key: "recordUnconfirmed" },
       );
     } finally {
       setIsCheckingLocation(false);
@@ -687,14 +760,21 @@ export default function Home() {
     const action = isOnBreak ? "end_break" : "start_break";
     if (
       !(await confirm({
-        title: isOnBreak ? "End break now?" : "Start break now?",
-        description: "Your location will be recorded with this action.",
-        confirmLabel: isOnBreak ? "End break" : "Start break",
+        title: isOnBreak
+          ? messages.clock.confirm.breakEndTitle
+          : messages.clock.confirm.breakStartTitle,
+        description: messages.clock.confirm.breakDescription,
+        confirmLabel: isOnBreak
+          ? messages.clock.actions.endBreak
+          : messages.clock.actions.startBreak,
       }))
     )
       return;
     setIsCheckingLocation(true);
-    setActionMessage(isOnBreak ? "Ending your break…" : "Starting your break…");
+    setActionNotice({
+      tone: "status",
+      key: isOnBreak ? "endingBreak" : "startingBreak",
+    });
     try {
       const response = await fetch("/api/clock", {
         method: "POST",
@@ -703,58 +783,20 @@ export default function Home() {
         body: JSON.stringify({ action, outletId: selectedOutlet.id }),
       });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "Break action failed.");
+      if (!response.ok)
+        throw new ClockRequestError(serverNotice(result, "breakFailed"));
       setClockData(await loadClockData());
-      setActionMessage("");
+      setActionNotice(null);
     } catch (error) {
-      setActionMessage(
-        error instanceof Error ? error.message : "Break action failed.",
-      );
+      setActionNotice(noticeFromError(error, "breakFailed"));
     } finally {
       setIsCheckingLocation(false);
     }
   }
 
-  const canManage = authSession.data.user.canAccessBackoffice;
-  const navigation: WorkspaceNavigationGroup[] = [
-    {
-      label: "MY TIME",
-      items: [
-        {
-          href: "/clock",
-          label: "Clock",
-          glyph: "◷",
-          requiredAccess: "clock",
-        },
-        {
-          href: "/clock/history",
-          label: "History",
-          glyph: "▤",
-          requiredAccess: "clock",
-          count: reconciliationCount,
-        },
-      ],
-    },
-    ...(canManage
-      ? [
-          {
-            label: "WORKSPACE",
-            items: [
-              {
-                href: "/manage",
-                label: "Backoffice",
-                glyph: "▤",
-                requiredAccess: "backoffice" as const,
-              },
-            ],
-          },
-        ]
-      : []),
-  ];
-
   const clockParts = splitClockTime(
     currentTime && selectedOutlet
-      ? formatDate(currentTime, selectedOutlet.timezone, {
+      ? formatDate(locale, currentTime, selectedOutlet.timezone, {
           hour: "2-digit",
           minute: "2-digit",
           hour12: true,
@@ -763,28 +805,12 @@ export default function Home() {
   );
 
   return (
-    <WorkspaceShell
-      activeHref="/clock"
-      pageTitle="Clock"
-      workspaceName={selectedOutlet?.name ?? "Timekeeping"}
-      outlets={clockData?.outlets}
-      selectedOutletId={selectedOutlet?.id}
-      onOutletChange={setSelectedOutletId}
-      isOutletLocked={isClockedIn}
-      dateLabel={
-        currentTime && selectedOutlet
-          ? formatDate(currentTime, selectedOutlet.timezone, {
-              weekday: "long",
-              day: "numeric",
-              month: "long",
-              year: "numeric",
-            })
-          : undefined
-      }
-      navigation={navigation}
-    >
+    <>
       <main className="page-content" id="clock">
-        <section className="clock-layout" aria-label="Clock and shift details">
+        <section
+          className="clock-layout"
+          aria-label={messages.clock.shifts.detailsLabel}
+        >
           <div className="clock-column">
             <article
               className={`clock-panel is-${isOnBreak ? "break" : isClockedIn ? "active" : "ready"}${isDeviceBlocked ? " is-device-blocked" : ""}`}
@@ -797,10 +823,10 @@ export default function Home() {
                 >
                   <i />
                   {isOnBreak
-                    ? "ON BREAK"
+                    ? messages.clock.status.onBreak
                     : isClockedIn
-                      ? "SHIFT IN PROGRESS"
-                      : "READY TO START"}
+                      ? messages.clock.status.shiftInProgress
+                      : messages.clock.status.readyToStart}
                 </span>
                 {isClockedIn &&
                   clockedInAt &&
@@ -808,18 +834,24 @@ export default function Home() {
                   selectedOutlet && (
                     <dl className="clock-shift-meta">
                       <div>
-                        <dt>Started</dt>
+                        <dt>{messages.clock.status.started}</dt>
                         <dd>
-                          {formatDate(clockedInAt, selectedOutlet.timezone, {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
+                          {formatDate(
+                            locale,
+                            clockedInAt,
+                            selectedOutlet.timezone,
+                            {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            },
+                          )}
                         </dd>
                       </div>
                       <div>
-                        <dt>Worked</dt>
+                        <dt>{messages.clock.status.worked}</dt>
                         <dd>
                           {formatDuration(
+                            messages,
                             clockedInAt.toISOString(),
                             currentTime,
                             activeSessionBreaks,
@@ -828,9 +860,10 @@ export default function Home() {
                       </div>
                       {activeBreak && (
                         <div>
-                          <dt>On break</dt>
+                          <dt>{messages.clock.status.onBreakLabel}</dt>
                           <dd>
                             {formatMinutes(
+                              messages,
                               getElapsedMinutes(
                                 activeBreak.startedAt,
                                 currentTime,
@@ -869,17 +902,17 @@ export default function Home() {
                 >
                   {isCheckingLocation
                     ? isOnBreak
-                      ? "Resuming…"
-                      : "Checking location…"
+                      ? messages.clock.actions.resuming
+                      : messages.clock.actions.checkingLocation
                     : shouldRequestManual
                       ? isClockedIn
-                        ? "Manual clock out"
-                        : "Manual clock in"
+                        ? messages.clock.actions.manualClockOut
+                        : messages.clock.actions.manualClockIn
                       : isOnBreak
-                        ? "Resume shift"
+                        ? messages.clock.actions.resumeShift
                         : isClockedIn
-                          ? "Clock out"
-                          : "Clock in"}
+                          ? messages.clock.actions.clockOut
+                          : messages.clock.actions.clockIn}
                 </button>
                 {isClockedIn && !isOnBreak && (
                   <button
@@ -890,28 +923,34 @@ export default function Home() {
                       isDeviceBlocked || isCheckingLocation || isLoadingData
                     }
                   >
-                    {isCheckingLocation ? "Saving break…" : "Start break"}
+                    {isCheckingLocation
+                      ? messages.clock.actions.savingBreak
+                      : messages.clock.actions.startBreak}
                   </button>
                 )}
               </div>
-              {actionMessage && (
+              {actionNotice && (
                 <p
-                  className={`clock-action-feedback${isCheckingLocation || actionMessage.startsWith("Device request sent") || actionMessage.startsWith("This browser is already approved") ? "" : " is-blocked"}`}
+                  className={`clock-action-feedback${isCheckingLocation || actionNotice.tone === "status" ? "" : " is-blocked"}`}
                   role={
-                    isCheckingLocation ||
-                    actionMessage.startsWith("Device request sent") ||
-                    actionMessage.startsWith("This browser is already approved")
+                    isCheckingLocation || actionNotice.tone === "status"
                       ? "status"
                       : "alert"
                   }
                 >
-                  {actionMessage}
+                  {noticeText(messages, actionNotice)}
                 </p>
               )}
               <div className="clock-checks" role="status" aria-live="polite">
-                <ClockCheckItem label="GPS" check={gpsCheck} />
+                <ClockCheckItem
+                  label={messages.clock.checks.gps}
+                  check={gpsCheck}
+                />
                 {isDeviceRequired && (
-                  <ClockCheckItem label="Device" check={deviceCheck}>
+                  <ClockCheckItem
+                    label={messages.clock.checks.device}
+                    check={deviceCheck}
+                  >
                     {!staffDeviceStatus?.currentBrowserApproved && (
                       <button
                         className="btn btn-ghost btn-sm"
@@ -920,16 +959,16 @@ export default function Home() {
                         onClick={() => void handleRequestStaffDevice()}
                       >
                         {isRequestingStaffDevice
-                          ? "Requesting…"
+                          ? messages.clock.actions.requesting
                           : staffDeviceStatus?.status === "active"
-                            ? "Request this browser"
+                            ? messages.clock.actions.requestThisBrowser
                             : staffDeviceStatus?.currentBrowserHasPendingRequest
-                              ? "Check enrollment request"
+                              ? messages.clock.actions.checkEnrollment
                               : staffDeviceStatus?.status === "pending" ||
                                   staffDeviceStatus?.status ===
                                     "replacement_pending"
-                                ? "Check pending request"
-                                : "Request device enrollment"}
+                                ? messages.clock.actions.checkPending
+                                : messages.clock.actions.requestEnrollment}
                       </button>
                     )}
                   </ClockCheckItem>
@@ -965,10 +1004,10 @@ export default function Home() {
         <section className="recent-section" id="history">
           <div className="section-heading">
             <div>
-              <h2>Recent shifts</h2>
+              <h2>{messages.clock.shifts.heading}</h2>
             </div>
             <Link className="text-link" href="/clock/history">
-              View all shifts <span aria-hidden="true">→</span>
+              {messages.clock.shifts.viewAll} <span aria-hidden="true">→</span>
             </Link>
           </div>
           <div className="clock-recent-list">
@@ -976,7 +1015,7 @@ export default function Home() {
               <article className="clock-recent-row" key={record.id}>
                 <div className="clock-recent-outlet">
                   <strong>
-                    {formatDate(record.clockInAt, record.timezone, {
+                    {formatDate(locale, record.clockInAt, record.timezone, {
                       weekday: "short",
                       day: "numeric",
                       month: "short",
@@ -986,55 +1025,59 @@ export default function Home() {
                 </div>
                 <div className="clock-recent-times">
                   <span>
-                    <small>In</small>
-                    {formatDate(record.clockInAt, record.timezone, {
+                    <small>{messages.clock.timeIn}</small>
+                    {formatDate(locale, record.clockInAt, record.timezone, {
                       hour: "2-digit",
                       minute: "2-digit",
                     })}
                   </span>
                   <span>
-                    <small>Out</small>
+                    <small>{messages.clock.timeOut}</small>
                     {record.clockOutAt
-                      ? formatDate(record.clockOutAt, record.timezone, {
+                      ? formatDate(locale, record.clockOutAt, record.timezone, {
                           hour: "2-digit",
                           minute: "2-digit",
                         })
-                      : "In progress"}
+                      : messages.clock.inProgress}
                   </span>
                 </div>
                 <strong className="clock-recent-duration">
                   {record.clockOutAt
                     ? formatDuration(
+                        messages,
                         record.clockInAt,
                         record.clockOutAt,
                         record.breaks,
                       )
                     : isClockedIn && currentTime
                       ? formatDuration(
+                          messages,
                           record.clockInAt,
                           currentTime,
                           record.breaks,
                         )
                       : "—"}
                   <small className="clock-recent-break-duration">
-                    {formatMinutes(
-                      getCompletedBreakMinutes(record.breaks) +
-                        (record.id === activeSession?.id &&
-                        activeBreak &&
-                        currentTime
-                          ? getElapsedMinutes(
-                              activeBreak.startedAt,
-                              currentTime,
-                            )
-                          : 0),
-                    )}{" "}
-                    break
+                    {format(messages.clock.breakTotal, {
+                      duration: formatMinutes(
+                        messages,
+                        getCompletedBreakMinutes(record.breaks) +
+                          (record.id === activeSession?.id &&
+                          activeBreak &&
+                          currentTime
+                            ? getElapsedMinutes(
+                                activeBreak.startedAt,
+                                currentTime,
+                              )
+                            : 0),
+                      ),
+                    })}
                   </small>
                 </strong>
               </article>
             ))}
             {!clockData?.recentSessions.length && (
-              <p className="empty-table">No clock records yet.</p>
+              <p className="empty-table">{messages.clock.shifts.empty}</p>
             )}
           </div>
         </section>
@@ -1056,6 +1099,6 @@ export default function Home() {
         </section>
       </main>
       {confirmDialog}
-    </WorkspaceShell>
+    </>
   );
 }

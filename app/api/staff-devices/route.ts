@@ -23,7 +23,10 @@ import { cookies } from "next/headers";
 export async function GET(request: Request) {
   if (!hasServerConfiguration()) {
     return Response.json(
-      { error: "Authentication is not configured." },
+      {
+        error: "Authentication is not configured.",
+        code: "auth_unconfigured",
+      },
       { status: 503 },
     );
   }
@@ -33,14 +36,20 @@ export async function GET(request: Request) {
       headers: request.headers,
     });
     if (!session) {
-      return Response.json({ error: "Sign in required." }, { status: 401 });
+      return Response.json(
+        { error: "Sign in required.", code: "unauthorized" },
+        { status: 401 },
+      );
     }
     const review = new URL(request.url).searchParams.get("view") === "review";
     if (review) {
       const access = await getTeamAccess(session.user.id);
       if (!access?.outletIds.length) {
         return Response.json(
-          { error: "Device review access is not available." },
+          {
+            error: "Device review access is not available.",
+            code: "device_review_unavailable",
+          },
           { status: 403 },
         );
       }
@@ -49,7 +58,10 @@ export async function GET(request: Request) {
       );
       if (requestedOutletId && !access.outletIds.includes(requestedOutletId)) {
         return Response.json(
-          { error: "Outlet is not available." },
+          {
+            error: "Outlet is not available.",
+            code: "outlet_not_available",
+          },
           { status: 403 },
         );
       }
@@ -116,7 +128,10 @@ export async function GET(request: Request) {
     }
     if (!session.user.canAccessClock) {
       return Response.json(
-        { error: "Clock access is not enabled." },
+        {
+          error: "Clock access is not enabled.",
+          code: "clock_access_disabled",
+        },
         { status: 403 },
       );
     }
@@ -171,7 +186,10 @@ export async function GET(request: Request) {
     });
   } catch {
     return Response.json(
-      { error: "Could not load trusted-device status." },
+      {
+        error: "Could not load trusted-device status.",
+        code: "device_status_failed",
+      },
       { status: 500 },
     );
   }
@@ -180,7 +198,10 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   if (!hasServerConfiguration()) {
     return Response.json(
-      { error: "Authentication is not configured." },
+      {
+        error: "Authentication is not configured.",
+        code: "auth_unconfigured",
+      },
       { status: 503 },
     );
   }
@@ -190,11 +211,17 @@ export async function POST(request: Request) {
       headers: request.headers,
     });
     if (!session) {
-      return Response.json({ error: "Sign in required." }, { status: 401 });
+      return Response.json(
+        { error: "Sign in required.", code: "unauthorized" },
+        { status: 401 },
+      );
     }
     if (!session.user.canAccessClock) {
       return Response.json(
-        { error: "Clock access is not enabled." },
+        {
+          error: "Clock access is not enabled.",
+          code: "clock_access_disabled",
+        },
         { status: 403 },
       );
     }
@@ -289,7 +316,10 @@ export async function POST(request: Request) {
       );
     }
     return Response.json(
-      { error: "Could not request a trusted device." },
+      {
+        error: "Could not request a trusted device.",
+        code: "device_request_failed",
+      },
       { status: 500 },
     );
   }

@@ -17,7 +17,7 @@ const resetSchema = z
 export async function POST(request: Request) {
   if (!hasServerConfiguration()) {
     return Response.json(
-      { error: "Authentication is not configured." },
+      { error: "Authentication is not configured.", code: "auth_unconfigured" },
       { status: 503 },
     );
   }
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     body = await request.json();
   } catch {
     return Response.json(
-      { error: "Request body must be valid JSON." },
+      { error: "Request body must be valid JSON.", code: "invalid_json" },
       { status: 400 },
     );
   }
@@ -35,7 +35,10 @@ export async function POST(request: Request) {
   const parsed = resetSchema.safeParse(body);
   if (!parsed.success) {
     return Response.json(
-      { error: "A valid reset token and password are required." },
+      {
+        error: "A valid reset token and password are required.",
+        code: "reset_link_incomplete",
+      },
       { status: 400 },
     );
   }
@@ -86,7 +89,10 @@ export async function POST(request: Request) {
 
   if (!changed) {
     return Response.json(
-      { error: "This reset link is invalid, expired, or already used." },
+      {
+        error: "This reset link is invalid, expired, or already used.",
+        code: "reset_link_invalid",
+      },
       { status: 410 },
     );
   }

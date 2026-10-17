@@ -3,6 +3,7 @@ import { hasServerConfiguration } from "@/lib/app-config";
 import { recordAudit } from "@/lib/audit";
 import { getDb } from "@/lib/db";
 import { describeDeviceFromUserAgent } from "@/lib/device-name";
+import { locales } from "@/lib/i18n/config";
 import { createOneTimeToken } from "@/lib/one-time-token";
 import { hashPassword } from "@/lib/password";
 import { MAX_PROFILE_PHOTO_BYTES } from "@/lib/profile-photo";
@@ -35,12 +36,13 @@ const registerSchema = z
       .regex(/^[a-zA-Z0-9._-]+$/),
     email: z.string().trim().max(254).email(),
     password: z.string().min(12).max(128),
+    locale: z.enum(locales).optional(),
   })
   .strict();
 
 function unavailable() {
   return Response.json(
-    { error: "Authentication is not configured." },
+    { error: "Authentication is not configured.", code: "auth_unconfigured" },
     { status: 503 },
   );
 }
@@ -50,6 +52,7 @@ function linkInactive() {
     {
       error:
         "This registration link is no longer active. Ask your manager for a new one.",
+      code: "registration_link_invalid",
     },
     { status: 410 },
   );
@@ -70,7 +73,10 @@ export async function GET(request: Request) {
     );
   } catch {
     return Response.json(
-      { error: "Could not verify this registration link." },
+      {
+        error: "Could not verify this registration link.",
+        code: "registration_link_invalid",
+      },
       { status: 500 },
     );
   }
@@ -81,7 +87,10 @@ export async function POST(request: Request) {
 
   if (!request.headers.get("content-type")?.includes("multipart/form-data")) {
     return Response.json(
-      { error: "Registration requires a profile photo upload." },
+      {
+        error: "Registration requires a profile photo upload.",
+        code: "photo_required",
+      },
       { status: 400 },
     );
   }
@@ -91,7 +100,10 @@ export async function POST(request: Request) {
     contentLength > MAX_PROFILE_PHOTO_BYTES + 64 * 1024
   ) {
     return Response.json(
-      { error: "Profile photos must be 2 MB or smaller." },
+      {
+        error: "Profile photos must be 2 MB or smaller.",
+        code: "photo_too_large",
+      },
       { status: 413 },
     );
   }
@@ -101,7 +113,10 @@ export async function POST(request: Request) {
     request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
   if (!(await allowRegistrationAttempt(clientAddress, now))) {
     return Response.json(
-      { error: "Too many registration attempts. Try again later." },
+      {
+        error: "Too many registration attempts. Try again later.",
+        code: "registration_rate_limited",
+      },
       { status: 429 },
     );
   }
@@ -116,18 +131,22 @@ export async function POST(request: Request) {
       username: form.get("username"),
       email: form.get("email"),
       password: form.get("password"),
+      locale: form.get("locale"),
     };
     const photo = form.get("profilePhoto");
     if (photo === null || typeof photo === "string" || photo.size === 0) {
       return Response.json(
-        { error: "A profile photo is required." },
+        { error: "A profile photo is required.", code: "photo_required" },
         { status: 400 },
       );
     }
     profilePhotoFile = photo;
   } catch {
     return Response.json(
-      { error: "Request body must be a valid form submission." },
+      {
+        error: "Request body must be a valid form submission.",
+        code: "invalid_registration",
+      },
       { status: 400 },
     );
   }
@@ -138,6 +157,7 @@ export async function POST(request: Request) {
       {
         error:
           "Name, username, email, a password of at least 12 characters, and a valid link are required.",
+        code: "invalid_registration",
       },
       { status: 400 },
     );
@@ -150,10 +170,13 @@ export async function POST(request: Request) {
     await validateProfilePhotoFile(profilePhotoFile);
   } catch (error) {
     if (error instanceof ProfilePhotoValidationError) {
-      return Response.json({ error: error.message }, { status: 400 });
+      return Response.json(
+        { error: error.message, code: "photo_invalid" },
+        { status: 400 },
+      );
     }
     return Response.json(
-      { error: "Could not validate profile photo." },
+      { error: "Could not validate profile photo.", code: "photo_invalid" },
       { status: 400 },
     );
   }
@@ -173,7 +196,10 @@ export async function POST(request: Request) {
       .limit(1);
     if (existingEmail) {
       return Response.json(
-        { error: "An account with this email already exists." },
+        {
+          error: "An account with this email already exists.",
+          code: "email_taken",
+        },
         { status: 409 },
       );
     }
@@ -185,7 +211,7 @@ export async function POST(request: Request) {
       .limit(1);
     if (existingUsername) {
       return Response.json(
-        { error: "This username is already taken." },
+        { error: "This username is already taken.", code: "username_taken" },
         { status: 409 },
       );
     }
@@ -211,6 +237,7 @@ export async function POST(request: Request) {
         canAccessBackoffice: false,
         approvalStatus: "pending",
         registrationOutletId: link.outletId,
+        locale: input.locale ?? null,
       });
 
       // Pending until a manager approves the registration. The device is
@@ -255,7 +282,7 @@ export async function POST(request: Request) {
         .catch(() => undefined);
     }
     return Response.json(
-      { error: "Could not submit this registration." },
+      { error: "Could not submit this registration.", code: "register_failed" },
       { status: 400 },
     );
   }

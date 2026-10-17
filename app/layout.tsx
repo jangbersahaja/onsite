@@ -1,3 +1,6 @@
+import { LocaleProvider } from "@/app/_components/locale-provider";
+import { localeTags } from "@/lib/i18n/config";
+import { getRequestLocale } from "@/lib/i18n/server";
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
@@ -17,10 +20,13 @@ export const viewport: Viewport = {
   themeColor: "#635bff",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const locale = await getRequestLocale();
   return (
-    <html lang="en" className="h-full antialiased">
-      <body>{children}</body>
+    <html lang={localeTags[locale]} className="h-full antialiased">
+      <body>
+        <LocaleProvider initialLocale={locale}>{children}</LocaleProvider>
+      </body>
     </html>
   );
 }

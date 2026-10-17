@@ -499,7 +499,7 @@ const editSchema = z
       )
       .max(30)
       .optional(),
-    reason: z.string().trim().min(3).max(500),
+    reason: z.string().trim().max(500),
   })
   .strict();
 
@@ -764,7 +764,7 @@ export async function PATCH(request: Request) {
             endedAt: breakInterval.endedAt?.toISOString() ?? null,
           })),
         },
-        reason: parsed.data.reason,
+        reason: parsed.data.reason || null,
       });
       return { success: true };
     });

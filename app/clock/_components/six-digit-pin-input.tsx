@@ -1,5 +1,7 @@
 "use client";
 
+import { useLocale } from "@/app/_components/locale-provider";
+import { format } from "@/lib/i18n/format";
 import { useRef } from "react";
 
 type SixDigitPinInputProps = {
@@ -19,6 +21,7 @@ export function SixDigitPinInput({
   onChange,
   autoComplete = "off",
 }: SixDigitPinInputProps) {
+  const { messages } = useLocale();
   const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
 
   function updateFromInput(index: number, input: string) {
@@ -53,7 +56,10 @@ export function SixDigitPinInput({
               inputRefs.current[index] = element;
             }}
             id={`${idPrefix}-${index + 1}`}
-            aria-label={`${label}, digit ${index + 1} of 6`}
+            aria-label={format(messages.dialogs.pinInput.digitLabel, {
+              label,
+              position: index + 1,
+            })}
             autoComplete={index === 0 ? autoComplete : "off"}
             inputMode="numeric"
             maxLength={6}

@@ -17,13 +17,28 @@ function tooLarge(request: Request) {
   return Number.isFinite(contentLength) && contentLength > maximumRequestBytes;
 }
 
+function photoValidationCode(message: string) {
+  if (message === "Choose an image to upload.") return "image_required";
+  if (message === "Choose a JPEG, PNG, or WebP image.")
+    return "photo_type_invalid";
+  if (message === "Profile photos must be 2 MB or smaller.")
+    return "photo_too_large";
+  return "photo_invalid";
+}
+
 export async function POST(request: Request) {
   const session = await getAuth().api.getSession({ headers: request.headers });
   if (!session)
-    return Response.json({ error: "Sign in required." }, { status: 401 });
+    return Response.json(
+      { error: "Sign in required.", code: "unauthorized" },
+      { status: 401 },
+    );
   if (tooLarge(request)) {
     return Response.json(
-      { error: "Profile photos must be 2 MB or smaller." },
+      {
+        error: "Profile photos must be 2 MB or smaller.",
+        code: "photo_too_large",
+      },
       { status: 413 },
     );
   }
@@ -34,7 +49,7 @@ export async function POST(request: Request) {
     const value = form.get("photo");
     if (!value || typeof value === "string") {
       return Response.json(
-        { error: "Choose an image to upload." },
+        { error: "Choose an image to upload.", code: "image_required" },
         { status: 400 },
       );
     }
@@ -48,7 +63,10 @@ export async function POST(request: Request) {
       .limit(1);
     if (!current) {
       await deleteProfilePhoto(uploadedPath).catch(() => undefined);
-      return Response.json({ error: "Account not found." }, { status: 404 });
+      return Response.json(
+        { error: "Account not found.", code: "account_not_found" },
+        { status: 404 },
+      );
     }
 
     const updated = await db.transaction(async (tx) => {
@@ -68,7 +86,10 @@ export async function POST(request: Request) {
     });
     if (!updated) {
       await deleteProfilePhoto(uploadedPath).catch(() => undefined);
-      return Response.json({ error: "Account not found." }, { status: 404 });
+      return Response.json(
+        { error: "Account not found.", code: "account_not_found" },
+        { status: 404 },
+      );
     }
     if (current.profilePhotoPath) {
       await deleteProfilePhoto(current.profilePhotoPath).catch(() => undefined);
@@ -85,10 +106,16 @@ export async function POST(request: Request) {
       await deleteProfilePhoto(uploadedPath).catch(() => undefined);
     }
     if (error instanceof ProfilePhotoValidationError) {
-      return Response.json({ error: error.message }, { status: 400 });
+      return Response.json(
+        { error: error.message, code: photoValidationCode(error.message) },
+        { status: 400 },
+      );
     }
     return Response.json(
-      { error: "Could not update profile photo." },
+      {
+        error: "Could not update profile photo.",
+        code: "profile_photo_update_failed",
+      },
       { status: 500 },
     );
   }
@@ -97,7 +124,10 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   const session = await getAuth().api.getSession({ headers: request.headers });
   if (!session)
-    return Response.json({ error: "Sign in required." }, { status: 401 });
+    return Response.json(
+      { error: "Sign in required.", code: "unauthorized" },
+      { status: 401 },
+    );
 
   try {
     const db = getDb();
@@ -107,7 +137,10 @@ export async function DELETE(request: Request) {
       .where(eq(user.id, session.user.id))
       .limit(1);
     if (!current)
-      return Response.json({ error: "Account not found." }, { status: 404 });
+      return Response.json(
+        { error: "Account not found.", code: "account_not_found" },
+        { status: 404 },
+      );
 
     await db.transaction(async (tx) => {
       await tx
@@ -132,7 +165,10 @@ export async function DELETE(request: Request) {
     );
   } catch {
     return Response.json(
-      { error: "Could not remove profile photo." },
+      {
+        error: "Could not remove profile photo.",
+        code: "profile_photo_remove_failed",
+      },
       { status: 500 },
     );
   }

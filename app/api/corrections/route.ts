@@ -10,6 +10,15 @@ import {
 import { hasServerConfiguration } from "@/lib/app-config";
 import { recordAudit } from "@/lib/audit";
 import { getAuth } from "@/lib/auth";
+import {
+  CORRECTION_EVENTS,
+  isBreakCorrectionEvent,
+  planBreakChange,
+  type BreakChange,
+  type BreakChangeError,
+  type BreakCorrectionEvent,
+  type ShiftBreak,
+} from "@/lib/break-corrections";
 import { getCorrectionTimeError } from "@/lib/correction-time";
 import { getDb } from "@/lib/db";
 import { notifyOutletManagers } from "@/lib/push-notifications";
@@ -23,20 +32,66 @@ import { and, desc, eq, gt, inArray, isNull, lte, ne, or } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { z } from "zod";
 
+const timestampSchema = z.string().datetime({ offset: true });
+
 const correctionSchema = z
   .object({
     outletId: z.string().uuid(),
     workSessionId: z.string().uuid().nullable(),
-    event: z.enum(["clock_in", "clock_out"]),
-    requestedAt: z.string().datetime({ offset: true }),
+    event: z.enum(CORRECTION_EVENTS),
+    requestedAt: timestampSchema,
+    workBreakId: z.string().uuid().nullable(),
+    breakStartedAt: timestampSchema.nullable(),
+    breakEndedAt: timestampSchema.nullable(),
     reason: z.string().trim().min(5).max(1000),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (!isBreakCorrectionEvent(value.event)) {
+      if (value.workBreakId || value.breakStartedAt || value.breakEndedAt) {
+        context.addIssue({
+          code: "custom",
+          path: ["workBreakId"],
+          message: "Break times only apply to break corrections.",
+        });
+      }
+      return;
+    }
+    if (!value.workSessionId) {
+      context.addIssue({
+        code: "custom",
+        path: ["workSessionId"],
+        message: "A break correction needs its shift.",
+      });
+    }
+    if (value.event !== "break_add" && !value.workBreakId) {
+      context.addIssue({
+        code: "custom",
+        path: ["workBreakId"],
+        message: "Choose the break to correct.",
+      });
+    }
+    if (value.event !== "break_delete" && !value.breakStartedAt) {
+      context.addIssue({
+        code: "custom",
+        path: ["breakStartedAt"],
+        message: "A break start time is required.",
+      });
+    }
+    if (value.event === "break_add" && !value.breakEndedAt) {
+      context.addIssue({
+        code: "custom",
+        path: ["breakEndedAt"],
+        message: "A break end time is required.",
+      });
+    }
+  });
 
 function unavailable() {
   return Response.json(
     {
       error: "Set DATABASE_URL before using corrections.",
+      code: "corrections_unconfigured",
     },
     { status: 503 },
   );
@@ -50,14 +105,20 @@ export async function GET(request: Request) {
       headers: request.headers,
     });
     if (!session)
-      return Response.json({ error: "Sign in required." }, { status: 401 });
+      return Response.json(
+        { error: "Sign in required.", code: "unauthorized" },
+        { status: 401 },
+      );
 
     const params = new URL(request.url).searchParams;
     const review = params.get("view") === "review";
     const requestedOutletId = params.get("outletId");
     if (!review && !session.user.canAccessClock) {
       return Response.json(
-        { error: "Clock access is not enabled." },
+        {
+          error: "Clock access is not enabled.",
+          code: "clock_access_disabled",
+        },
         { status: 403 },
       );
     }
@@ -65,7 +126,10 @@ export async function GET(request: Request) {
     const reviewOutletIds = access?.outletIds ?? [];
     if (review && !reviewOutletIds.length) {
       return Response.json(
-        { error: "Correction review access is not available." },
+        {
+          error: "Correction review access is not available.",
+          code: "correction_review_unavailable",
+        },
         { status: 403 },
       );
     }
@@ -75,7 +139,10 @@ export async function GET(request: Request) {
       !reviewOutletIds.includes(requestedOutletId)
     ) {
       return Response.json(
-        { error: "You cannot access this outlet." },
+        {
+          error: "You cannot access this outlet.",
+          code: "outlet_access_denied",
+        },
         { status: 403 },
       );
     }
@@ -95,6 +162,9 @@ export async function GET(request: Request) {
         workSessionId: correctionRequests.workSessionId,
         event: correctionRequests.event,
         requestedAt: correctionRequests.requestedAt,
+        workBreakId: correctionRequests.workBreakId,
+        breakStartedAt: correctionRequests.breakStartedAt,
+        breakEndedAt: correctionRequests.breakEndedAt,
         reason: correctionRequests.reason,
         status: correctionRequests.status,
         appliedAt: correctionRequests.appliedAt,
@@ -119,10 +189,401 @@ export async function GET(request: Request) {
     return Response.json({ requests, review });
   } catch {
     return Response.json(
-      { error: "Could not load correction requests." },
+      {
+        error: "Could not load correction requests.",
+        code: "corrections_load_failed",
+      },
       { status: 500 },
     );
   }
+}
+
+type DbTransaction = Parameters<
+  Parameters<ReturnType<typeof getDb>["transaction"]>[0]
+>[0];
+type CorrectionInput = z.infer<typeof correctionSchema>;
+type CorrectionRow = typeof correctionRequests.$inferSelect;
+type WorkSessionRow = typeof workSessions.$inferSelect;
+type ReviewFailure = {
+  ok: false;
+  status: number;
+  error: string;
+  code: string;
+};
+
+const BREAK_ERROR_DETAILS: Record<
+  BreakChangeError,
+  { status: number; error: string }
+> = {
+  break_not_found: {
+    status: 404,
+    error: "That break no longer exists on this shift.",
+  },
+  break_end_locked: {
+    status: 400,
+    error: "An open break can only have its start time corrected.",
+  },
+  break_in_future: {
+    status: 400,
+    error: "Break times cannot be in the future.",
+  },
+  break_invalid: {
+    status: 400,
+    error:
+      "The break times must fall inside the shift and must not overlap other breaks.",
+  },
+};
+
+function breakErrorDetails(error: BreakChangeError) {
+  return { ...BREAK_ERROR_DETAILS[error], code: error };
+}
+
+async function loadShiftBreaks(
+  tx: DbTransaction,
+  workSessionId: string,
+): Promise<ShiftBreak[]> {
+  return tx
+    .select({
+      id: workBreaks.id,
+      startedAt: workBreaks.startedAt,
+      endedAt: workBreaks.endedAt,
+    })
+    .from(workBreaks)
+    .where(eq(workBreaks.workSessionId, workSessionId))
+    .orderBy(workBreaks.startedAt);
+}
+
+type BreakCorrectionOutcome =
+  | { kind: "error"; status: number; error: string; code: string }
+  | { kind: "applied"; correction: CorrectionRow; session: WorkSessionRow };
+
+async function submitBreakCorrection(
+  tx: DbTransaction,
+  {
+    event,
+    input,
+    userId,
+    timezone,
+    now,
+  }: {
+    event: BreakCorrectionEvent;
+    input: CorrectionInput;
+    userId: string;
+    timezone: string;
+    now: Date;
+  },
+): Promise<BreakCorrectionOutcome> {
+  if (!input.workSessionId) {
+    return {
+      kind: "error",
+      status: 400,
+      error: "Choose the shift that contains the break.",
+      code: "break_shift_required",
+    };
+  }
+
+  const [shift] = await tx
+    .select()
+    .from(workSessions)
+    .where(
+      and(
+        eq(workSessions.id, input.workSessionId),
+        eq(workSessions.userId, userId),
+        eq(workSessions.outletId, input.outletId),
+      ),
+    )
+    .limit(1)
+    .for("update");
+  if (!shift) {
+    return {
+      kind: "error",
+      status: 403,
+      error: "That shift does not belong to your account.",
+      code: "shift_not_owned",
+    };
+  }
+
+  // Schema refinements guarantee the fields each event needs are present.
+  const change: BreakChange =
+    event === "break_add"
+      ? {
+          kind: "add",
+          startedAt: new Date(input.breakStartedAt!),
+          endedAt: new Date(input.breakEndedAt!),
+        }
+      : event === "break_update"
+        ? {
+            kind: "update",
+            workBreakId: input.workBreakId!,
+            startedAt: new Date(input.breakStartedAt!),
+            endedAt: input.breakEndedAt ? new Date(input.breakEndedAt) : null,
+          }
+        : { kind: "delete", workBreakId: input.workBreakId! };
+
+  const plan = planBreakChange(
+    shift,
+    await loadShiftBreaks(tx, shift.id),
+    change,
+    now,
+  );
+  if (!plan.ok) {
+    return { kind: "error", ...breakErrorDetails(plan.error) };
+  }
+
+  const previousBreak = plan.target
+    ? {
+        startedAt: plan.target.startedAt.toISOString(),
+        endedAt: plan.target.endedAt?.toISOString() ?? null,
+      }
+    : null;
+
+  let breakId: string;
+  if (change.kind === "add") {
+    const [created] = await tx
+      .insert(workBreaks)
+      .values({
+        workSessionId: shift.id,
+        startedAt: change.startedAt,
+        endedAt: change.endedAt,
+        updatedAt: now,
+      })
+      .returning({ id: workBreaks.id });
+    breakId = created.id;
+  } else if (change.kind === "update") {
+    await tx
+      .update(workBreaks)
+      .set({
+        startedAt: change.startedAt,
+        endedAt: change.endedAt,
+        updatedAt: now,
+      })
+      .where(eq(workBreaks.id, change.workBreakId));
+    breakId = change.workBreakId;
+  } else {
+    await tx.delete(workBreaks).where(eq(workBreaks.id, change.workBreakId));
+    breakId = change.workBreakId;
+  }
+
+  // A deleted break keeps its last known times on the request record.
+  const recordedStart =
+    change.kind === "delete"
+      ? (plan.target?.startedAt ?? now)
+      : change.startedAt;
+  const recordedEnd =
+    change.kind === "delete" ? (plan.target?.endedAt ?? null) : change.endedAt;
+
+  const [correction] = await tx
+    .insert(correctionRequests)
+    .values({
+      requestedBy: userId,
+      outletId: input.outletId,
+      timezone,
+      workSessionId: shift.id,
+      event,
+      requestedAt: recordedStart,
+      workBreakId: change.kind === "delete" ? null : breakId,
+      breakStartedAt: recordedStart,
+      breakEndedAt: recordedEnd,
+      reason: input.reason,
+      status: "reconciliation",
+      appliedAt: now,
+    })
+    .returning();
+
+  await recordAudit(tx, [
+    {
+      actorId: userId,
+      action: "correction_break_applied",
+      entityType: "correction_request",
+      entityId: correction.id,
+      outletId: input.outletId,
+      newValues: {
+        workSessionId: shift.id,
+        event,
+        workBreakId: change.kind === "delete" ? null : breakId,
+        breakStartedAt: recordedStart.toISOString(),
+        breakEndedAt: recordedEnd?.toISOString() ?? null,
+        status: "reconciliation",
+        appliedAt: now.toISOString(),
+      },
+      reason: input.reason,
+    },
+    {
+      actorId: userId,
+      action: "correction_break_changed",
+      entityType: "work_break",
+      entityId: breakId,
+      outletId: input.outletId,
+      previousValues: previousBreak,
+      newValues:
+        change.kind === "delete"
+          ? null
+          : {
+              startedAt: change.startedAt.toISOString(),
+              endedAt: change.endedAt?.toISOString() ?? null,
+            },
+      reason: input.reason,
+    },
+  ]);
+
+  return { kind: "applied", correction, session: shift };
+}
+
+type BreakReviewInput = {
+  correction: CorrectionRow;
+  decision: "confirm" | "adjust";
+  reason: string;
+  reviewerId: string;
+  reviewedAt: Date;
+  breakStartedAt?: string;
+  breakEndedAt?: string | null;
+};
+
+async function reconcileBreakCorrection(
+  tx: DbTransaction,
+  input: BreakReviewInput,
+): Promise<{ ok: true } | ReviewFailure> {
+  const { correction, reviewerId, reviewedAt } = input;
+  const relatedShiftMissing = {
+    ok: false as const,
+    status: 409,
+    error: "The related shift no longer exists.",
+    code: "related_shift_missing",
+  };
+  if (!correction.workSessionId) return relatedShiftMissing;
+
+  const [shift] = await tx
+    .select()
+    .from(workSessions)
+    .where(
+      and(
+        eq(workSessions.id, correction.workSessionId),
+        eq(workSessions.userId, correction.requestedBy),
+        eq(workSessions.outletId, correction.outletId),
+      ),
+    )
+    .limit(1)
+    .for("update");
+  if (!shift) return relatedShiftMissing;
+
+  let recordedStart: Date = correction.breakStartedAt ?? correction.requestedAt;
+  let recordedEnd: Date | null = correction.breakEndedAt;
+  let adjustedBreak: {
+    id: string;
+    previousValues: unknown;
+    newValues: unknown;
+  } | null = null;
+
+  if (input.decision === "adjust") {
+    if (correction.event === "break_delete") {
+      return {
+        ok: false,
+        status: 400,
+        error: "Deleted breaks can only be confirmed.",
+        code: "break_not_adjustable",
+      };
+    }
+    if (!correction.workBreakId) {
+      return { ok: false, ...breakErrorDetails("break_not_found") };
+    }
+    if (!input.breakStartedAt) {
+      return {
+        ok: false,
+        status: 400,
+        error: "Decision details are invalid.",
+        code: "invalid_decision",
+      };
+    }
+
+    const startedAt = new Date(input.breakStartedAt);
+    const endedAt = input.breakEndedAt ? new Date(input.breakEndedAt) : null;
+    const plan = planBreakChange(
+      shift,
+      await loadShiftBreaks(tx, shift.id),
+      {
+        kind: "update",
+        workBreakId: correction.workBreakId,
+        startedAt,
+        endedAt,
+      },
+      reviewedAt,
+    );
+    if (!plan.ok) return { ok: false, ...breakErrorDetails(plan.error) };
+    if (!plan.target) {
+      return { ok: false, ...breakErrorDetails("break_not_found") };
+    }
+
+    await tx
+      .update(workBreaks)
+      .set({ startedAt, endedAt, updatedAt: reviewedAt })
+      .where(eq(workBreaks.id, plan.target.id));
+    adjustedBreak = {
+      id: plan.target.id,
+      previousValues: {
+        startedAt: plan.target.startedAt.toISOString(),
+        endedAt: plan.target.endedAt?.toISOString() ?? null,
+      },
+      newValues: {
+        startedAt: startedAt.toISOString(),
+        endedAt: endedAt?.toISOString() ?? null,
+      },
+    };
+    recordedStart = startedAt;
+    recordedEnd = endedAt;
+  }
+
+  await tx
+    .update(correctionRequests)
+    .set({
+      status: "approved",
+      requestedAt: recordedStart,
+      breakStartedAt: recordedStart,
+      breakEndedAt: recordedEnd,
+      reviewedBy: reviewerId,
+      reviewedAt,
+      reviewReason: input.reason || null,
+      reconciledBy: reviewerId,
+      reconciledAt: reviewedAt,
+    })
+    .where(eq(correctionRequests.id, correction.id));
+  await recordAudit(tx, {
+    actorId: reviewerId,
+    action:
+      input.decision === "adjust"
+        ? "correction_adjusted"
+        : "correction_reconciled",
+    entityType: "correction_request",
+    entityId: correction.id,
+    outletId: correction.outletId,
+    previousValues: {
+      status: "reconciliation",
+      requestedAt: correction.requestedAt.toISOString(),
+      breakStartedAt: correction.breakStartedAt?.toISOString() ?? null,
+      breakEndedAt: correction.breakEndedAt?.toISOString() ?? null,
+    },
+    newValues: {
+      status: "approved",
+      requestedAt: recordedStart.toISOString(),
+      breakStartedAt: recordedStart.toISOString(),
+      breakEndedAt: recordedEnd?.toISOString() ?? null,
+      reconciledAt: reviewedAt.toISOString(),
+    },
+    reason: input.reason,
+  });
+  if (adjustedBreak) {
+    await recordAudit(tx, {
+      actorId: reviewerId,
+      action: "correction_break_adjusted",
+      entityType: "work_break",
+      entityId: adjustedBreak.id,
+      outletId: correction.outletId,
+      previousValues: adjustedBreak.previousValues,
+      newValues: adjustedBreak.newValues,
+      reason: input.reason,
+    });
+  }
+
+  return { ok: true };
 }
 
 const reviewSchema = z
@@ -130,14 +591,12 @@ const reviewSchema = z
     requestId: z.string().uuid(),
     outletId: z.string().uuid(),
     decision: z.enum(["confirm", "adjust"]),
-    reason: z.string().trim().min(3).max(500),
-    requestedAt: z.string().datetime({ offset: true }).optional(),
+    reason: z.string().trim().max(500),
+    requestedAt: timestampSchema.optional(),
+    breakStartedAt: timestampSchema.optional(),
+    breakEndedAt: timestampSchema.nullable().optional(),
   })
-  .strict()
-  .refine((value) => value.decision !== "adjust" || value.requestedAt, {
-    path: ["requestedAt"],
-    message: "An adjusted punch time is required.",
-  });
+  .strict();
 
 export async function PATCH(request: Request) {
   if (!hasServerConfiguration()) return unavailable();
@@ -147,18 +606,27 @@ export async function PATCH(request: Request) {
       headers: request.headers,
     });
     if (!session)
-      return Response.json({ error: "Sign in required." }, { status: 401 });
+      return Response.json(
+        { error: "Sign in required.", code: "unauthorized" },
+        { status: 401 },
+      );
     const access = await getTeamAccess(session.user.id);
     if (!access) {
       return Response.json(
-        { error: "Correction review access is not available." },
+        {
+          error: "Correction review access is not available.",
+          code: "correction_review_unavailable",
+        },
         { status: 403 },
       );
     }
     const reviewOutletIds = access.outletIds;
     if (!reviewOutletIds.length) {
       return Response.json(
-        { error: "Correction review access is not available." },
+        {
+          error: "Correction review access is not available.",
+          code: "correction_review_unavailable",
+        },
         { status: 403 },
       );
     }
@@ -168,14 +636,14 @@ export async function PATCH(request: Request) {
       body = await request.json();
     } catch {
       return Response.json(
-        { error: "Request body must be valid JSON." },
+        { error: "Request body must be valid JSON.", code: "invalid_json" },
         { status: 400 },
       );
     }
     const parsed = reviewSchema.safeParse(body);
     if (!parsed.success) {
       return Response.json(
-        { error: "Decision details are invalid." },
+        { error: "Decision details are invalid.", code: "invalid_decision" },
         { status: 400 },
       );
     }
@@ -201,6 +669,7 @@ export async function PATCH(request: Request) {
           ok: false as const,
           status: 404,
           error: "Applied correction not found.",
+          code: "correction_not_found",
         };
       }
 
@@ -212,11 +681,23 @@ export async function PATCH(request: Request) {
       } | null = null;
 
       if (correction.status === "reconciliation") {
+        if (isBreakCorrectionEvent(correction.event)) {
+          return reconcileBreakCorrection(tx, {
+            correction,
+            decision: parsed.data.decision,
+            reason: parsed.data.reason,
+            reviewerId: session.user.id,
+            reviewedAt,
+            breakStartedAt: parsed.data.breakStartedAt,
+            breakEndedAt: parsed.data.breakEndedAt,
+          });
+        }
         if (!correction.workSessionId) {
           return {
             ok: false as const,
             status: 409,
             error: "The related shift no longer exists.",
+            code: "related_shift_missing",
           };
         }
 
@@ -237,12 +718,21 @@ export async function PATCH(request: Request) {
             ok: false as const,
             status: 409,
             error: "The related shift no longer exists.",
+            code: "related_shift_missing",
           };
         }
 
         let reconciledTime = correction.requestedAt;
         if (parsed.data.decision === "adjust") {
-          reconciledTime = new Date(parsed.data.requestedAt!);
+          if (!parsed.data.requestedAt) {
+            return {
+              ok: false as const,
+              status: 400,
+              error: "Decision details are invalid.",
+              code: "invalid_decision",
+            };
+          }
+          reconciledTime = new Date(parsed.data.requestedAt);
           const timeError = getCorrectionTimeError(
             correction.event,
             reconciledTime,
@@ -254,6 +744,7 @@ export async function PATCH(request: Request) {
               ok: false as const,
               status: 400,
               error: "A future time cannot be reconciled.",
+              code: "future_time_reconcile",
             };
           }
           if (timeError === "out_of_order") {
@@ -261,6 +752,7 @@ export async function PATCH(request: Request) {
               ok: false as const,
               status: 400,
               error: "The adjusted punch would put the shift out of order.",
+              code: "adjusted_punch_out_of_order",
             };
           }
           if (correction.event === "clock_in") {
@@ -284,6 +776,7 @@ export async function PATCH(request: Request) {
                 ok: false as const,
                 status: 409,
                 error: "The adjusted clock-in overlaps another shift.",
+                code: "adjusted_clock_in_overlaps",
               };
             }
           }
@@ -340,7 +833,7 @@ export async function PATCH(request: Request) {
             requestedAt: reconciledTime,
             reviewedBy: session.user.id,
             reviewedAt,
-            reviewReason: parsed.data.reason,
+            reviewReason: parsed.data.reason || null,
             reconciledBy: session.user.id,
             reconciledAt: reviewedAt,
           })
@@ -383,12 +876,13 @@ export async function PATCH(request: Request) {
         ok: false as const,
         status: 409,
         error: "This correction is no longer awaiting reconciliation.",
+        code: "correction_not_awaiting",
       };
     });
 
     if (!outcome.ok) {
       return Response.json(
-        { error: outcome.error },
+        { error: outcome.error, code: outcome.code },
         { status: outcome.status },
       );
     }
@@ -400,7 +894,10 @@ export async function PATCH(request: Request) {
     return Response.json({ success: true });
   } catch {
     return Response.json(
-      { error: "Could not review the correction request." },
+      {
+        error: "Could not review the correction request.",
+        code: "correction_review_failed",
+      },
       { status: 500 },
     );
   }
@@ -414,10 +911,16 @@ export async function POST(request: Request) {
       headers: request.headers,
     });
     if (!session)
-      return Response.json({ error: "Sign in required." }, { status: 401 });
+      return Response.json(
+        { error: "Sign in required.", code: "unauthorized" },
+        { status: 401 },
+      );
     if (!session.user.canAccessClock)
       return Response.json(
-        { error: "Clock access is not enabled." },
+        {
+          error: "Clock access is not enabled.",
+          code: "clock_access_disabled",
+        },
         { status: 403 },
       );
 
@@ -426,7 +929,7 @@ export async function POST(request: Request) {
       rawBody = await request.json();
     } catch {
       return Response.json(
-        { error: "Request body must be valid JSON." },
+        { error: "Request body must be valid JSON.", code: "invalid_json" },
         { status: 400 },
       );
     }
@@ -434,7 +937,10 @@ export async function POST(request: Request) {
     const parsed = correctionSchema.safeParse(rawBody);
     if (!parsed.success) {
       return Response.json(
-        { error: "Correction request details are invalid." },
+        {
+          error: "Correction request details are invalid.",
+          code: "invalid_correction",
+        },
         { status: 400 },
       );
     }
@@ -442,12 +948,16 @@ export async function POST(request: Request) {
     const input = parsed.data;
     if (input.event === "clock_out" && !input.workSessionId) {
       return Response.json(
-        { error: "Choose the shift that needs a clock-out correction." },
+        {
+          error: "Choose the shift that needs a clock-out correction.",
+          code: "clock_out_shift_required",
+        },
         { status: 400 },
       );
     }
     const requestedAt = new Date(input.requestedAt);
     if (
+      !isBreakCorrectionEvent(input.event) &&
       getCorrectionTimeError(
         input.event,
         requestedAt,
@@ -457,7 +967,10 @@ export async function POST(request: Request) {
       ) === "future"
     ) {
       return Response.json(
-        { error: "Requested time cannot be in the future." },
+        {
+          error: "Requested time cannot be in the future.",
+          code: "requested_time_future",
+        },
         { status: 400 },
       );
     }
@@ -481,7 +994,10 @@ export async function POST(request: Request) {
 
     if (!assignment) {
       return Response.json(
-        { error: "You are not assigned to this outlet." },
+        {
+          error: "You are not assigned to this outlet.",
+          code: "outlet_not_assigned",
+        },
         { status: 403 },
       );
     }
@@ -524,6 +1040,15 @@ export async function POST(request: Request) {
 
     const now = new Date();
     const outcome = await db.transaction(async (tx) => {
+      if (isBreakCorrectionEvent(input.event)) {
+        return submitBreakCorrection(tx, {
+          event: input.event,
+          input,
+          userId: session.user.id,
+          timezone: assignment.timezone,
+          now,
+        });
+      }
       let workSession = null;
       if (input.workSessionId) {
         [workSession] = await tx
@@ -543,6 +1068,7 @@ export async function POST(request: Request) {
             kind: "error" as const,
             status: 403,
             error: "That shift does not belong to your account.",
+            code: "shift_not_owned",
           };
         }
       } else if (input.event === "clock_out") {
@@ -550,6 +1076,7 @@ export async function POST(request: Request) {
           kind: "error" as const,
           status: 400,
           error: "Choose the shift that needs a clock-out correction.",
+          code: "clock_out_shift_required",
         };
       } else {
         const [openSession] = await tx
@@ -568,6 +1095,7 @@ export async function POST(request: Request) {
             kind: "error" as const,
             status: 409,
             error: "You already have an open shift.",
+            code: "already_clocked_in",
           };
         }
       }
@@ -581,6 +1109,7 @@ export async function POST(request: Request) {
           kind: "error" as const,
           status: 400,
           error: "The requested punch would put the shift out of order.",
+          code: "requested_punch_out_of_order",
         };
       }
 
@@ -605,6 +1134,7 @@ export async function POST(request: Request) {
             kind: "error" as const,
             status: 409,
             error: "The requested clock-in overlaps another shift.",
+            code: "requested_clock_in_overlaps",
           };
         }
       }
@@ -625,6 +1155,7 @@ export async function POST(request: Request) {
             kind: "error" as const,
             status: 409,
             error: "End your break before clocking out.",
+            code: "end_break_first",
           };
         }
       }
@@ -683,6 +1214,7 @@ export async function POST(request: Request) {
           kind: "error" as const,
           status: 409,
           error: "The shift could not be updated.",
+          code: "shift_update_failed",
         };
       }
 
@@ -744,7 +1276,7 @@ export async function POST(request: Request) {
 
     if (outcome.kind === "error") {
       return Response.json(
-        { error: outcome.error },
+        { error: outcome.error, code: outcome.code },
         { status: outcome.status },
       );
     }
@@ -759,7 +1291,10 @@ export async function POST(request: Request) {
     );
   } catch {
     return Response.json(
-      { error: "Could not submit the correction request." },
+      {
+        error: "Could not submit the correction request.",
+        code: "correction_submit_failed",
+      },
       { status: 500 },
     );
   }

@@ -74,7 +74,10 @@ async function verifyCurrentPassword(userId: string, password: string) {
 export async function POST(request: Request) {
   if (!hasServerConfiguration()) {
     return Response.json(
-      { error: "Authentication is not configured." },
+      {
+        error: "Authentication is not configured.",
+        code: "auth_unconfigured",
+      },
       { status: 503 },
     );
   }
@@ -82,7 +85,10 @@ export async function POST(request: Request) {
   const pepper = getPinPepper();
   if (!pepper) {
     return Response.json(
-      { error: "PIN sign-in is not configured on this server." },
+      {
+        error: "PIN sign-in is not configured on this server.",
+        code: "pin_sign_in_unconfigured",
+      },
       { status: 503 },
     );
   }
@@ -92,14 +98,20 @@ export async function POST(request: Request) {
     body = await request.json();
   } catch {
     return Response.json(
-      { error: "Request body must be valid JSON." },
+      {
+        error: "Request body must be valid JSON.",
+        code: "invalid_json",
+      },
       { status: 400 },
     );
   }
   const parsed = setPinSchema.safeParse(body);
   if (!parsed.success || !isValidPin(parsed.data.pin)) {
     return Response.json(
-      { error: "A six-digit PIN is required." },
+      {
+        error: "A six-digit PIN is required.",
+        code: "invalid_pin",
+      },
       { status: 400 },
     );
   }
@@ -109,11 +121,17 @@ export async function POST(request: Request) {
       headers: request.headers,
     });
     if (!session) {
-      return Response.json({ error: "Sign in required." }, { status: 401 });
+      return Response.json(
+        { error: "Sign in required.", code: "unauthorized" },
+        { status: 401 },
+      );
     }
     if (!session.user.canAccessClock) {
       return Response.json(
-        { error: "Clock access is not enabled." },
+        {
+          error: "Clock access is not enabled.",
+          code: "clock_access_disabled",
+        },
         { status: 403 },
       );
     }
@@ -121,7 +139,10 @@ export async function POST(request: Request) {
     const enrollment = await getActiveEnrollment(session.user.id);
     if (!enrollment) {
       return Response.json(
-        { error: "Use this PIN only from your approved browser." },
+        {
+          error: "Use this PIN only from your approved browser.",
+          code: "pin_requires_approved_browser",
+        },
         { status: 403 },
       );
     }
@@ -150,14 +171,20 @@ export async function POST(request: Request) {
     });
     if (!saved) {
       return Response.json(
-        { error: "Device status changed. Refresh and try again." },
+        {
+          error: "Device status changed. Refresh and try again.",
+          code: "device_status_changed",
+        },
         { status: 409 },
       );
     }
     return Response.json({ pinEnabled: true });
   } catch {
     return Response.json(
-      { error: "Could not update this browser's PIN." },
+      {
+        error: "Could not update this browser's PIN.",
+        code: "pin_update_failed",
+      },
       { status: 500 },
     );
   }
@@ -166,7 +193,10 @@ export async function POST(request: Request) {
 export async function DELETE(request: Request) {
   if (!hasServerConfiguration()) {
     return Response.json(
-      { error: "Authentication is not configured." },
+      {
+        error: "Authentication is not configured.",
+        code: "auth_unconfigured",
+      },
       { status: 503 },
     );
   }
@@ -176,14 +206,20 @@ export async function DELETE(request: Request) {
     body = await request.json();
   } catch {
     return Response.json(
-      { error: "Request body must be valid JSON." },
+      {
+        error: "Request body must be valid JSON.",
+        code: "invalid_json",
+      },
       { status: 400 },
     );
   }
   const parsed = removePinSchema.safeParse(body);
   if (!parsed.success) {
     return Response.json(
-      { error: "A current password is required." },
+      {
+        error: "A current password is required.",
+        code: "current_password_required",
+      },
       { status: 400 },
     );
   }
@@ -193,11 +229,17 @@ export async function DELETE(request: Request) {
       headers: request.headers,
     });
     if (!session) {
-      return Response.json({ error: "Sign in required." }, { status: 401 });
+      return Response.json(
+        { error: "Sign in required.", code: "unauthorized" },
+        { status: 401 },
+      );
     }
     if (!session.user.canAccessClock) {
       return Response.json(
-        { error: "Clock access is not enabled." },
+        {
+          error: "Clock access is not enabled.",
+          code: "clock_access_disabled",
+        },
         { status: 403 },
       );
     }
@@ -205,7 +247,10 @@ export async function DELETE(request: Request) {
     const enrollment = await getActiveEnrollment(session.user.id);
     if (!enrollment) {
       return Response.json(
-        { error: "Use this setting only from your approved browser." },
+        {
+          error: "Use this setting only from your approved browser.",
+          code: "setting_requires_approved_browser",
+        },
         { status: 403 },
       );
     }
@@ -216,7 +261,10 @@ export async function DELETE(request: Request) {
       ))
     ) {
       return Response.json(
-        { error: "Current password was not recognized." },
+        {
+          error: "Current password was not recognized.",
+          code: "current_password_invalid",
+        },
         { status: 401 },
       );
     }
@@ -246,14 +294,20 @@ export async function DELETE(request: Request) {
     });
     if (!removed) {
       return Response.json(
-        { error: "Device status changed. Refresh and try again." },
+        {
+          error: "Device status changed. Refresh and try again.",
+          code: "device_status_changed",
+        },
         { status: 409 },
       );
     }
     return Response.json({ pinEnabled: false });
   } catch {
     return Response.json(
-      { error: "Could not remove this browser's PIN." },
+      {
+        error: "Could not remove this browser's PIN.",
+        code: "pin_remove_failed",
+      },
       { status: 500 },
     );
   }

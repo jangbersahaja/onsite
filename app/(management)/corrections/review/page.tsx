@@ -3,6 +3,10 @@
 import { useConfirmDialog } from "@/app/_components/confirm-dialog";
 import { REVIEW_REQUESTS_CHANGED_EVENT } from "@/app/_components/workspace-shell";
 import {
+  isBreakCorrectionEvent,
+  type CorrectionEvent,
+} from "@/lib/break-corrections";
+import {
   formatOutletDateTime,
   outletDateTimeToISOString,
 } from "@/lib/outlet-time";
@@ -17,8 +21,11 @@ type ReviewRequest = {
   outletName: string;
   timezone: string;
   workSessionId: string | null;
-  event: "clock_in" | "clock_out";
+  workBreakId: string | null;
+  event: CorrectionEvent;
   requestedAt: string;
+  breakStartedAt: string | null;
+  breakEndedAt: string | null;
   reason: string;
   status: "reconciliation";
   appliedAt: string | null;
@@ -194,15 +201,25 @@ export default function CorrectionReviewPage() {
       submitter instanceof HTMLButtonElement ? submitter.value : "";
     if (decision !== "confirm" && decision !== "adjust") return;
 
+    const target = requestList.find((request) => request.id === requestId);
+    const timezone = target?.timezone ?? "UTC";
+    const isBreak = target ? isBreakCorrectionEvent(target.event) : false;
     let requestedAt: string | undefined;
+    let breakStartedAt: string | undefined;
+    let breakEndedAt: string | null | undefined;
     if (decision === "adjust") {
-      const localTime = String(formData.get("requestedAt") ?? "");
       try {
-        requestedAt = outletDateTimeToISOString(
-          localTime,
-          requestList.find((request) => request.id === requestId)?.timezone ??
-            "UTC",
-        );
+        if (isBreak) {
+          const localStart = String(formData.get("breakStartedAt") ?? "");
+          const localEnd = String(formData.get("breakEndedAt") ?? "");
+          breakStartedAt = outletDateTimeToISOString(localStart, timezone);
+          breakEndedAt = localEnd
+            ? outletDateTimeToISOString(localEnd, timezone)
+            : null;
+        } else {
+          const localTime = String(formData.get("requestedAt") ?? "");
+          requestedAt = outletDateTimeToISOString(localTime, timezone);
+        }
       } catch (error) {
         setMessage(
           error instanceof Error ? error.message : "Enter a valid punch time.",
@@ -241,6 +258,8 @@ export default function CorrectionReviewPage() {
           decision,
           reason,
           requestedAt,
+          breakStartedAt,
+          breakEndedAt,
         }),
       });
       const body = await response.json();
@@ -400,35 +419,70 @@ export default function CorrectionReviewPage() {
                 Reviewer note
                 <textarea
                   name="reason"
-                  minLength={3}
                   maxLength={500}
                   rows={2}
-                  required
                   placeholder="Add a reconciliation note."
                 />
               </label>
-              <label>
-                Adjust punch time
-                <input
-                  name="requestedAt"
-                  type="datetime-local"
-                  required
-                  defaultValue={formatOutletDateTime(
-                    request.requestedAt,
-                    request.timezone,
-                  )}
-                />
-              </label>
+              {isBreakCorrectionEvent(request.event) ? (
+                request.event !== "break_delete" && (
+                  <>
+                    <label>
+                      Adjust break start
+                      <input
+                        name="breakStartedAt"
+                        type="datetime-local"
+                        required
+                        defaultValue={formatOutletDateTime(
+                          request.breakStartedAt ?? request.requestedAt,
+                          request.timezone,
+                        )}
+                      />
+                    </label>
+                    {request.breakEndedAt && (
+                      <label>
+                        Adjust break end
+                        <input
+                          name="breakEndedAt"
+                          type="datetime-local"
+                          required
+                          defaultValue={formatOutletDateTime(
+                            request.breakEndedAt,
+                            request.timezone,
+                          )}
+                        />
+                      </label>
+                    )}
+                  </>
+                )
+              ) : (
+                <label>
+                  Adjust punch time
+                  <input
+                    name="requestedAt"
+                    type="datetime-local"
+                    required
+                    defaultValue={formatOutletDateTime(
+                      request.requestedAt,
+                      request.timezone,
+                    )}
+                  />
+                </label>
+              )}
               <div className="correction-decision-actions">
-                <button
-                  className="btn btn-secondary"
-                  type="submit"
-                  name="decision"
-                  value="adjust"
-                  disabled={Boolean(busyId)}
-                >
-                  {busyId === `correction:${request.id}` ? "Saving…" : "Adjust"}
-                </button>
+                {request.event !== "break_delete" && (
+                  <button
+                    className="btn btn-secondary"
+                    type="submit"
+                    name="decision"
+                    value="adjust"
+                    disabled={Boolean(busyId)}
+                  >
+                    {busyId === `correction:${request.id}`
+                      ? "Saving…"
+                      : "Adjust"}
+                  </button>
+                )}
                 <button
                   className="btn btn-primary"
                   type="submit"

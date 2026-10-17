@@ -1,21 +1,40 @@
 "use client";
 
+import { useLocale } from "@/app/_components/locale-provider";
+import { isLocale } from "@/lib/i18n/config";
+import { errorMessage, type ErrorText } from "@/lib/i18n/errors";
 import Image from "next/image";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-export function ResetPasswordForm({ token }: { token: string }) {
-  const [message, setMessage] = useState("");
+export function ResetPasswordForm({
+  token,
+  lang,
+}: {
+  token: string;
+  lang?: string;
+}) {
+  const { messages, setLocale } = useLocale();
+  const t = messages.auth.reset;
+  const appliedLang = useRef(false);
+  useEffect(() => {
+    // The reset link carries the recipient's language. Apply it once.
+    if (appliedLang.current || !isLocale(lang)) return;
+    appliedLang.current = true;
+    void setLocale(lang);
+  }, [lang, setLocale]);
+
+  const [message, setMessage] = useState<ErrorText | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [completed, setCompleted] = useState(false);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setMessage("");
+    setMessage(null);
     const form = new FormData(event.currentTarget);
     const newPassword = String(form.get("password"));
     if (newPassword !== String(form.get("confirmPassword"))) {
-      setMessage("The passwords do not match.");
+      setMessage({ code: "password_mismatch", text: "" });
       return;
     }
 
@@ -27,15 +46,16 @@ export function ResetPasswordForm({ token }: { token: string }) {
         body: JSON.stringify({ password: newPassword, token }),
       });
       const body = await response.json();
-      if (!response.ok)
-        throw new Error(body.error ?? "This reset link is unavailable.");
+      if (!response.ok) {
+        setMessage({
+          code: body.code ?? "reset_link_invalid",
+          text: String(body.error ?? ""),
+        });
+        return;
+      }
       setCompleted(true);
-    } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "This reset link is invalid, expired, or already used.",
-      );
+    } catch {
+      setMessage({ code: null, text: messages.common.networkError });
     } finally {
       setIsSubmitting(false);
     }
@@ -54,27 +74,25 @@ export function ResetPasswordForm({ token }: { token: string }) {
           />
           <span>OnSITE</span>
         </Link>
-        <p className="eyebrow">ACCOUNT ACCESS</p>
-        <h1 id="reset-title">Set a new password.</h1>
+        <p className="eyebrow">{t.eyebrow}</p>
+        <h1 id="reset-title">{t.title}</h1>
         {completed ? (
           <div className="invite-result">
-            <p>
-              Password updated. Your previous sessions have been signed out.
-            </p>
+            <p>{t.updated}</p>
             <Link
               className="btn btn-primary btn-lg btn-block btn-spaced"
               href="/"
             >
-              Return to sign in
+              {t.returnToSignIn}
             </Link>
           </div>
         ) : !token ? (
           <p className="form-error" role="alert">
-            This reset link is invalid or incomplete.
+            {messages.errors.reset_link_incomplete}
           </p>
         ) : (
           <form className="auth-form" onSubmit={handleSubmit}>
-            <label htmlFor="reset-password">New password</label>
+            <label htmlFor="reset-password">{t.newPassword}</label>
             <input
               id="reset-password"
               name="password"
@@ -84,7 +102,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
               maxLength={128}
               required
             />
-            <label htmlFor="reset-confirm-password">Confirm password</label>
+            <label htmlFor="reset-confirm-password">{t.confirmPassword}</label>
             <input
               id="reset-confirm-password"
               name="confirmPassword"
@@ -96,7 +114,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
             />
             {message && (
               <p className="form-error" role="alert">
-                {message}
+                {errorMessage(messages, message)}
               </p>
             )}
             <button
@@ -104,7 +122,7 @@ export function ResetPasswordForm({ token }: { token: string }) {
               type="submit"
               disabled={isSubmitting}
             >
-              {isSubmitting ? "Updating password…" : "Update password"}
+              {isSubmitting ? t.updating : t.update}
             </button>
           </form>
         )}

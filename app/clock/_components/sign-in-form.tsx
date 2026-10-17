@@ -1,7 +1,13 @@
 "use client";
 
+import { LanguageSwitcher } from "@/app/_components/language-switcher";
+import { useLocale } from "@/app/_components/locale-provider";
 import { PasswordInput } from "@/app/_components/password-input";
 import { SixDigitPinInput } from "@/app/clock/_components/six-digit-pin-input";
+import {
+  errorMessage as translateError,
+  type ErrorText,
+} from "@/lib/i18n/errors";
 import {
   getRememberedPinUser,
   subscribeToRememberedPinUser,
@@ -13,7 +19,9 @@ import { useState, useSyncExternalStore } from "react";
 
 export function SignInForm() {
   const router = useRouter();
-  const [errorMessage, setErrorMessage] = useState("");
+  const { messages } = useLocale();
+  const t = messages.auth.signIn;
+  const [errorMessage, setErrorMessage] = useState<ErrorText | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [pinValue, setPinValue] = useState("");
   const rememberedUserId = useSyncExternalStore(
@@ -26,7 +34,7 @@ export function SignInForm() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setErrorMessage("");
+    setErrorMessage(null);
     setIsSubmitting(true);
 
     const formData = new FormData(event.currentTarget);
@@ -52,7 +60,14 @@ export function SignInForm() {
         setIsPendingApproval(true);
         return;
       }
-      if (!response.ok) throw new Error(body.error ?? "Sign-in failed.");
+      if (!response.ok) {
+        setErrorMessage({
+          code:
+            body.code ?? (usePin ? "invalid_pin_sign_in" : "invalid_sign_in"),
+          text: String(body.error ?? ""),
+        });
+        return;
+      }
       const authUser = body.user as {
         id: string;
         canAccessClock: boolean;
@@ -69,14 +84,8 @@ export function SignInForm() {
             ? "/manage"
             : "/",
       );
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error
-          ? error.message
-          : usePin
-            ? "PIN sign-in was not recognized for this browser."
-            : "Username/email or password was not recognized.",
-      );
+    } catch {
+      setErrorMessage({ code: null, text: messages.common.networkError });
     } finally {
       setIsSubmitting(false);
     }
@@ -99,20 +108,19 @@ export function SignInForm() {
             />
             <span>OnSITE</span>
           </Link>
-          <p className="eyebrow">REGISTRATION PENDING</p>
-          <h1 id="pending-approval-title">Waiting for admin approval.</h1>
-          <p className="auth-description">
-            Please contact your manager/supervisor to approve for registration.
-          </p>
+          <LanguageSwitcher className="auth-language" />
+          <p className="eyebrow">{t.pendingEyebrow}</p>
+          <h1 id="pending-approval-title">{t.pendingTitle}</h1>
+          <p className="auth-description">{t.pendingBody}</p>
           <button
             className="btn btn-ghost btn-sm"
             type="button"
             onClick={() => {
               setIsPendingApproval(false);
-              setErrorMessage("");
+              setErrorMessage(null);
             }}
           >
-            Back to sign in
+            {t.backToSignIn}
           </button>
         </section>
       </main>
@@ -132,12 +140,13 @@ export function SignInForm() {
           />
           <span>OnSITE</span>
         </Link>
-        <p className="eyebrow">TEAM ACCESS</p>
-        <h1 id="sign-in-title">Welcome back.</h1>
+        <LanguageSwitcher className="auth-language" />
+        <p className="eyebrow">{t.eyebrow}</p>
+        <h1 id="sign-in-title">{t.title}</h1>
         <p className="auth-description">
           {rememberedUserId && !isPasswordMode
-            ? "Enter your PIN to continue on this approved browser."
-            : "Sign in to clock in and review your shifts."}
+            ? t.pinDescription
+            : t.passwordDescription}
         </p>
         <form
           className={`auth-form${rememberedUserId && !isPasswordMode ? " is-pin-form" : ""}`}
@@ -147,7 +156,7 @@ export function SignInForm() {
             <>
               <SixDigitPinInput
                 idPrefix="sign-in-pin"
-                label="Enter your six-digit PIN"
+                label={t.pinLabel}
                 name="pin"
                 value={pinValue}
                 onChange={setPinValue}
@@ -156,7 +165,7 @@ export function SignInForm() {
             </>
           ) : (
             <>
-              <label htmlFor="identifier">Username or email</label>
+              <label htmlFor="identifier">{t.identifierLabel}</label>
               <input
                 id="identifier"
                 name="identifier"
@@ -164,7 +173,7 @@ export function SignInForm() {
                 autoComplete="username"
                 required
               />
-              <label htmlFor="password">Password</label>
+              <label htmlFor="password">{t.passwordLabel}</label>
               <PasswordInput
                 id="password"
                 name="password"
@@ -175,7 +184,7 @@ export function SignInForm() {
           )}
           {errorMessage && (
             <p className="form-error" role="alert">
-              {errorMessage}
+              {translateError(messages, errorMessage)}
             </p>
           )}
           <button
@@ -188,10 +197,10 @@ export function SignInForm() {
             }
           >
             {isSubmitting
-              ? "Signing in…"
+              ? t.signingIn
               : rememberedUserId && !isPasswordMode
-                ? "Continue with PIN"
-                : "Sign in"}
+                ? t.continueWithPin
+                : t.signIn}
           </button>
         </form>
         {rememberedUserId && (
@@ -199,19 +208,15 @@ export function SignInForm() {
             className="btn btn-ghost btn-sm"
             type="button"
             onClick={() => {
-              setErrorMessage("");
+              setErrorMessage(null);
               setPinValue("");
               setIsPasswordMode((isPassword) => !isPassword);
             }}
           >
-            {isPasswordMode
-              ? "Use PIN on this browser"
-              : "Use password instead"}
+            {isPasswordMode ? t.usePinOnBrowser : t.usePasswordInstead}
           </button>
         )}
-        <p className="auth-footnote">
-          New here? Ask your outlet manager for a registration QR code or link.
-        </p>
+        <p className="auth-footnote">{t.newHere}</p>
       </section>
     </main>
   );

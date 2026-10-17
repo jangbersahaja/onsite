@@ -1,10 +1,12 @@
 "use client";
 
+import { useLocale } from "@/app/_components/locale-provider";
 import { useState, type ComponentPropsWithoutRef } from "react";
 
 type PasswordInputProps = Omit<ComponentPropsWithoutRef<"input">, "type">;
 
 export function PasswordInput(props: PasswordInputProps) {
+  const { messages } = useLocale();
   const [isVisible, setIsVisible] = useState(false);
 
   return (
@@ -13,7 +15,11 @@ export function PasswordInput(props: PasswordInputProps) {
       <button
         className="btn btn-ghost password-toggle"
         type="button"
-        aria-label={isVisible ? "Hide password" : "Show password"}
+        aria-label={
+          isVisible
+            ? messages.shell.password.hide
+            : messages.shell.password.show
+        }
         aria-pressed={isVisible}
         onClick={() => setIsVisible((visible) => !visible)}
       >

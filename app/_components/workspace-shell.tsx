@@ -1,7 +1,10 @@
 "use client";
 
 import { useConfirmDialog } from "@/app/_components/confirm-dialog";
+import { LanguageSwitcher } from "@/app/_components/language-switcher";
+import { useLocale } from "@/app/_components/locale-provider";
 import { authClient } from "@/lib/auth-client";
+import { errorMessage, type ErrorText } from "@/lib/i18n/errors";
 import { MAX_PROFILE_PHOTO_BYTES } from "@/lib/profile-photo";
 import Image from "next/image";
 import Link from "next/link";
@@ -136,7 +139,7 @@ async function fetchReviewRows(
 export function WorkspaceShell({
   activeHref,
   pageTitle,
-  workspaceName = "Workspace",
+  workspaceName: workspaceNameProp,
   outlets = [],
   selectedOutletId,
   onOutletChange,
@@ -152,9 +155,12 @@ export function WorkspaceShell({
   const [expandedNavigationGroups, setExpandedNavigationGroups] = useState<
     Set<string>
   >(() => new Set());
-  const [profilePhotoMessage, setProfilePhotoMessage] = useState("");
+  const [profilePhotoMessage, setProfilePhotoMessage] =
+    useState<ErrorText | null>(null);
   const [isPhotoSaving, setIsPhotoSaving] = useState(false);
   const { confirm, confirmDialog } = useConfirmDialog();
+  const { messages } = useLocale();
+  const workspaceName = workspaceNameProp ?? messages.shell.workspace;
   const accountMenuRef = useRef<HTMLDivElement>(null);
   const profilePhotoInputRef = useRef<HTMLInputElement>(null);
   const [pendingDeviceRequestCount, setPendingDeviceRequestCount] = useState(0);
@@ -163,7 +169,7 @@ export function WorkspaceShell({
     null,
   );
   const canAccessBackoffice = session.data?.user.canAccessBackoffice === true;
-  const userName = session.data?.user.name ?? "Account";
+  const userName = session.data?.user.name ?? messages.shell.account;
   const profilePhotoUrl = session.data?.user.profilePhotoUrl ?? null;
   const selectedOutlet = outlets.find(
     (outlet) => outlet.id === selectedOutletId,
@@ -284,16 +290,19 @@ export function WorkspaceShell({
   }
 
   async function updateProfilePhoto(file: File) {
-    setProfilePhotoMessage("");
+    setProfilePhotoMessage(null);
     if (file.size > MAX_PROFILE_PHOTO_BYTES) {
-      setProfilePhotoMessage("Profile photos must be 2 MB or smaller.");
+      setProfilePhotoMessage({
+        code: null,
+        text: messages.shell.profile.tooLarge,
+      });
       return;
     }
     if (
       !(await confirm({
-        title: "Update profile photo?",
-        description: "This photo will replace your current profile photo.",
-        confirmLabel: "Update photo",
+        title: messages.shell.profile.updateTitle,
+        description: messages.shell.profile.updateDescription,
+        confirmLabel: messages.shell.profile.updateConfirm,
       }))
     )
       return;
@@ -306,30 +315,33 @@ export function WorkspaceShell({
         method: "POST",
         body: form,
       });
-      const body = (await response.json()) as { error?: string };
+      const body = (await response.json()) as { code?: string; error?: string };
       if (!response.ok) {
-        throw new Error(body.error ?? "Could not update profile photo.");
+        setProfilePhotoMessage({
+          code: body.code ?? null,
+          text: body.error ?? messages.shell.profile.updateFailed,
+        });
+        return;
       }
       window.dispatchEvent(new Event("shiftline-session-changed"));
       setIsAccountMenuOpen(false);
-    } catch (error) {
-      setProfilePhotoMessage(
-        error instanceof Error
-          ? error.message
-          : "Could not update profile photo.",
-      );
+    } catch {
+      setProfilePhotoMessage({
+        code: null,
+        text: messages.shell.profile.updateFailed,
+      });
     } finally {
       setIsPhotoSaving(false);
     }
   }
 
   async function removeProfilePhoto() {
-    setProfilePhotoMessage("");
+    setProfilePhotoMessage(null);
     if (
       !(await confirm({
-        title: "Remove profile photo?",
-        description: "Your profile will show your initials instead.",
-        confirmLabel: "Remove photo",
+        title: messages.shell.profile.removeTitle,
+        description: messages.shell.profile.removeDescription,
+        confirmLabel: messages.shell.profile.removeConfirm,
         tone: "danger",
       }))
     )
@@ -337,18 +349,21 @@ export function WorkspaceShell({
     setIsPhotoSaving(true);
     try {
       const response = await fetch("/api/profile-photo", { method: "DELETE" });
-      const body = (await response.json()) as { error?: string };
+      const body = (await response.json()) as { code?: string; error?: string };
       if (!response.ok) {
-        throw new Error(body.error ?? "Could not remove profile photo.");
+        setProfilePhotoMessage({
+          code: body.code ?? null,
+          text: body.error ?? messages.shell.profile.removeFailed,
+        });
+        return;
       }
       window.dispatchEvent(new Event("shiftline-session-changed"));
       setIsAccountMenuOpen(false);
-    } catch (error) {
-      setProfilePhotoMessage(
-        error instanceof Error
-          ? error.message
-          : "Could not remove profile photo.",
-      );
+    } catch {
+      setProfilePhotoMessage({
+        code: null,
+        text: messages.shell.profile.removeFailed,
+      });
     } finally {
       setIsPhotoSaving(false);
     }
@@ -357,9 +372,9 @@ export function WorkspaceShell({
   async function signOut() {
     if (
       !(await confirm({
-        title: "Sign out?",
-        description: "You will need to sign in again to continue.",
-        confirmLabel: "Sign out",
+        title: messages.shell.signOutTitle,
+        description: messages.shell.signOutDescription,
+        confirmLabel: messages.shell.signOut,
       }))
     )
       return;
@@ -373,7 +388,7 @@ export function WorkspaceShell({
         <button
           className="mobile-nav-backdrop"
           type="button"
-          aria-label="Close navigation"
+          aria-label={messages.shell.closeNavigation}
           onClick={() => setIsMobileNavOpen(false)}
         />
       )}
@@ -381,7 +396,11 @@ export function WorkspaceShell({
         className={`side-rail${isMobileNavOpen ? " is-open" : ""}`}
         id="workspace-navigation"
       >
-        <Link className="brand-lockup" href="/" aria-label="OnSITE home">
+        <Link
+          className="brand-lockup"
+          href="/"
+          aria-label={messages.shell.homeLabel}
+        >
           <Image
             className="brand-mark"
             src="/onsite%20logo.png"
@@ -392,7 +411,7 @@ export function WorkspaceShell({
           <span>OnSITE</span>
         </Link>
 
-        <p className="workspace-label">WORKSPACE</p>
+        <p className="workspace-label">{messages.shell.workspaceLabel}</p>
         {outlets.length > 0 && selectedOutletId && onOutletChange ? (
           <label className="outlet-switcher" htmlFor="workspace-outlet-select">
             <span className="outlet-avatar">
@@ -404,7 +423,7 @@ export function WorkspaceShell({
             </span>
             <select
               id="workspace-outlet-select"
-              aria-label="Select outlet"
+              aria-label={messages.shell.selectOutlet}
               value={selectedOutletId}
               onChange={(event) => onOutletChange(event.target.value)}
               disabled={isOutletLocked}
@@ -423,12 +442,12 @@ export function WorkspaceShell({
             </span>
             <span className="outlet-copy">
               <strong>{selectedOutlet?.name ?? workspaceName}</strong>
-              <small>Current workspace</small>
+              <small>{messages.shell.currentWorkspace}</small>
             </span>
           </div>
         )}
 
-        <nav className="primary-nav" aria-label="Main navigation">
+        <nav className="primary-nav" aria-label={messages.shell.mainNavigation}>
           {visibleNavigation.map((group, groupIndex) => {
             const groupId = group.id ?? group.label;
             const isActiveGroup = group.items.some(
@@ -493,7 +512,7 @@ export function WorkspaceShell({
         <div className="rail-bottom">
           <div className="demo-status">
             <span className="status-dot" />
-            Connected workspace
+            {messages.shell.connectedWorkspace}
           </div>
           <div className="profile-account" ref={accountMenuRef}>
             <button
@@ -502,7 +521,7 @@ export function WorkspaceShell({
               aria-expanded={isAccountMenuOpen}
               aria-controls="profile-account-menu"
               onClick={() => {
-                setProfilePhotoMessage("");
+                setProfilePhotoMessage(null);
                 setIsAccountMenuOpen((isOpen) => !isOpen);
               }}
             >
@@ -520,7 +539,7 @@ export function WorkspaceShell({
               )}
               <span className="profile-copy">
                 <strong>{userName}</strong>
-                <small>Manage account</small>
+                <small>{messages.shell.manageAccount}</small>
               </span>
               <span className="switcher-chevron" aria-hidden="true">
                 ···
@@ -533,7 +552,7 @@ export function WorkspaceShell({
                   type="file"
                   hidden
                   accept="image/jpeg,image/png,image/webp"
-                  aria-label="Choose a profile photo"
+                  aria-label={messages.shell.profile.choosePhoto}
                   onChange={(event) => {
                     const file = event.currentTarget.files?.[0];
                     event.currentTarget.value = "";
@@ -546,7 +565,7 @@ export function WorkspaceShell({
                   disabled={isPhotoSaving}
                   onClick={() => profilePhotoInputRef.current?.click()}
                 >
-                  Change photo
+                  {messages.shell.profile.changePhoto}
                 </button>
                 {profilePhotoUrl && (
                   <button
@@ -555,21 +574,22 @@ export function WorkspaceShell({
                     disabled={isPhotoSaving}
                     onClick={() => void removeProfilePhoto()}
                   >
-                    Remove photo
+                    {messages.shell.profile.removePhoto}
                   </button>
                 )}
                 {profilePhotoMessage && (
                   <p className="profile-menu-message" role="status">
-                    {profilePhotoMessage}
+                    {errorMessage(messages, profilePhotoMessage)}
                   </p>
                 )}
+                <LanguageSwitcher className="profile-language" />
                 <button
                   className="btn btn-danger btn-block"
                   type="button"
                   disabled={isPhotoSaving}
                   onClick={() => void signOut()}
                 >
-                  Sign out
+                  {messages.shell.signOut}
                 </button>
               </div>
             )}
@@ -583,7 +603,9 @@ export function WorkspaceShell({
             className="btn btn-ghost btn-icon mobile-nav-toggle"
             type="button"
             aria-label={
-              isMobileNavOpen ? "Close navigation" : "Open navigation"
+              isMobileNavOpen
+                ? messages.shell.closeNavigation
+                : messages.shell.openNavigation
             }
             aria-expanded={isMobileNavOpen}
             aria-controls="workspace-navigation"
@@ -604,7 +626,7 @@ export function WorkspaceShell({
                 type="button"
                 onClick={() => void installApp()}
               >
-                Install app
+                {messages.shell.installApp}
               </button>
             )}
             {profilePhotoUrl ? (
@@ -625,7 +647,10 @@ export function WorkspaceShell({
         {mobileStaffNavigation.some(
           (item) => item.href === "/clock/history",
         ) && (
-          <nav className="mobile-staff-tabs" aria-label="Staff navigation">
+          <nav
+            className="mobile-staff-tabs"
+            aria-label={messages.shell.staffNavigation}
+          >
             {mobileStaffNavigation.map((item) => (
               <Link
                 className={`mobile-staff-tab${item.href === activeHref ? " is-active" : ""}`}

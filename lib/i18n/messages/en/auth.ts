@@ -1,0 +1,56 @@
+export const enAuth = {
+  signIn: {
+    pendingEyebrow: "REGISTRATION PENDING",
+    pendingTitle: "Waiting for admin approval.",
+    pendingBody:
+      "Please contact your manager/supervisor to approve for registration.",
+    backToSignIn: "Back to sign in",
+    eyebrow: "TEAM ACCESS",
+    title: "Welcome back.",
+    pinDescription: "Enter your PIN to continue on this approved browser.",
+    passwordDescription: "Sign in to clock in and review your shifts.",
+    pinLabel: "Enter your six-digit PIN",
+    identifierLabel: "Username or email",
+    passwordLabel: "Password",
+    continueWithPin: "Continue with PIN",
+    signIn: "Sign in",
+    signingIn: "Signing in…",
+    usePasswordInstead: "Use password instead",
+    usePinOnBrowser: "Use PIN on this browser",
+    newHere:
+      "New here? Ask your outlet manager for a registration QR code or link.",
+  },
+  register: {
+    eyebrow: "STAFF REGISTRATION",
+    title: "Create your account.",
+    checkingLink: "Checking registration link…",
+    registeringFor:
+      "Registering for {outlet}. A manager at this outlet will approve your account.",
+    photoPreviewAlt: "Your profile photo preview",
+    addPhoto: "Add photo",
+    photoRequirements: "Required · JPEG, PNG, or WebP · up to 2 MB",
+    fullName: "Full name",
+    username: "Username (Nickname)",
+    email: "Email",
+    createPassword: "Create password",
+    confirmPassword: "Confirm password",
+    language: "Language",
+    languageHint: "You can change this later.",
+    submit: "Submit registration",
+    submitting: "Submitting…",
+    submittedFor:
+      "Registration submitted for {outlet}. Your account is waiting for admin approval. Please contact your manager/supervisor to approve for registration.",
+    submitted:
+      "Registration submitted. Your account is waiting for admin approval. Please contact your manager/supervisor to approve for registration.",
+  },
+  reset: {
+    eyebrow: "ACCOUNT ACCESS",
+    title: "Set a new password.",
+    updated: "Password updated. Your previous sessions have been signed out.",
+    returnToSignIn: "Return to sign in",
+    newPassword: "New password",
+    confirmPassword: "Confirm password",
+    update: "Update password",
+    updating: "Updating password…",
+  },
+};

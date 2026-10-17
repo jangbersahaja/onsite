@@ -22,7 +22,10 @@ export async function PATCH(
 ) {
   if (!hasServerConfiguration()) {
     return Response.json(
-      { error: "Authentication is not configured." },
+      {
+        error: "Authentication is not configured.",
+        code: "auth_unconfigured",
+      },
       { status: 503 },
     );
   }
@@ -32,12 +35,18 @@ export async function PATCH(
       headers: request.headers,
     });
     if (!session) {
-      return Response.json({ error: "Sign in required." }, { status: 401 });
+      return Response.json(
+        { error: "Sign in required.", code: "unauthorized" },
+        { status: 401 },
+      );
     }
 
     const access = await getTeamAccess(session.user.id);
     if (!access) {
-      return Response.json({ error: "Team access denied." }, { status: 403 });
+      return Response.json(
+        { error: "Team access denied.", code: "team_access_denied" },
+        { status: 403 },
+      );
     }
 
     let rawBody: unknown;
@@ -45,14 +54,20 @@ export async function PATCH(
       rawBody = await request.json();
     } catch {
       return Response.json(
-        { error: "Request body must be valid JSON." },
+        {
+          error: "Request body must be valid JSON.",
+          code: "invalid_json",
+        },
         { status: 400 },
       );
     }
     const parsed = deviceActionSchema.safeParse(rawBody);
     if (!parsed.success) {
       return Response.json(
-        { error: "A valid device action is required." },
+        {
+          error: "A valid device action is required.",
+          code: "invalid_device_action",
+        },
         { status: 400 },
       );
     }
@@ -70,7 +85,10 @@ export async function PATCH(
     if (!access.isSuperAdmin) {
       if (!access.outletIds.length) {
         return Response.json(
-          { error: "You cannot manage this device." },
+          {
+            error: "You cannot manage this device.",
+            code: "device_manage_denied",
+          },
           { status: 403 },
         );
       }
@@ -97,13 +115,19 @@ export async function PATCH(
 
     if (!target) {
       return Response.json(
-        { error: "You cannot manage this device." },
+        {
+          error: "You cannot manage this device.",
+          code: "device_manage_denied",
+        },
         { status: 403 },
       );
     }
     if (target.userId === session.user.id) {
       return Response.json(
-        { error: "You cannot manage your own trusted device." },
+        {
+          error: "You cannot manage your own trusted device.",
+          code: "own_device_manage_denied",
+        },
         { status: 403 },
       );
     }
@@ -111,19 +135,28 @@ export async function PATCH(
     const { action } = parsed.data;
     if (action === "approve" && target.status !== "pending") {
       return Response.json(
-        { error: "Only pending devices can be approved." },
+        {
+          error: "Only pending devices can be approved.",
+          code: "approve_requires_pending",
+        },
         { status: 409 },
       );
     }
     if (action === "reject" && target.status !== "pending") {
       return Response.json(
-        { error: "Only pending devices can be rejected." },
+        {
+          error: "Only pending devices can be rejected.",
+          code: "reject_requires_pending",
+        },
         { status: 409 },
       );
     }
     if (action === "revoke" && target.status !== "active") {
       return Response.json(
-        { error: "Only active devices can be revoked." },
+        {
+          error: "Only active devices can be revoked.",
+          code: "revoke_requires_active",
+        },
         { status: 409 },
       );
     }
@@ -212,12 +245,18 @@ export async function PATCH(
       error.message === "STAFF_DEVICE_STATE_CONFLICT"
     ) {
       return Response.json(
-        { error: "Device status changed. Refresh and try again." },
+        {
+          error: "Device status changed. Refresh and try again.",
+          code: "device_status_changed",
+        },
         { status: 409 },
       );
     }
     return Response.json(
-      { error: "Could not update the trusted device." },
+      {
+        error: "Could not update the trusted device.",
+        code: "device_update_failed",
+      },
       { status: 500 },
     );
   }

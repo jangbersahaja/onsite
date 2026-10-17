@@ -54,6 +54,7 @@ export async function POST(request: Request) {
         email: user.email,
         accountType: user.accountType,
         canAccessBackoffice: user.canAccessBackoffice,
+        locale: user.locale,
       })
       .from(user)
       .where(eq(user.id, parsed.data.userId))
@@ -116,6 +117,8 @@ export async function POST(request: Request) {
 
     const resetUrl = new URL("/reset-password", request.url);
     resetUrl.searchParams.set("token", token);
+    // Opens the reset page in the recipient's language.
+    resetUrl.searchParams.set("lang", target.locale ?? "en");
 
     return Response.json(
       { resetUrl: resetUrl.toString(), expiresAt },

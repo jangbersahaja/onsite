@@ -35,6 +35,7 @@ export async function getSession(headers: Headers) {
       accountType: user.accountType,
       canAccessClock: user.canAccessClock,
       canAccessBackoffice: user.canAccessBackoffice,
+      locale: user.locale,
     })
     .from(session)
     .innerJoin(user, eq(session.userId, user.id))
@@ -61,6 +62,7 @@ export async function getSession(headers: Headers) {
       accountType: record.accountType,
       canAccessClock: record.canAccessClock,
       canAccessBackoffice: record.canAccessBackoffice,
+      locale: record.locale,
     },
   };
 }

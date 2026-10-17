@@ -1,6 +1,10 @@
 "use client";
 
+import { useLocale } from "@/app/_components/locale-provider";
 import { PasswordInput } from "@/app/_components/password-input";
+import { localeNames, locales, type Locale } from "@/lib/i18n/config";
+import { errorMessage, type ErrorText } from "@/lib/i18n/errors";
+import { format } from "@/lib/i18n/format";
 import { MAX_PROFILE_PHOTO_BYTES } from "@/lib/profile-photo";
 import Image from "next/image";
 import Link from "next/link";
@@ -9,15 +13,17 @@ import { useEffect, useMemo, useState } from "react";
 type LinkStatus = "loading" | "ready" | "invalid";
 
 export function RegisterForm({ token }: { token: string }) {
+  const { locale, messages, setLocale } = useLocale();
+  const t = messages.auth.register;
   const [linkStatus, setLinkStatus] = useState<LinkStatus>(
     token ? "loading" : "invalid",
   );
   const [outletName, setOutletName] = useState("");
-  const [linkMessage, setLinkMessage] = useState(
-    token ? "" : "This registration link is missing its token.",
+  const [linkError, setLinkError] = useState<ErrorText | null>(
+    token ? null : { code: "registration_link_missing", text: "" },
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState<ErrorText | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
 
@@ -39,22 +45,24 @@ export function RegisterForm({ token }: { token: string }) {
     })
       .then(async (response) => {
         const body = await response.json();
-        if (!response.ok)
-          throw new Error(
-            body.error ?? "This registration link is unavailable.",
-          );
+        if (!response.ok) {
+          if (active) {
+            setLinkError({
+              code: body.code ?? "registration_link_invalid",
+              text: String(body.error ?? ""),
+            });
+            setLinkStatus("invalid");
+          }
+          return;
+        }
         if (active) {
           setOutletName(String(body.outletName ?? ""));
           setLinkStatus("ready");
         }
       })
-      .catch((error: unknown) => {
+      .catch(() => {
         if (active) {
-          setLinkMessage(
-            error instanceof Error
-              ? error.message
-              : "This registration link is unavailable.",
-          );
+          setLinkError({ code: "registration_link_invalid", text: "" });
           setLinkStatus("invalid");
         }
       });
@@ -64,10 +72,10 @@ export function RegisterForm({ token }: { token: string }) {
   }, [token]);
 
   function handlePhotoChange(event: React.ChangeEvent<HTMLInputElement>) {
-    setMessage("");
+    setMessage(null);
     const file = event.target.files?.[0] ?? null;
     if (file && file.size > MAX_PROFILE_PHOTO_BYTES) {
-      setMessage("Profile photos must be 2 MB or smaller.");
+      setMessage({ code: "photo_too_large", text: "" });
       event.target.value = "";
       setPhotoFile(null);
       return;
@@ -77,15 +85,15 @@ export function RegisterForm({ token }: { token: string }) {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setMessage("");
+    setMessage(null);
     if (!photoFile) {
-      setMessage("A profile photo is required.");
+      setMessage({ code: "photo_required", text: "" });
       return;
     }
     const form = new FormData(event.currentTarget);
     const password = String(form.get("password"));
     if (password !== String(form.get("confirmPassword"))) {
-      setMessage("The passwords do not match.");
+      setMessage({ code: "password_mismatch", text: "" });
       return;
     }
 
@@ -96,21 +104,23 @@ export function RegisterForm({ token }: { token: string }) {
       for (const field of ["name", "username", "email", "password"] as const) {
         payload.set(field, String(form.get(field) ?? ""));
       }
+      payload.set("locale", locale);
       payload.set("profilePhoto", photoFile);
       const response = await fetch("/api/register", {
         method: "POST",
         body: payload,
       });
       const body = await response.json();
-      if (!response.ok)
-        throw new Error(body.error ?? "Could not submit this registration.");
+      if (!response.ok) {
+        setMessage({
+          code: body.code ?? "register_failed",
+          text: String(body.error ?? ""),
+        });
+        return;
+      }
       setSubmitted(true);
-    } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Could not submit this registration.",
-      );
+    } catch {
+      setMessage({ code: null, text: messages.common.networkError });
     } finally {
       setIsSubmitting(false);
     }
@@ -129,37 +139,35 @@ export function RegisterForm({ token }: { token: string }) {
           />
           <span>OnSITE</span>
         </Link>
-        <p className="eyebrow">STAFF REGISTRATION</p>
-        <h1 id="register-title">Create your account.</h1>
+        <p className="eyebrow">{t.eyebrow}</p>
+        <h1 id="register-title">{t.title}</h1>
 
         {submitted ? (
           <div className="invite-result">
             <p>
-              Registration submitted
-              {outletName ? ` for ${outletName}` : ""}. Your account is waiting
-              for admin approval. Please contact your manager/supervisor to
-              approve for registration.
+              {outletName
+                ? format(t.submittedFor, { outlet: outletName })
+                : t.submitted}
             </p>
             <Link
               className="btn btn-primary btn-lg btn-block btn-spaced"
               href="/"
             >
-              Back to sign in
+              {messages.auth.signIn.backToSignIn}
             </Link>
           </div>
         ) : linkStatus === "loading" ? (
           <p className="auth-description" aria-live="polite">
-            Checking registration link…
+            {t.checkingLink}
           </p>
         ) : linkStatus === "invalid" ? (
           <p className="form-error" role="alert">
-            {linkMessage}
+            {linkError ? errorMessage(messages, linkError) : ""}
           </p>
         ) : (
           <>
             <p className="auth-description">
-              Registering for {outletName}. A manager at this outlet will
-              approve your account.
+              {format(t.registeringFor, { outlet: outletName })}
             </p>
             <form className="auth-form" onSubmit={handleSubmit}>
               <div className="register-photo-field">
@@ -170,13 +178,13 @@ export function RegisterForm({ token }: { token: string }) {
                   {photoPreview ? (
                     <Image
                       src={photoPreview}
-                      alt="Your profile photo preview"
+                      alt={t.photoPreviewAlt}
                       width={96}
                       height={96}
                       unoptimized
                     />
                   ) : (
-                    <span aria-hidden="true">Add photo</span>
+                    <span aria-hidden="true">{t.addPhoto}</span>
                   )}
                 </label>
                 <input
@@ -188,12 +196,10 @@ export function RegisterForm({ token }: { token: string }) {
                   onChange={handlePhotoChange}
                   aria-required="true"
                 />
-                <small className="auth-field-hint">
-                  Required · JPEG, PNG, or WebP · up to 2 MB
-                </small>
+                <small className="auth-field-hint">{t.photoRequirements}</small>
               </div>
 
-              <label htmlFor="register-name">Full name</label>
+              <label htmlFor="register-name">{t.fullName}</label>
               <input
                 id="register-name"
                 name="name"
@@ -202,7 +208,7 @@ export function RegisterForm({ token }: { token: string }) {
                 maxLength={120}
                 required
               />
-              <label htmlFor="register-username">Username (Nickname)</label>
+              <label htmlFor="register-username">{t.username}</label>
               <input
                 id="register-username"
                 name="username"
@@ -212,7 +218,7 @@ export function RegisterForm({ token }: { token: string }) {
                 pattern="[A-Za-z0-9._-]+"
                 required
               />
-              <label htmlFor="register-email">Email</label>
+              <label htmlFor="register-email">{t.email}</label>
               <input
                 id="register-email"
                 name="email"
@@ -221,7 +227,7 @@ export function RegisterForm({ token }: { token: string }) {
                 maxLength={254}
                 required
               />
-              <label htmlFor="register-password">Create password</label>
+              <label htmlFor="register-password">{t.createPassword}</label>
               <PasswordInput
                 id="register-password"
                 name="password"
@@ -231,7 +237,7 @@ export function RegisterForm({ token }: { token: string }) {
                 required
               />
               <label htmlFor="register-confirm-password">
-                Confirm password
+                {t.confirmPassword}
               </label>
               <PasswordInput
                 id="register-confirm-password"
@@ -241,9 +247,23 @@ export function RegisterForm({ token }: { token: string }) {
                 maxLength={128}
                 required
               />
+              <label htmlFor="register-language">{t.language}</label>
+              <select
+                id="register-language"
+                name="locale"
+                value={locale}
+                onChange={(event) => setLocale(event.target.value as Locale)}
+              >
+                {locales.map((option) => (
+                  <option key={option} value={option}>
+                    {localeNames[option]}
+                  </option>
+                ))}
+              </select>
+              <small className="auth-field-hint">{t.languageHint}</small>
               {message && (
                 <p className="form-error" role="alert">
-                  {message}
+                  {errorMessage(messages, message)}
                 </p>
               )}
               <button
@@ -251,7 +271,7 @@ export function RegisterForm({ token }: { token: string }) {
                 type="submit"
                 disabled={isSubmitting}
               >
-                {isSubmitting ? "Submitting…" : "Submit registration"}
+                {isSubmitting ? t.submitting : t.submit}
               </button>
             </form>
           </>

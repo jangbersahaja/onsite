@@ -10,7 +10,13 @@ function decodeVapidKey(value: string) {
   return Uint8Array.from(raw, (character) => character.charCodeAt(0));
 }
 
-export function NotificationSettings({ outletId }: { outletId: string }) {
+export function NotificationSettings({
+  outletId,
+  outletName,
+}: {
+  outletId: string;
+  outletName?: string;
+}) {
   const [isVisible, setIsVisible] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [publicKey, setPublicKey] = useState<string | null>(null);
@@ -190,14 +196,14 @@ export function NotificationSettings({ outletId }: { outletId: string }) {
   if (!isVisible) return null;
 
   const cannotEnable = !isSupported || !publicKey;
+  const titleId = `notification-settings-${outletId}`;
   return (
-    <section
-      className="outlet-notification-settings"
-      aria-labelledby="notification-settings-title"
-    >
+    <section className="outlet-notification-settings" aria-labelledby={titleId}>
       <div>
         <p className="eyebrow">OUTLET ALERTS</p>
-        <h2 id="notification-settings-title">Browser notifications</h2>
+        <h2 id={titleId}>
+          {outletName ? `${outletName} alerts` : "Browser notifications"}
+        </h2>
         <p className="team-section-description">
           Get alerts for clocking, breaks, correction requests, and timesheet
           edits.

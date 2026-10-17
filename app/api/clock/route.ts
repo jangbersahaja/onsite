@@ -56,7 +56,10 @@ const clockActionSchema = z.discriminatedUnion("action", [
 
 function unavailable() {
   return Response.json(
-    { error: "Set DATABASE_URL before using clocking." },
+    {
+      error: "Set DATABASE_URL before using clocking.",
+      code: "clock_unconfigured",
+    },
     { status: 503 },
   );
 }
@@ -69,10 +72,16 @@ export async function GET(request: Request) {
       headers: request.headers,
     });
     if (!session)
-      return Response.json({ error: "Sign in required." }, { status: 401 });
+      return Response.json(
+        { error: "Sign in required.", code: "unauthorized" },
+        { status: 401 },
+      );
     if (!session.user.canAccessClock)
       return Response.json(
-        { error: "Clock access is not enabled." },
+        {
+          error: "Clock access is not enabled.",
+          code: "clock_access_disabled",
+        },
         { status: 403 },
       );
 
@@ -133,7 +142,10 @@ export async function GET(request: Request) {
     const pageOffset = Number(params.get("offset") ?? 0);
     if (!historyRange) {
       return Response.json(
-        { error: "History date filters are invalid." },
+        {
+          error: "History date filters are invalid.",
+          code: "invalid_history_filters",
+        },
         { status: 400 },
       );
     }
@@ -145,7 +157,10 @@ export async function GET(request: Request) {
       pageOffset < 0
     ) {
       return Response.json(
-        { error: "History pagination is invalid." },
+        {
+          error: "History pagination is invalid.",
+          code: "invalid_history_pagination",
+        },
         { status: 400 },
       );
     }
@@ -181,6 +196,7 @@ export async function GET(request: Request) {
     const breakRows = recentSessions.length
       ? await db
           .select({
+            id: workBreaks.id,
             workSessionId: workBreaks.workSessionId,
             startedAt: workBreaks.startedAt,
             endedAt: workBreaks.endedAt,
@@ -216,7 +232,10 @@ export async function GET(request: Request) {
     });
   } catch {
     return Response.json(
-      { error: "Could not load timekeeping data." },
+      {
+        error: "Could not load timekeeping data.",
+        code: "timekeeping_load_failed",
+      },
       { status: 500 },
     );
   }
@@ -230,10 +249,16 @@ export async function POST(request: Request) {
       headers: request.headers,
     });
     if (!session)
-      return Response.json({ error: "Sign in required." }, { status: 401 });
+      return Response.json(
+        { error: "Sign in required.", code: "unauthorized" },
+        { status: 401 },
+      );
     if (!session.user.canAccessClock)
       return Response.json(
-        { error: "Clock access is not enabled." },
+        {
+          error: "Clock access is not enabled.",
+          code: "clock_access_disabled",
+        },
         { status: 403 },
       );
 
@@ -242,7 +267,7 @@ export async function POST(request: Request) {
       rawBody = await request.json();
     } catch {
       return Response.json(
-        { error: "Request body must be valid JSON." },
+        { error: "Request body must be valid JSON.", code: "invalid_json" },
         { status: 400 },
       );
     }
@@ -250,7 +275,10 @@ export async function POST(request: Request) {
     const parsed = clockActionSchema.safeParse(rawBody);
     if (!parsed.success) {
       return Response.json(
-        { error: "Clock action details are invalid." },
+        {
+          error: "Clock action details are invalid.",
+          code: "invalid_clock_action",
+        },
         { status: 400 },
       );
     }
@@ -329,19 +357,28 @@ export async function POST(request: Request) {
 
       if (outcome.kind === "no_open_shift") {
         return Response.json(
-          { error: "No open shift exists at this outlet." },
+          {
+            error: "No open shift exists at this outlet.",
+            code: "no_open_shift",
+          },
           { status: 409 },
         );
       }
       if (outcome.kind === "already_on_break") {
         return Response.json(
-          { error: "This shift already has an open break." },
+          {
+            error: "This shift already has an open break.",
+            code: "break_already_open",
+          },
           { status: 409 },
         );
       }
       if (outcome.kind === "not_on_break") {
         return Response.json(
-          { error: "This shift has no open break to end." },
+          {
+            error: "This shift has no open break to end.",
+            code: "no_open_break",
+          },
           { status: 409 },
         );
       }
@@ -377,7 +414,10 @@ export async function POST(request: Request) {
 
     if (!assignment)
       return Response.json(
-        { error: "You are not assigned to this outlet." },
+        {
+          error: "You are not assigned to this outlet.",
+          code: "outlet_not_assigned",
+        },
         { status: 403 },
       );
 
@@ -428,7 +468,10 @@ export async function POST(request: Request) {
       .limit(1);
 
     if (!outlet)
-      return Response.json({ error: "Outlet not found." }, { status: 404 });
+      return Response.json(
+        { error: "Outlet not found.", code: "outlet_not_found" },
+        { status: 404 },
+      );
 
     const location = verifyGeofence(
       {
@@ -445,9 +488,14 @@ export async function POST(request: Request) {
         location.reason === "poor_accuracy"
           ? "Location accuracy is too low. Request a manual time correction from your outlet lead."
           : "You could not be verified within this outlet's clocking radius. Request a manual time correction if needed.";
+      const code =
+        location.reason === "poor_accuracy"
+          ? "location_accuracy_low"
+          : "outside_clock_radius";
       return Response.json(
         {
           error,
+          code,
           reason: location.reason,
           distanceMeters: Math.round(location.distanceMeters),
           accuracyMeters: Math.round(input.accuracy),
@@ -554,19 +602,24 @@ export async function POST(request: Request) {
     });
 
     if (!result) {
-      return Response.json(
-        {
-          error:
-            input.action === "clock_in"
-              ? "You already have an open shift."
-              : "No open shift exists at this outlet.",
-        },
-        { status: 409 },
-      );
+      const conflict =
+        input.action === "clock_in"
+          ? {
+              error: "You already have an open shift.",
+              code: "already_clocked_in",
+            }
+          : {
+              error: "No open shift exists at this outlet.",
+              code: "no_open_shift",
+            };
+      return Response.json(conflict, { status: 409 });
     }
     if ("kind" in result) {
       return Response.json(
-        { error: "End your break before clocking out." },
+        {
+          error: "End your break before clocking out.",
+          code: "end_break_first",
+        },
         { status: 409 },
       );
     }
@@ -588,12 +641,18 @@ export async function POST(request: Request) {
     const code = (error as { code?: string }).code;
     if (code === "23505") {
       return Response.json(
-        { error: "You already have an open shift." },
+        {
+          error: "You already have an open shift.",
+          code: "already_clocked_in",
+        },
         { status: 409 },
       );
     }
     return Response.json(
-      { error: "Could not record the clock action." },
+      {
+        error: "Could not record the clock action.",
+        code: "clock_action_failed",
+      },
       { status: 500 },
     );
   }

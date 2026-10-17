@@ -3,6 +3,7 @@ import { hasServerConfiguration } from "@/lib/app-config";
 import { recordAudit } from "@/lib/audit";
 import { createSession, sessionCookie } from "@/lib/auth-instance";
 import { getDb } from "@/lib/db";
+import { localeCookie } from "@/lib/i18n/config";
 import { verifyPassword } from "@/lib/password";
 import { eq, sql } from "drizzle-orm";
 import { createHash } from "node:crypto";
@@ -18,7 +19,7 @@ const signInSchema = z
 export async function POST(request: Request) {
   if (!hasServerConfiguration()) {
     return Response.json(
-      { error: "Authentication is not configured." },
+      { error: "Authentication is not configured.", code: "auth_unconfigured" },
       { status: 503 },
     );
   }
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
     body = await request.json();
   } catch {
     return Response.json(
-      { error: "Request body must be valid JSON." },
+      { error: "Request body must be valid JSON.", code: "invalid_json" },
       { status: 400 },
     );
   }
@@ -36,7 +37,10 @@ export async function POST(request: Request) {
   const parsed = signInSchema.safeParse(body);
   if (!parsed.success) {
     return Response.json(
-      { error: "Username/email and password are required." },
+      {
+        error: "Username/email and password are required.",
+        code: "invalid_sign_in",
+      },
       { status: 400 },
     );
   }
@@ -57,7 +61,10 @@ export async function POST(request: Request) {
 
   if (attempt?.blockedUntil && attempt.blockedUntil > now) {
     return Response.json(
-      { error: "Too many sign-in attempts. Try again later." },
+      {
+        error: "Too many sign-in attempts. Try again later.",
+        code: "too_many_attempts",
+      },
       { status: 429 },
     );
   }
@@ -73,6 +80,7 @@ export async function POST(request: Request) {
       canAccessClock: user.canAccessClock,
       canAccessBackoffice: user.canAccessBackoffice,
       approvalStatus: user.approvalStatus,
+      locale: user.locale,
     })
     .from(user)
     .where(
@@ -107,7 +115,10 @@ export async function POST(request: Request) {
         },
       });
     return Response.json(
-      { error: "Username/email or password was not recognized." },
+      {
+        error: "Username/email or password was not recognized.",
+        code: "invalid_credentials",
+      },
       { status: 401 },
     );
   }
@@ -136,6 +147,15 @@ export async function POST(request: Request) {
     entityType: "user",
     entityId: account.id,
   });
+
+  const headers = new Headers({
+    "Cache-Control": "no-store",
+    "Set-Cookie": sessionCookie(newSession.token),
+  });
+  // Apply the saved language to this browser so the first render matches.
+  if (account.locale)
+    headers.append("Set-Cookie", localeCookie(account.locale));
+
   return Response.json(
     {
       user: {
@@ -146,13 +166,9 @@ export async function POST(request: Request) {
         accountType: account.accountType,
         canAccessClock: account.canAccessClock,
         canAccessBackoffice: account.canAccessBackoffice,
+        locale: account.locale,
       },
     },
-    {
-      headers: {
-        "Cache-Control": "no-store",
-        "Set-Cookie": sessionCookie(newSession.token),
-      },
-    },
+    { headers },
   );
 }

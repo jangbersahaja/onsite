@@ -1,8 +1,13 @@
-import { outletMemberships, outlets, pushSubscriptions } from "@/db/schema";
+import { pushSubscriptions } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { and, eq } from "drizzle-orm";
+import {
+  getOutletNotificationEnabled,
+  setOutletNotificationEnabled,
+} from "@/lib/outlet-notification-preferences";
+import { getTeamAccess } from "@/lib/team-access";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 const preferenceSchema = z
@@ -31,36 +36,22 @@ export async function GET(request: Request) {
       return Response.json({ error: "Outlet ID is invalid." }, { status: 400 });
     }
 
-    if (!session.user.canAccessBackoffice) {
+    const access = await getTeamAccess(session.user.id);
+    if (!access || !access.outletIds.includes(outletId)) {
       return Response.json(
         { error: "Active backoffice outlet assignment not found." },
         { status: 404 },
       );
     }
 
-    const [membership] = await getDb()
-      .select({ enabled: outletMemberships.notificationsEnabled })
-      .from(outletMemberships)
-      .innerJoin(outlets, eq(outletMemberships.outletId, outlets.id))
-      .where(
-        and(
-          eq(outletMemberships.userId, session.user.id),
-          eq(outletMemberships.outletId, outletId),
-          eq(outletMemberships.isActive, true),
-          eq(outlets.isActive, true),
-        ),
-      )
-      .limit(1);
-
-    if (!membership) {
-      return Response.json(
-        { error: "Active backoffice outlet assignment not found." },
-        { status: 404 },
-      );
-    }
+    const enabled = await getOutletNotificationEnabled({
+      userId: session.user.id,
+      outletId,
+      isSuperAdmin: access.isSuperAdmin,
+    });
 
     return Response.json({
-      enabled: membership.enabled,
+      enabled,
       publicKey: process.env.VAPID_PUBLIC_KEY ?? null,
     });
   } catch {
@@ -98,8 +89,8 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const db = getDb();
-    if (!session.user.canAccessBackoffice) {
+    const access = await getTeamAccess(session.user.id);
+    if (!access || !access.outletIds.includes(parsed.data.outletId)) {
       return Response.json(
         { error: "Active backoffice outlet assignment not found." },
         { status: 404 },
@@ -116,7 +107,7 @@ export async function PATCH(request: Request) {
           { status: 503 },
         );
       }
-      const [subscription] = await db
+      const [subscription] = await getDb()
         .select({ id: pushSubscriptions.id })
         .from(pushSubscriptions)
         .where(eq(pushSubscriptions.userId, session.user.id))
@@ -129,25 +120,13 @@ export async function PATCH(request: Request) {
       }
     }
 
-    const [membership] = await db
-      .update(outletMemberships)
-      .set({ notificationsEnabled: parsed.data.enabled })
-      .where(
-        and(
-          eq(outletMemberships.userId, session.user.id),
-          eq(outletMemberships.outletId, parsed.data.outletId),
-          eq(outletMemberships.isActive, true),
-        ),
-      )
-      .returning({ enabled: outletMemberships.notificationsEnabled });
-
-    if (!membership) {
-      return Response.json(
-        { error: "Active backoffice outlet assignment not found." },
-        { status: 404 },
-      );
-    }
-    return Response.json({ enabled: membership.enabled });
+    const enabled = await setOutletNotificationEnabled({
+      userId: session.user.id,
+      outletId: parsed.data.outletId,
+      isSuperAdmin: access.isSuperAdmin,
+      enabled: parsed.data.enabled,
+    });
+    return Response.json({ enabled });
   } catch {
     return Response.json(
       { error: "Could not update notification settings." },

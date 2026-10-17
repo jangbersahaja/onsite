@@ -1,8 +1,9 @@
-import { outletMemberships, outlets, pushSubscriptions } from "@/db/schema";
+import { pushSubscriptions } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { isSupportedPushEndpoint } from "@/lib/push-notification-content";
+import { getTeamAccess } from "@/lib/team-access";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
@@ -72,19 +73,10 @@ export async function POST(request: Request) {
       );
     }
 
-    const [membership] = await getDb()
-      .select({ id: outletMemberships.id })
-      .from(outletMemberships)
-      .innerJoin(outlets, eq(outletMemberships.outletId, outlets.id))
-      .where(
-        and(
-          eq(outletMemberships.userId, session.user.id),
-          eq(outletMemberships.isActive, true),
-          eq(outlets.isActive, true),
-        ),
-      )
-      .limit(1);
-    if (!membership) {
+    // Regular users need an active outlet membership; super admins can manage
+    // every active outlet, so getTeamAccess lists them all.
+    const access = await getTeamAccess(session.user.id);
+    if (!access || access.outletIds.length === 0) {
       return Response.json(
         { error: "An active outlet assignment is required." },
         { status: 403 },

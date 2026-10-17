@@ -1,5 +1,6 @@
 "use client";
 
+import { useLocale } from "@/app/_components/locale-provider";
 import { useCallback, useRef, useState, type ReactNode } from "react";
 import { ModalDialog } from "./modal-dialog";
 
@@ -51,6 +52,7 @@ function ConfirmDialog({
   options: ConfirmOptions | null;
   onSettle: (confirmed: boolean) => void;
 }) {
+  const { messages } = useLocale();
   return (
     <ModalDialog
       open={options !== null}
@@ -77,14 +79,14 @@ function ConfirmDialog({
               type="button"
               onClick={() => onSettle(false)}
             >
-              {options.cancelLabel ?? "Cancel"}
+              {options.cancelLabel ?? messages.shell.dialog.cancel}
             </button>
             <button
               className={`btn btn-lg ${options.tone === "danger" ? "btn-danger-solid" : "btn-primary"}`}
               type="button"
               onClick={() => onSettle(true)}
             >
-              {options.confirmLabel ?? "Confirm"}
+              {options.confirmLabel ?? messages.shell.dialog.confirm}
             </button>
           </div>
         </div>
