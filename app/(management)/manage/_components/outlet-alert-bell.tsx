@@ -1,6 +1,6 @@
 "use client";
 
-import { BellIcon } from "@/app/_components/icons";
+import { BellIcon, BellOffIcon } from "@/app/_components/icons";
 import { useEffect, useState } from "react";
 
 function decodeVapidKey(value: string) {
@@ -187,7 +187,7 @@ export function OutletAlertBell({
         disabled={disabled}
         onClick={() => void toggleAlerts()}
       >
-        <BellIcon />
+        {isOn ? <BellIcon /> : <BellOffIcon />}
       </button>
       {message && (
         <p className="outlet-alert-message" role="status" aria-live="polite">

@@ -9,7 +9,7 @@ import {
   type TimesheetEditValues,
 } from "@/app/(management)/timesheets/_components/timesheet-edit-dialog";
 import { useConfirmDialog } from "@/app/_components/confirm-dialog";
-import { EditIcon, TrashIcon } from "@/app/_components/icons";
+import { EditIcon, PlusIcon, TrashIcon } from "@/app/_components/icons";
 import { OutletAvatar } from "@/app/_components/outlet-avatar";
 import { outletDateTimeToISOString } from "@/lib/outlet-time";
 import Link from "next/link";
@@ -143,6 +143,8 @@ async function fetchTimesheetData(nextFilters: Filters) {
   return body as TimesheetData;
 }
 
+const LONG_SHIFT_MINUTES = 10 * 60;
+
 function formatDuration(minutes: number | null) {
   if (minutes === null) return "In progress";
   return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, "0")}m`;
@@ -161,8 +163,9 @@ function splitLocalTimestamp(timestamp: string | null) {
 function formatShiftDate(date: string) {
   const [year, month, day] = date.split("-").map(Number);
   return new Intl.DateTimeFormat("en-GB", {
+    weekday: "short",
     day: "2-digit",
-    month: "2-digit",
+    month: "short",
     year: "numeric",
     timeZone: "UTC",
   }).format(new Date(Date.UTC(year, month - 1, day)));
@@ -646,17 +649,20 @@ export default function TimesheetsPage() {
                 </h2>
                 {group.employeeEmail && <small>{group.employeeEmail}</small>}
               </div>
-              <span className="outlet-inline">
-                <OutletAvatar
-                  name={group.outletName}
-                  imageUrl={
-                    data?.outlets.find((outlet) => outlet.id === group.outletId)
-                      ?.imageUrl
-                  }
-                  className="outlet-avatar outlet-avatar-sm"
-                />
-                {group.outletName}
-              </span>
+              <div className="timesheet-staff-actions">
+                <span className="outlet-inline">
+                  <OutletAvatar
+                    name={group.outletName}
+                    imageUrl={
+                      data?.outlets.find(
+                        (outlet) => outlet.id === group.outletId,
+                      )?.imageUrl
+                    }
+                    className="outlet-avatar outlet-avatar-sm"
+                  />
+                  {group.outletName}
+                </span>
+              </div>
             </header>
             <div className="team-table-wrap">
               <table className="team-table timesheet-table">
@@ -674,6 +680,9 @@ export default function TimesheetsPage() {
                     const clockIn = splitLocalTimestamp(row.clockInLocal);
                     const clockOut = splitLocalTimestamp(row.clockOutLocal);
                     const isExpanded = expandedShiftIds.has(row.id);
+                    const isLongShift =
+                      row.durationMinutes !== null &&
+                      row.durationMinutes > LONG_SHIFT_MINUTES;
                     return (
                       <tr key={row.id} data-expanded={isExpanded}>
                         <td>
@@ -694,21 +703,34 @@ export default function TimesheetsPage() {
                           className="timesheet-clock-time"
                           data-label="Clock in"
                         >
-                          {clockIn?.time}
+                          {clockIn?.time.slice(0, 5)}
                         </td>
                         <td
-                          className="timesheet-clock-time"
+                          className={
+                            clockOut
+                              ? "timesheet-clock-time"
+                              : "timesheet-clock-time timesheet-open-shift"
+                          }
                           data-label="Clock out"
                         >
-                          {clockOut?.time ?? "Open shift"}
+                          {clockOut ? clockOut.time.slice(0, 5) : "Open shift"}
                         </td>
                         <td data-label="Worked">
                           <div className="timesheet-worked-row">
-                            <strong className="timesheet-worked">
+                            <strong
+                              className={
+                                isLongShift
+                                  ? "timesheet-worked timesheet-worked-long"
+                                  : "timesheet-worked"
+                              }
+                              title={
+                                isLongShift ? "Longer than 10 hours" : undefined
+                              }
+                            >
                               {formatDuration(row.durationMinutes)}
                             </strong>
                             <button
-                              className="timesheet-details-toggle"
+                              className="timesheet-details-toggle timesheet-icon-button"
                               type="button"
                               aria-expanded={isExpanded}
                               aria-label={
@@ -733,14 +755,16 @@ export default function TimesheetsPage() {
                               </svg>
                             </button>
                           </div>
-                          <small className="timesheet-duration-detail">
-                            Gross {formatDuration(row.grossDurationMinutes)}
-                            <span aria-hidden="true"> · </span>
-                            Break{" "}
-                            {row.breakMinutes === null
-                              ? "Not provided"
-                              : formatDuration(row.breakMinutes)}
-                          </small>
+                          {row.breakMinutes !== 0 && (
+                            <small className="timesheet-duration-detail">
+                              Gross {formatDuration(row.grossDurationMinutes)}
+                              <span aria-hidden="true"> · </span>
+                              Break{" "}
+                              {row.breakMinutes === null
+                                ? "Not provided"
+                                : formatDuration(row.breakMinutes)}
+                            </small>
+                          )}
                         </td>
                         <td data-label="Record">
                           <div className="timesheet-record-cell">
@@ -761,7 +785,7 @@ export default function TimesheetsPage() {
                             {row.source === "onsite" && (
                               <div className="timesheet-record-actions">
                                 <button
-                                  className="btn btn-ghost btn-icon btn-sm"
+                                  className="btn btn-ghost btn-icon btn-sm timesheet-icon-button"
                                   type="button"
                                   aria-label="Edit shift"
                                   title="Edit shift"
@@ -772,7 +796,7 @@ export default function TimesheetsPage() {
                                 {row.clockOutAt &&
                                   canChangeShifts(row.userId) && (
                                     <button
-                                      className="btn btn-danger btn-icon btn-sm"
+                                      className="btn btn-danger btn-icon btn-sm timesheet-icon-button"
                                       type="button"
                                       aria-label="Delete shift"
                                       title="Delete shift"
@@ -793,19 +817,6 @@ export default function TimesheetsPage() {
                       <td colSpan={5}>No shifts in this range.</td>
                     </tr>
                   )}
-                  {group.userId && canChangeShifts(group.userId) && (
-                    <tr className="timesheet-add-row">
-                      <td colSpan={5}>
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          type="button"
-                          onClick={() => openCreate(group)}
-                        >
-                          Add shift
-                        </button>
-                      </td>
-                    </tr>
-                  )}
                 </tbody>
                 <tfoot>
                   <tr>
@@ -813,7 +824,7 @@ export default function TimesheetsPage() {
                       {group.rows.length} shift{" "}
                       {group.rows.length === 1 ? "record" : "records"}
                     </td>
-                    <td className="timesheet-table-total-hours" colSpan={2}>
+                    <td className="timesheet-table-total-hours">
                       <span>Total work hours</span>
                       <strong>
                         {formatDuration(
@@ -823,6 +834,21 @@ export default function TimesheetsPage() {
                           ),
                         )}
                       </strong>
+                    </td>
+                    <td className="timesheet-add-shift-cell">
+                      <div className="timesheet-add-shift-action">
+                        {group.userId && canChangeShifts(group.userId) && (
+                          <button
+                            className="btn btn-secondary btn-icon btn-sm timesheet-icon-button"
+                            type="button"
+                            aria-label={`Add shift for ${group.employeeName}`}
+                            title="Add shift"
+                            onClick={() => openCreate(group)}
+                          >
+                            <PlusIcon />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 </tfoot>
