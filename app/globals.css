@@ -2546,6 +2546,8 @@ h2 {
   padding: 0 9px;
   color: var(--ink);
   font: inherit;
+  font-size: 15px;
+  font-weight: 500;
 }
 .timesheet-filters .auth-submit,
 .timesheet-edit-fields .auth-submit {
@@ -6046,16 +6048,18 @@ small,
   .timesheet-table .timesheet-empty {
     height: auto !important;
   }
+  .timesheet-table tbody {
+    gap: 0;
+  }
   .timesheet-table tbody tr {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 12px 14px;
-    border-left: 4px solid var(--green);
-  }
-  .timesheet-table tbody tr:has(.manual-adjustment-label) {
-    border-left-color: #945622;
-  }
-  .timesheet-table tbody tr:has(.storehub-source-label) {
-    border-left-color: #176b7a;
+    padding: 14px 0;
+    border: 0;
+    border-top: 1px solid #edf0eb;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
   }
   .timesheet-table tbody td {
     grid-template-columns: minmax(0, 1fr);
@@ -6133,17 +6137,15 @@ small,
     transform: rotate(180deg);
   }
   .timesheet-table .timesheet-record-cell {
-    flex-direction: column;
-    align-items: stretch;
     gap: 10px;
   }
-  .timesheet-table .timesheet-record-cell .timesheet-edit-button {
-    width: 100%;
+  .timesheet-table .timesheet-record-actions .btn {
+    width: 44px;
+    height: 44px;
     min-height: 44px;
-    font-size: 13px;
   }
   .timesheet-table tbody .timesheet-shift-date time {
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 650;
   }
   .timesheet-table tbody .timesheet-shift-date small,
@@ -6151,12 +6153,40 @@ small,
     font-size: 12px;
   }
   .timesheet-table tbody .timesheet-clock-time {
-    font-size: 17px;
-    font-weight: 650;
+    font-size: 14px;
+    font-weight: 600;
   }
   .timesheet-table tbody .timesheet-worked {
     font-size: 22px;
     font-weight: 700;
+  }
+  .timesheet-table tbody tr.timesheet-add-row,
+  .timesheet-table tbody tr.timesheet-empty-row {
+    display: block;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .timesheet-table tbody tr.timesheet-empty-row td {
+    padding: 4px 0;
+    text-align: center;
+  }
+  .timesheet-table tbody tr.timesheet-add-row .btn {
+    width: 100%;
+    min-height: 44px;
+  }
+  .timesheet-table .manual-adjustment-label,
+  .timesheet-table .gps-source-label,
+  .timesheet-table .storehub-source-label {
+    display: inline-flex;
+    align-items: center;
+    min-height: 26px;
+    border-radius: 999px;
+    background: #f4f7f8;
+    padding: 0 10px;
+    font-size: 11px;
+    font-weight: 600;
   }
 }
 
@@ -6358,5 +6388,40 @@ small,
   .workspace-dialog,
   .workspace-dialog:has(.pin-setup-panel) {
     animation: none;
+  }
+}
+
+/* Shared form control typography; overrides per-component font rules. */
+body
+  input:not(
+    [type="checkbox"],
+    [type="radio"],
+    [type="hidden"],
+    [type="file"]
+  ):not(.auth-pin-input):not(.pin-digit-group *),
+body select,
+body textarea {
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+body input[type="date"]::-webkit-datetime-edit,
+body input[type="datetime-local"]::-webkit-datetime-edit {
+  font-size: inherit;
+  line-height: inherit;
+  padding: 0;
+}
+@media (max-width: 600px) {
+  body
+    input:not(
+      [type="checkbox"],
+      [type="radio"],
+      [type="hidden"],
+      [type="file"]
+    ):not(.auth-pin-input):not(.pin-digit-group *),
+  body select,
+  body textarea {
+    font-size: 16px;
   }
 }
