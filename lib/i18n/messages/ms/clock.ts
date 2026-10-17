@@ -12,7 +12,7 @@ export const msClock: typeof enClock = {
     myTime: "MASA SAYA",
     clock: "Kehadiran",
     history: "Sejarah",
-    workspace: "RUANG KERJA",
+    workspace: "URUS",
     backoffice: "Backoffice",
   },
   status: {
@@ -31,7 +31,8 @@ export const msClock: typeof enClock = {
   shifts: {
     heading: "Shif terkini",
     viewAll: "Lihat semua shif",
-    empty: "Tiada rekod kehadiran lagi.",
+    empty:
+      "Tiada shif lagi. Rekod masuk dan keluar anda akan dipaparkan di sini selepas shif pertama.",
     detailsLabel: "Butiran kehadiran dan shif",
   },
   actions: {
@@ -50,7 +51,13 @@ export const msClock: typeof enClock = {
     checkEnrollment: "Semak permohonan pendaftaran",
     checkPending: "Semak permohonan tertunda",
     requestEnrollment: "Mohon pendaftaran peranti",
+    retryLocation: "Cuba semula lokasi",
   },
+  nextStep: {
+    device: "Seterusnya: lulus browser ini untuk membolehkan kehadiran.",
+    gps: "Seterusnya: tunggu ketepatan GPS 50 m atau kurang, atau dekati outlet.",
+  },
+  timezoneNotice: "Masa dipaparkan mengikut masa outlet ({timezone}).",
   confirm: {
     clockInTitle: "Daftar masuk sekarang?",
     clockOutTitle: "Daftar keluar sekarang?",
@@ -69,6 +76,7 @@ export const msClock: typeof enClock = {
     device: "Peranti",
     gpsReady: "GPS sedia",
     gpsChecking: "Menyemak GPS…",
+    gpsImprovingTitle: "Menambah baik ketepatan GPS…",
     noOutletTitle: "Tiada outlet diberikan",
     noOutletDetail:
       "Minta pengurus anda menambah anda ke outlet aktif sebelum mendaftar masuk.",
@@ -77,8 +85,9 @@ export const msClock: typeof enClock = {
       "Data kehadiran anda tidak dapat dimuatkan. Muat semula halaman atau hubungi pengurus anda.",
     accuracyLowTitle: "Ketepatan GPS terlalu rendah",
     accuracyServerDetail:
-      "Pelayan mengukur ±{accuracy} m; ia mesti 50 m atau kurang.",
-    accuracyLiveDetail: "Ketepatan ±{accuracy} m; ia mesti 50 m atau kurang.",
+      "Pelayan mengukur ±{accuracy} m; ia mesti 50 m atau kurang. Bergerak berdekatan tingkap atau di luar, kemudian cuba lagi.",
+    accuracyLiveDetail:
+      "Ketepatan ±{accuracy} m; ia mesti 50 m atau kurang. Menunggu isyarat yang lebih kuat…",
     outsideTitle: "Di luar kawasan daftar masuk",
     outsideServerDetail: "{distance} m dari outlet; had ialah {radius} m.",
     outsideLiveDetail:

@@ -105,6 +105,7 @@ export function SignInForm() {
               alt=""
               width={128}
               height={128}
+              priority
             />
             <span>OnSITE</span>
           </Link>
@@ -137,6 +138,7 @@ export function SignInForm() {
             alt=""
             width={128}
             height={128}
+            priority
           />
           <span>OnSITE</span>
         </Link>

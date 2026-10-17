@@ -292,6 +292,8 @@ export default function Home() {
     reason: "permission_denied" | "unavailable";
   } | null>(null);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
+  const [deviceTimeZone, setDeviceTimeZone] = useState<string | null>(null);
+  const [locationRetryCount, setLocationRetryCount] = useState(0);
   const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
   const [isCorrectionDialogOpen, setIsCorrectionDialogOpen] = useState(false);
   const { confirm, confirmDialog } = useConfirmDialog();
@@ -330,14 +332,34 @@ export default function Home() {
     isDeviceRequired &&
     (!staffDeviceStatus || !staffDeviceStatus.currentBrowserApproved),
   );
+  const isLivePoorAccuracy = Boolean(
+    liveGeofence &&
+    !liveGeofence.allowed &&
+    liveGeofence.reason === "poor_accuracy",
+  );
   const isLocationBlocked = Boolean(
     activeLocationError ||
     clockBlockInfo ||
-    (liveGeofence && !liveGeofence.allowed),
+    (liveGeofence && !liveGeofence.allowed && !isLivePoorAccuracy),
   );
   const shouldRequestManual = Boolean(
     !isOnBreak && isLocationBlocked && !isDeviceBlocked,
   );
+  const canRetryLocation = Boolean(
+    selectedOutlet && (activeLocationError || isLivePoorAccuracy),
+  );
+  const nextStepText = isDeviceBlocked
+    ? messages.clock.nextStep.device
+    : !isOnBreak && isLivePoorAccuracy
+      ? messages.clock.nextStep.gps
+      : null;
+
+  function retryLocation() {
+    setClockBlockInfo(null);
+    setLocationError(null);
+    setLocationFix(null);
+    setLocationRetryCount((count) => count + 1);
+  }
 
   function getGpsCheck(): ClockCheck {
     const { checks } = messages.clock;
@@ -391,8 +413,8 @@ export default function Home() {
       const accuracy = Math.round(locationFix?.accuracy ?? 0);
       return liveGeofence.reason === "poor_accuracy"
         ? {
-            state: "blocked",
-            title: checks.accuracyLowTitle,
+            state: "pending",
+            title: checks.gpsImprovingTitle,
             detail: format(checks.accuracyLiveDetail, { accuracy }),
           }
         : {
@@ -491,7 +513,7 @@ export default function Home() {
     );
 
     return () => navigator.geolocation.clearWatch(watchId);
-  }, [selectedOutlet?.id]);
+  }, [selectedOutlet?.id, locationRetryCount]);
 
   useEffect(() => {
     let active = true;
@@ -587,7 +609,10 @@ export default function Home() {
   }, [authUserId, isConfigured]);
 
   useEffect(() => {
-    const updateTime = () => setCurrentTime(new Date());
+    const updateTime = () => {
+      setCurrentTime(new Date());
+      setDeviceTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
+    };
     updateTime();
     const timer = window.setInterval(updateTime, 30_000);
     return () => window.clearInterval(timer);
@@ -595,7 +620,7 @@ export default function Home() {
 
   useReportClockWorkspace({
     pageTitle: messages.clock.pageTitle,
-    workspaceName: selectedOutlet?.name ?? messages.clock.workspaceFallback,
+    workspaceName: messages.clock.workspaceFallback,
     outlets: clockData?.outlets,
     selectedOutletId: selectedOutlet?.id,
     onOutletChange: setSelectedOutletId,
@@ -881,8 +906,20 @@ export default function Home() {
                   {clockParts.time}
                   {clockParts.period && <span>{clockParts.period}</span>}
                 </span>
+                {selectedOutlet &&
+                  deviceTimeZone &&
+                  deviceTimeZone !== selectedOutlet.timezone && (
+                    <p className="clock-timezone">
+                      {format(messages.clock.timezoneNotice, {
+                        timezone: selectedOutlet.timezone,
+                      })}
+                    </p>
+                  )}
               </div>
               <div className="clock-actions">
+                {nextStepText && (
+                  <p className="clock-next-step">{nextStepText}</p>
+                )}
                 <button
                   className={`clock-action${isClockedIn && !isOnBreak ? " is-clocked-in" : ""}${shouldRequestManual ? " is-manual" : ""}`}
                   type="button"
@@ -946,7 +983,17 @@ export default function Home() {
                 <ClockCheckItem
                   label={messages.clock.checks.gps}
                   check={gpsCheck}
-                />
+                >
+                  {canRetryLocation && (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      type="button"
+                      onClick={retryLocation}
+                    >
+                      {messages.clock.actions.retryLocation}
+                    </button>
+                  )}
+                </ClockCheckItem>
                 {isDeviceRequired && (
                   <ClockCheckItem
                     label={messages.clock.checks.device}
@@ -954,7 +1001,7 @@ export default function Home() {
                   >
                     {!staffDeviceStatus?.currentBrowserApproved && (
                       <button
-                        className="btn btn-ghost btn-sm"
+                        className="btn btn-primary btn-sm"
                         type="button"
                         disabled={isRequestingStaffDevice}
                         onClick={() => void handleRequestStaffDevice()}

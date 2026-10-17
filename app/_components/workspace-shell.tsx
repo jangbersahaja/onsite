@@ -409,6 +409,7 @@ export function WorkspaceShell({
             alt=""
             width={128}
             height={128}
+            priority
           />
           <span>OnSITE</span>
         </Link>

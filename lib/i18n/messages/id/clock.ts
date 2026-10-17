@@ -12,7 +12,7 @@ export const idClock: typeof enClock = {
     myTime: "WAKTU SAYA",
     clock: "Absensi",
     history: "Riwayat",
-    workspace: "RUANG KERJA",
+    workspace: "KELOLA",
     backoffice: "Backoffice",
   },
   status: {
@@ -31,7 +31,8 @@ export const idClock: typeof enClock = {
   shifts: {
     heading: "Shift terbaru",
     viewAll: "Lihat semua shift",
-    empty: "Belum ada catatan absensi.",
+    empty:
+      "Belum ada shift. Catatan absen masuk dan keluar Anda akan muncul di sini setelah shift pertama.",
     detailsLabel: "Detail absensi dan shift",
   },
   actions: {
@@ -50,7 +51,13 @@ export const idClock: typeof enClock = {
     checkEnrollment: "Periksa pengajuan pendaftaran",
     checkPending: "Periksa pengajuan tertunda",
     requestEnrollment: "Ajukan pendaftaran perangkat",
+    retryLocation: "Coba lagi lokasi",
   },
+  nextStep: {
+    device: "Berikutnya: setujui browser ini agar bisa absen.",
+    gps: "Berikutnya: tunggu akurasi GPS 50 m atau lebih baik, atau mendekat ke outlet.",
+  },
+  timezoneNotice: "Waktu ditampilkan sesuai zona waktu outlet ({timezone}).",
   confirm: {
     clockInTitle: "Absen masuk sekarang?",
     clockOutTitle: "Absen keluar sekarang?",
@@ -69,6 +76,7 @@ export const idClock: typeof enClock = {
     device: "Perangkat",
     gpsReady: "GPS siap",
     gpsChecking: "Memeriksa GPS…",
+    gpsImprovingTitle: "Meningkatkan akurasi GPS…",
     noOutletTitle: "Belum ada outlet yang ditugaskan",
     noOutletDetail:
       "Minta manajer Anda menambahkan Anda ke outlet aktif sebelum absen.",
@@ -77,8 +85,9 @@ export const idClock: typeof enClock = {
       "Data absensi Anda tidak dapat dimuat. Muat ulang halaman atau hubungi manajer Anda.",
     accuracyLowTitle: "Akurasi GPS terlalu rendah",
     accuracyServerDetail:
-      "Server mengukur ±{accuracy} m; harus 50 m atau lebih baik.",
-    accuracyLiveDetail: "Akurasi ±{accuracy} m; harus 50 m atau lebih baik.",
+      "Server mengukur ±{accuracy} m; harus 50 m atau lebih baik. Dekat jendela atau di luar ruangan, lalu coba lagi.",
+    accuracyLiveDetail:
+      "Akurasi ±{accuracy} m; harus 50 m atau lebih baik. Menunggu sinyal yang lebih kuat…",
     outsideTitle: "Di luar area absensi",
     outsideServerDetail: "{distance} m dari outlet; batasnya {radius} m.",
     outsideLiveDetail:

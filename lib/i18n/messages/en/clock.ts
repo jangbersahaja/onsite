@@ -10,7 +10,7 @@ export const enClock = {
     myTime: "MY TIME",
     clock: "Clock",
     history: "History",
-    workspace: "WORKSPACE",
+    workspace: "MANAGE",
     backoffice: "Backoffice",
   },
   status: {
@@ -29,7 +29,8 @@ export const enClock = {
   shifts: {
     heading: "Recent shifts",
     viewAll: "View all shifts",
-    empty: "No clock records yet.",
+    empty:
+      "No shifts yet. Your clock-ins and clock-outs will appear here after your first shift.",
     detailsLabel: "Clock and shift details",
   },
   actions: {
@@ -48,7 +49,13 @@ export const enClock = {
     checkEnrollment: "Check enrollment request",
     checkPending: "Check pending request",
     requestEnrollment: "Request device enrollment",
+    retryLocation: "Retry location",
   },
+  nextStep: {
+    device: "Next: approve this browser to unlock clocking.",
+    gps: "Next: wait for GPS accuracy of 50 m or better, or move closer to the outlet.",
+  },
+  timezoneNotice: "Times are shown in outlet time ({timezone}).",
   confirm: {
     clockInTitle: "Clock in now?",
     clockOutTitle: "Clock out now?",
@@ -67,6 +74,7 @@ export const enClock = {
     device: "Device",
     gpsReady: "GPS ready",
     gpsChecking: "Checking GPS…",
+    gpsImprovingTitle: "Improving GPS accuracy…",
     noOutletTitle: "No outlet assigned",
     noOutletDetail:
       "Ask your manager to add you to an active outlet before clocking.",
@@ -75,8 +83,9 @@ export const enClock = {
       "Your clock data could not be loaded. Reload the page or contact your manager.",
     accuracyLowTitle: "GPS accuracy too low",
     accuracyServerDetail:
-      "Server measured ±{accuracy} m; it must be 50 m or better.",
-    accuracyLiveDetail: "Accuracy is ±{accuracy} m; it must be 50 m or better.",
+      "Server measured ±{accuracy} m; it must be 50 m or better. Move near a window or outdoors, then try again.",
+    accuracyLiveDetail:
+      "Accuracy is ±{accuracy} m; it must be 50 m or better. Waiting for a stronger signal…",
     outsideTitle: "Outside the clocking area",
     outsideServerDetail:
       "{distance} m from the outlet; the limit is {radius} m.",

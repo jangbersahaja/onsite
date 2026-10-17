@@ -194,14 +194,14 @@ export function PinSettingsPanel({
               </label>
               <div className="clock-pin-actions">
                 <button
-                  className="btn btn-danger"
+                  className="btn btn-danger btn-sm"
                   type="submit"
                   disabled={isSavingPin}
                 >
                   {isSavingPin ? t.removing : t.removePin}
                 </button>
                 <button
-                  className="btn btn-secondary"
+                  className="btn btn-secondary btn-sm"
                   type="button"
                   onClick={() => setPinFormMode(null)}
                   disabled={isSavingPin}
@@ -213,7 +213,7 @@ export function PinSettingsPanel({
           ) : (
             <div className="clock-pin-actions">
               <button
-                className="btn btn-primary"
+                className="btn btn-primary btn-sm"
                 type="button"
                 onClick={openPinSetup}
               >
@@ -221,7 +221,7 @@ export function PinSettingsPanel({
               </button>
               {pinEnabled && (
                 <button
-                  className="btn btn-danger"
+                  className="btn btn-ghost btn-sm"
                   type="button"
                   onClick={() => {
                     setPinNotice(null);
