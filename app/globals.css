@@ -2952,16 +2952,53 @@ h2 {
   font-weight: 700;
   line-height: 1;
 }
-.correction-review-item {
-  display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(300px, 0.9fr);
-  gap: 28px;
-  border-bottom: 1px solid var(--line);
-  padding: 22px 0;
+.correction-review-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
-.correction-review-details h2 {
-  margin: 4px 0;
-  font-size: 19px;
+.correction-review-row {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  padding: 16px 4px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.correction-review-row:hover {
+  background: #f7faf8;
+}
+.correction-review-row:focus-visible {
+  outline: 2px solid rgba(99, 91, 255, 0.35);
+  outline-offset: -2px;
+}
+.correction-review-row-main {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+.correction-review-row-main strong {
+  overflow: hidden;
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.correction-review-row-main small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.correction-review-row-action {
+  flex: none;
+  color: var(--green-dark);
+  font-size: 12px;
+  font-weight: 650;
 }
 .correction-review-email {
   margin: 0 0 13px;
@@ -3043,9 +3080,8 @@ h2 {
   .timesheet-edit-fields {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-  .correction-review-item {
-    grid-template-columns: minmax(0, 1fr) minmax(280px, 0.9fr);
-    gap: 18px;
+  .correction-review-row-main strong {
+    font-size: 14px;
   }
 }
 @media (max-width: 600px) {
@@ -3082,10 +3118,8 @@ h2 {
   .timesheet-edit-form h2 {
     font-size: 15px;
   }
-  .correction-review-item {
-    grid-template-columns: 1fr;
-    gap: 15px;
-    padding: 18px 0;
+  .correction-review-row {
+    padding: 14px 2px;
   }
   .correction-decision-actions > button {
     flex: 1;

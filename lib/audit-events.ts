@@ -18,6 +18,10 @@ export const AUDIT_ACTIONS = [
   "correction_break_applied",
   "correction_break_changed",
   "correction_break_adjusted",
+  "correction_noted",
+  "correction_rejected",
+  "correction_punch_reverted",
+  "correction_break_reverted",
   "invitation_created",
   "outlet_created",
   "outlet_updated",
@@ -104,6 +108,14 @@ const describers: Record<AuditAction, (parts: DescriptionParts) => string> = {
     `${actor} changed a break${atOutlet}`,
   correction_break_adjusted: ({ actor, atOutlet }) =>
     `${actor} adjusted a break${atOutlet}`,
+  correction_noted: ({ actor, atOutlet }) =>
+    `${actor} added a note to a correction request${atOutlet}`,
+  correction_rejected: ({ actor, atOutlet }) =>
+    `${actor} rejected a correction request${atOutlet}`,
+  correction_punch_reverted: ({ actor, atOutlet }) =>
+    `${actor} reverted a punch to its previous time${atOutlet}`,
+  correction_break_reverted: ({ actor, atOutlet }) =>
+    `${actor} reverted a break to its previous time${atOutlet}`,
   invitation_created: ({ actor, target }) =>
     `${actor} invited ${target ?? "a new user"}`,
   outlet_created: ({ actor, outletName }) =>

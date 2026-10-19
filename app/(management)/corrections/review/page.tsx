@@ -1,6 +1,8 @@
 "use client";
 
 import { useConfirmDialog } from "@/app/_components/confirm-dialog";
+import { CloseIcon, RefreshIcon } from "@/app/_components/icons";
+import { ModalDialog } from "@/app/_components/modal-dialog";
 import { REVIEW_REQUESTS_CHANGED_EVENT } from "@/app/_components/workspace-shell";
 import {
   isBreakCorrectionEvent,
@@ -55,6 +57,45 @@ type OutletOption = {
   id: string;
   name: string;
 };
+
+type CorrectionDecision = "confirm" | "adjust" | "reject" | "save_note";
+
+const CORRECTION_DECISIONS: readonly string[] = [
+  "confirm",
+  "adjust",
+  "reject",
+  "save_note",
+];
+
+const DECISION_CONFIRM = {
+  confirm: {
+    title: "Confirm this punch?",
+    description: "The punch will be reconciled as recorded.",
+    confirmLabel: "Confirm punch",
+  },
+  adjust: {
+    title: "Save adjusted punch?",
+    description: "The punch time will be changed and the request reconciled.",
+    confirmLabel: "Save adjustment",
+  },
+  reject: {
+    title: "Reject this correction?",
+    description:
+      "The punch or break will return to its previous time and the request will be marked rejected.",
+    confirmLabel: "Reject correction",
+  },
+} as const;
+
+const DECISION_SUCCESS: Record<CorrectionDecision, string> = {
+  confirm: "Punch reconciled.",
+  adjust: "Punch adjusted and reconciled.",
+  reject: "Correction rejected and the previous time restored.",
+  save_note: "Note saved. This correction stays in the list.",
+};
+
+function isCorrectionDecision(value: string): value is CorrectionDecision {
+  return CORRECTION_DECISIONS.includes(value);
+}
 
 async function loadReviewList<T>(
   url: string,
@@ -126,11 +167,25 @@ export default function CorrectionReviewPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [busyId, setBusyId] = useState("");
   const [message, setMessage] = useState("");
+  const [selectedCorrectionId, setSelectedCorrectionId] = useState("");
+  const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const requestList = requests ?? [];
   const deviceRequestList = deviceRequests ?? [];
   const reconciliationRequests = requestList.filter(
     (request) => request.status === "reconciliation",
   );
+  const selectedCorrection =
+    reconciliationRequests.find(
+      (request) => request.id === selectedCorrectionId,
+    ) ?? null;
+  const selectedDevice =
+    deviceRequestList.find((request) => request.id === selectedDeviceId) ??
+    null;
+  const messageNode = message ? (
+    <p className="team-message" role="status">
+      {message}
+    </p>
+  ) : null;
 
   async function refresh() {
     setIsLoading(true);
@@ -199,7 +254,11 @@ export default function CorrectionReviewPage() {
     const submitter = (event.nativeEvent as SubmitEvent).submitter;
     const decision =
       submitter instanceof HTMLButtonElement ? submitter.value : "";
-    if (decision !== "confirm" && decision !== "adjust") return;
+    if (!isCorrectionDecision(decision)) return;
+    if ((decision === "reject" || decision === "save_note") && !reason.trim()) {
+      setMessage("Add a reviewer note to reject or save a note.");
+      return;
+    }
 
     const target = requestList.find((request) => request.id === requestId);
     const timezone = target?.timezone ?? "UTC";
@@ -229,18 +288,8 @@ export default function CorrectionReviewPage() {
     }
 
     if (
-      !(await confirm({
-        title:
-          decision === "adjust"
-            ? "Save adjusted punch?"
-            : "Confirm this punch?",
-        description:
-          decision === "adjust"
-            ? "The punch time will be changed and the request reconciled."
-            : "The punch will be reconciled as recorded.",
-        confirmLabel:
-          decision === "adjust" ? "Save adjustment" : "Confirm punch",
-      }))
+      decision !== "save_note" &&
+      !(await confirm(DECISION_CONFIRM[decision]))
     )
       return;
 
@@ -265,16 +314,15 @@ export default function CorrectionReviewPage() {
       const body = await response.json();
       if (!response.ok)
         throw new Error(body.error ?? "Could not record this decision.");
-      setMessage(
-        decision === "adjust"
-          ? "Punch adjusted and reconciled."
-          : "Punch reconciled.",
-      );
-      window.dispatchEvent(new Event(REVIEW_REQUESTS_CHANGED_EVENT));
-      setRequests(
-        (current) =>
-          current?.filter((request) => request.id !== requestId) ?? null,
-      );
+      setMessage(DECISION_SUCCESS[decision]);
+      setSelectedCorrectionId("");
+      if (decision !== "save_note") {
+        window.dispatchEvent(new Event(REVIEW_REQUESTS_CHANGED_EVENT));
+        setRequests(
+          (current) =>
+            current?.filter((request) => request.id !== requestId) ?? null,
+        );
+      }
     } catch (error) {
       setMessage(
         error instanceof Error
@@ -317,6 +365,7 @@ export default function CorrectionReviewPage() {
         (current) =>
           current?.filter((request) => request.id !== requestId) ?? null,
       );
+      setSelectedDeviceId("");
       window.dispatchEvent(new Event(REVIEW_REQUESTS_CHANGED_EVENT));
       setMessage(
         action === "approve"
@@ -359,20 +408,18 @@ export default function CorrectionReviewPage() {
           </select>
         </label>
         <button
-          className="btn btn-secondary"
+          className="btn btn-secondary btn-icon"
           type="button"
+          aria-label="Refresh requests"
+          title="Refresh requests"
           disabled={isLoading}
           onClick={() => void refresh()}
         >
-          Refresh
+          <RefreshIcon />
         </button>
       </div>
 
-      {message && (
-        <p className="team-message" role="status">
-          {message}
-        </p>
-      )}
+      {!selectedCorrection && !selectedDevice && messageNode}
       <section
         className="correction-review-list"
         aria-label="Applied punches awaiting reconciliation"
@@ -390,114 +437,36 @@ export default function CorrectionReviewPage() {
         {isLoading && requests === null && (
           <p className="correction-review-empty">Loading clock corrections…</p>
         )}
-        {reconciliationRequests.map((request) => (
-          <article className="correction-review-item" key={request.id}>
-            <div className="correction-review-details">
-              <p className="eyebrow">
-                {request.outletName} · {request.event.replace("_", " ")}
-              </p>
-              <h2>{request.requesterName}</h2>
-              <p className="correction-review-email">
-                {request.requesterEmail}
-              </p>
-              <strong className="correction-requested-time">
-                {formatRequestedTime(request.requestedAt, request.timezone)}
-              </strong>
-              <p className="correction-request-reason">{request.reason}</p>
-              <small>
-                Applied
-                {request.appliedAt
-                  ? ` ${formatRequestedTime(request.appliedAt, request.timezone)}`
-                  : " immediately"}
-              </small>
-            </div>
-            <form
-              className="correction-decision-form"
-              onSubmit={(event) => void decide(event, request.id)}
-            >
-              <label>
-                Reviewer note
-                <textarea
-                  name="reason"
-                  maxLength={500}
-                  rows={2}
-                  placeholder="Add a reconciliation note."
-                />
-              </label>
-              {isBreakCorrectionEvent(request.event) ? (
-                request.event !== "break_delete" && (
-                  <>
-                    <label>
-                      Adjust break start
-                      <input
-                        name="breakStartedAt"
-                        type="datetime-local"
-                        required
-                        defaultValue={formatOutletDateTime(
-                          request.breakStartedAt ?? request.requestedAt,
-                          request.timezone,
-                        )}
-                      />
-                    </label>
-                    {request.breakEndedAt && (
-                      <label>
-                        Adjust break end
-                        <input
-                          name="breakEndedAt"
-                          type="datetime-local"
-                          required
-                          defaultValue={formatOutletDateTime(
-                            request.breakEndedAt,
-                            request.timezone,
-                          )}
-                        />
-                      </label>
-                    )}
-                  </>
-                )
-              ) : (
-                <label>
-                  Adjust punch time
-                  <input
-                    name="requestedAt"
-                    type="datetime-local"
-                    required
-                    defaultValue={formatOutletDateTime(
-                      request.requestedAt,
-                      request.timezone,
-                    )}
-                  />
-                </label>
-              )}
-              <div className="correction-decision-actions">
-                {request.event !== "break_delete" && (
-                  <button
-                    className="btn btn-secondary"
-                    type="submit"
-                    name="decision"
-                    value="adjust"
-                    disabled={Boolean(busyId)}
-                  >
-                    {busyId === `correction:${request.id}`
-                      ? "Saving…"
-                      : "Adjust"}
-                  </button>
-                )}
+        {reconciliationRequests.length > 0 && (
+          <ul className="correction-review-rows">
+            {reconciliationRequests.map((request) => (
+              <li key={request.id}>
                 <button
-                  className="btn btn-primary"
-                  type="submit"
-                  name="decision"
-                  value="confirm"
-                  disabled={Boolean(busyId)}
+                  className="correction-review-row"
+                  type="button"
+                  onClick={() => {
+                    setMessage("");
+                    setSelectedCorrectionId(request.id);
+                  }}
                 >
-                  {busyId === `correction:${request.id}`
-                    ? "Saving…"
-                    : "Confirm"}
+                  <span className="correction-review-row-main">
+                    <span className="eyebrow">
+                      {request.outletName} · {request.event.replace("_", " ")}
+                    </span>
+                    <strong>{request.requesterName}</strong>
+                    <small>
+                      {formatRequestedTime(
+                        request.requestedAt,
+                        request.timezone,
+                      )}
+                    </small>
+                  </span>
+                  <span className="correction-review-row-action">Review</span>
                 </button>
-              </div>
-            </form>
-          </article>
-        ))}
+              </li>
+            ))}
+          </ul>
+        )}
         {requests !== null &&
           !correctionError &&
           reconciliationRequests.length === 0 && (
@@ -525,38 +494,33 @@ export default function CorrectionReviewPage() {
         {isLoading && deviceRequests === null && (
           <p className="correction-review-empty">Loading device enrollments…</p>
         )}
-        {deviceRequestList.map((request) => (
-          <article className="correction-review-item" key={request.id}>
-            <div className="correction-review-details">
-              <p className="eyebrow">
-                TRUSTED DEVICE · {request.outletNames.join(", ")}
-              </p>
-              <h2>{request.employeeName}</h2>
-              <p className="correction-review-email">{request.employeeEmail}</p>
-              <strong className="correction-requested-time">
-                Requested {formatDeviceRequestTime(request.createdAt)}
-              </strong>
-            </div>
-            <div className="correction-decision-actions">
-              <button
-                className="btn btn-danger"
-                type="button"
-                disabled={Boolean(busyId)}
-                onClick={() => void decideDevice(request.id, "reject")}
-              >
-                {busyId === `device:${request.id}` ? "Saving…" : "Reject"}
-              </button>
-              <button
-                className="btn btn-primary"
-                type="button"
-                disabled={Boolean(busyId)}
-                onClick={() => void decideDevice(request.id, "approve")}
-              >
-                {busyId === `device:${request.id}` ? "Saving…" : "Approve"}
-              </button>
-            </div>
-          </article>
-        ))}
+        {deviceRequestList.length > 0 && (
+          <ul className="correction-review-rows">
+            {deviceRequestList.map((request) => (
+              <li key={request.id}>
+                <button
+                  className="correction-review-row"
+                  type="button"
+                  onClick={() => {
+                    setMessage("");
+                    setSelectedDeviceId(request.id);
+                  }}
+                >
+                  <span className="correction-review-row-main">
+                    <span className="eyebrow">
+                      TRUSTED DEVICE · {request.outletNames.join(", ")}
+                    </span>
+                    <strong>{request.employeeName}</strong>
+                    <small>
+                      Requested {formatDeviceRequestTime(request.createdAt)}
+                    </small>
+                  </span>
+                  <span className="correction-review-row-action">Review</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
         {deviceRequests !== null &&
           !deviceError &&
           deviceRequestList.length === 0 && (
@@ -565,6 +529,234 @@ export default function CorrectionReviewPage() {
             </p>
           )}
       </section>
+
+      <ModalDialog
+        open={Boolean(selectedCorrection)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedCorrectionId("");
+        }}
+        labelledBy="correction-review-title"
+      >
+        {selectedCorrection && (
+          <div className="dialog-panel">
+            <header className="dialog-header">
+              <div>
+                <p className="eyebrow">
+                  {selectedCorrection.outletName} ·{" "}
+                  {selectedCorrection.event.replace("_", " ")}
+                </p>
+                <h2 id="correction-review-title">
+                  {selectedCorrection.requesterName}
+                </h2>
+                <p className="correction-review-email">
+                  {selectedCorrection.requesterEmail}
+                </p>
+              </div>
+              <button
+                className="btn btn-ghost btn-icon btn-sm"
+                type="button"
+                aria-label="Close dialog"
+                title="Close dialog"
+                onClick={() => setSelectedCorrectionId("")}
+              >
+                <CloseIcon />
+              </button>
+            </header>
+            <strong className="correction-requested-time">
+              {formatRequestedTime(
+                selectedCorrection.requestedAt,
+                selectedCorrection.timezone,
+              )}
+            </strong>
+            <p className="correction-request-reason">
+              {selectedCorrection.reason}
+            </p>
+            <small>
+              Applied
+              {selectedCorrection.appliedAt
+                ? ` ${formatRequestedTime(selectedCorrection.appliedAt, selectedCorrection.timezone)}`
+                : " immediately"}
+            </small>
+            {messageNode}
+            <form
+              className="correction-decision-form"
+              onSubmit={(event) => void decide(event, selectedCorrection.id)}
+              onKeyDown={(event) => {
+                if (
+                  event.key === "Enter" &&
+                  event.target instanceof HTMLInputElement
+                )
+                  event.preventDefault();
+              }}
+            >
+              <label>
+                Reviewer note
+                <textarea
+                  name="reason"
+                  maxLength={500}
+                  rows={2}
+                  placeholder="Add a reconciliation note."
+                />
+              </label>
+              {isBreakCorrectionEvent(selectedCorrection.event) ? (
+                selectedCorrection.event !== "break_delete" && (
+                  <>
+                    <label>
+                      Adjust break start
+                      <input
+                        name="breakStartedAt"
+                        type="datetime-local"
+                        required
+                        defaultValue={formatOutletDateTime(
+                          selectedCorrection.breakStartedAt ??
+                            selectedCorrection.requestedAt,
+                          selectedCorrection.timezone,
+                        )}
+                      />
+                    </label>
+                    {selectedCorrection.breakEndedAt && (
+                      <label>
+                        Adjust break end
+                        <input
+                          name="breakEndedAt"
+                          type="datetime-local"
+                          required
+                          defaultValue={formatOutletDateTime(
+                            selectedCorrection.breakEndedAt,
+                            selectedCorrection.timezone,
+                          )}
+                        />
+                      </label>
+                    )}
+                  </>
+                )
+              ) : (
+                <label>
+                  Adjust punch time
+                  <input
+                    name="requestedAt"
+                    type="datetime-local"
+                    required
+                    defaultValue={formatOutletDateTime(
+                      selectedCorrection.requestedAt,
+                      selectedCorrection.timezone,
+                    )}
+                  />
+                </label>
+              )}
+              <div className="dialog-actions correction-decision-actions">
+                <button
+                  className="btn btn-danger"
+                  type="submit"
+                  name="decision"
+                  value="reject"
+                  formNoValidate
+                  disabled={Boolean(busyId)}
+                >
+                  Reject
+                </button>
+                <button
+                  className="btn btn-ghost"
+                  type="submit"
+                  name="decision"
+                  value="save_note"
+                  formNoValidate
+                  disabled={Boolean(busyId)}
+                >
+                  Save note
+                </button>
+                {selectedCorrection.event !== "break_delete" && (
+                  <button
+                    className="btn btn-secondary"
+                    type="submit"
+                    name="decision"
+                    value="adjust"
+                    disabled={Boolean(busyId)}
+                  >
+                    {busyId === `correction:${selectedCorrection.id}`
+                      ? "Saving…"
+                      : "Adjust"}
+                  </button>
+                )}
+                <button
+                  className="btn btn-primary"
+                  type="submit"
+                  name="decision"
+                  value="confirm"
+                  disabled={Boolean(busyId)}
+                >
+                  {busyId === `correction:${selectedCorrection.id}`
+                    ? "Saving…"
+                    : "Confirm"}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+      </ModalDialog>
+
+      <ModalDialog
+        open={Boolean(selectedDevice)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedDeviceId("");
+        }}
+        labelledBy="device-review-title"
+      >
+        {selectedDevice && (
+          <div className="dialog-panel">
+            <header className="dialog-header">
+              <div>
+                <p className="eyebrow">
+                  TRUSTED DEVICE · {selectedDevice.outletNames.join(", ")}
+                </p>
+                <h2 id="device-review-title">{selectedDevice.employeeName}</h2>
+                <p className="correction-review-email">
+                  {selectedDevice.employeeEmail}
+                </p>
+              </div>
+              <button
+                className="btn btn-ghost btn-icon btn-sm"
+                type="button"
+                aria-label="Close dialog"
+                title="Close dialog"
+                onClick={() => setSelectedDeviceId("")}
+              >
+                <CloseIcon />
+              </button>
+            </header>
+            <strong className="correction-requested-time">
+              Requested {formatDeviceRequestTime(selectedDevice.createdAt)}
+            </strong>
+            <p className="dialog-description">
+              Approving replaces any previous device for this staff member.
+              Rejecting requires them to request enrollment again.
+            </p>
+            {messageNode}
+            <div className="dialog-actions correction-decision-actions">
+              <button
+                className="btn btn-danger"
+                type="button"
+                disabled={Boolean(busyId)}
+                onClick={() => void decideDevice(selectedDevice.id, "reject")}
+              >
+                {busyId === `device:${selectedDevice.id}`
+                  ? "Saving…"
+                  : "Reject"}
+              </button>
+              <button
+                className="btn btn-primary"
+                type="button"
+                disabled={Boolean(busyId)}
+                onClick={() => void decideDevice(selectedDevice.id, "approve")}
+              >
+                {busyId === `device:${selectedDevice.id}`
+                  ? "Saving…"
+                  : "Approve"}
+              </button>
+            </div>
+          </div>
+        )}
+      </ModalDialog>
       {confirmDialog}
     </div>
   );

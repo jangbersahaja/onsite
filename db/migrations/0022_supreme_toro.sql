@@ -1,0 +1,1 @@
+ALTER TABLE "correction_requests" ADD COLUMN "previous_values" jsonb;

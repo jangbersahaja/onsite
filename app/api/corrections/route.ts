@@ -2,6 +2,7 @@ import {
   correctionRequests,
   outletMemberships,
   outlets,
+  punchSourceEnum,
   staffDeviceEnrollments,
   user,
   workBreaks,
@@ -204,6 +205,15 @@ type DbTransaction = Parameters<
 type CorrectionInput = z.infer<typeof correctionSchema>;
 type CorrectionRow = typeof correctionRequests.$inferSelect;
 type WorkSessionRow = typeof workSessions.$inferSelect;
+type PunchSource = (typeof punchSourceEnum.enumValues)[number];
+// Punch values captured before a clock correction, used to restore them on reject.
+type PunchSnapshot = {
+  at: string | null;
+  source: PunchSource | null;
+  latitude: number | null;
+  longitude: number | null;
+  accuracy: number | null;
+};
 type ReviewFailure = {
   ok: false;
   status: number;
@@ -387,6 +397,7 @@ async function submitBreakCorrection(
       reason: input.reason,
       status: "reconciliation",
       appliedAt: now,
+      previousValues: previousBreak,
     })
     .returning();
 
@@ -586,17 +597,414 @@ async function reconcileBreakCorrection(
   return { ok: true };
 }
 
+const punchSnapshotSchema = z.object({
+  at: z.string().nullable(),
+  source: z.enum(punchSourceEnum.enumValues).nullable(),
+  latitude: z.number().nullable(),
+  longitude: z.number().nullable(),
+  accuracy: z.number().nullable(),
+});
+
+const breakSnapshotSchema = z.object({
+  startedAt: z.string(),
+  endedAt: z.string().nullable(),
+});
+
+const notRestorableFailure = {
+  ok: false as const,
+  status: 409,
+  error:
+    "This correction has no saved values to restore. Adjust or confirm it instead.",
+  code: "reject_not_restorable",
+};
+
+const changedSinceCorrectionFailure = {
+  ok: false as const,
+  status: 409,
+  error:
+    "This has changed since the correction was applied. Adjust or confirm it instead.",
+  code: "changed_since_correction",
+};
+
+function sameInstant(a: Date | null, b: Date | null) {
+  return (a?.getTime() ?? null) === (b?.getTime() ?? null);
+}
+
+async function saveCorrectionNote(
+  tx: DbTransaction,
+  input: { correction: CorrectionRow; reason: string; reviewerId: string },
+): Promise<{ ok: true }> {
+  const { correction, reason, reviewerId } = input;
+  await tx
+    .update(correctionRequests)
+    .set({ reviewReason: reason })
+    .where(eq(correctionRequests.id, correction.id));
+  await recordAudit(tx, {
+    actorId: reviewerId,
+    action: "correction_noted",
+    entityType: "correction_request",
+    entityId: correction.id,
+    outletId: correction.outletId,
+    previousValues: { reviewReason: correction.reviewReason },
+    newValues: { reviewReason: reason },
+    reason,
+  });
+  return { ok: true };
+}
+
+async function markCorrectionRejected(
+  tx: DbTransaction,
+  input: {
+    correction: CorrectionRow;
+    reason: string;
+    reviewerId: string;
+    reviewedAt: Date;
+  },
+) {
+  const { correction, reason, reviewerId, reviewedAt } = input;
+  await tx
+    .update(correctionRequests)
+    .set({
+      status: "rejected",
+      reviewedBy: reviewerId,
+      reviewedAt,
+      reviewReason: reason,
+    })
+    .where(eq(correctionRequests.id, correction.id));
+  await recordAudit(tx, {
+    actorId: reviewerId,
+    action: "correction_rejected",
+    entityType: "correction_request",
+    entityId: correction.id,
+    outletId: correction.outletId,
+    previousValues: { status: "reconciliation" },
+    newValues: { status: "rejected", reviewedAt: reviewedAt.toISOString() },
+    reason,
+  });
+}
+
+async function rejectClockCorrection(
+  tx: DbTransaction,
+  correction: CorrectionRow,
+  workSession: WorkSessionRow,
+  input: { reason: string; reviewerId: string; reviewedAt: Date },
+): Promise<{ ok: true } | ReviewFailure> {
+  const { reviewedAt } = input;
+  const snapshot = punchSnapshotSchema.safeParse(correction.previousValues);
+  if (!snapshot.success) return notRestorableFailure;
+  const { at, source, latitude, longitude, accuracy } = snapshot.data;
+  const restoredAt = at ? new Date(at) : null;
+  const event: "clock_in" | "clock_out" =
+    correction.event === "clock_in" ? "clock_in" : "clock_out";
+
+  const currentAt =
+    event === "clock_in" ? workSession.clockInAt : workSession.clockOutAt;
+  if (!sameInstant(currentAt, correction.requestedAt)) {
+    return changedSinceCorrectionFailure;
+  }
+
+  if (event === "clock_in") {
+    if (!restoredAt || !source) return notRestorableFailure;
+    if (
+      getCorrectionTimeError("clock_in", restoredAt, workSession, reviewedAt)
+    ) {
+      return {
+        ok: false,
+        status: 409,
+        error: "The restored clock-in is no longer valid for this shift.",
+        code: "reject_out_of_order",
+      };
+    }
+    const [overlappingSession] = await tx
+      .select({ id: workSessions.id })
+      .from(workSessions)
+      .where(
+        and(
+          eq(workSessions.userId, correction.requestedBy),
+          ne(workSessions.id, workSession.id),
+          lte(workSessions.clockInAt, restoredAt),
+          or(
+            isNull(workSessions.clockOutAt),
+            gt(workSessions.clockOutAt, restoredAt),
+          ),
+        ),
+      )
+      .limit(1);
+    if (overlappingSession) {
+      return {
+        ok: false,
+        status: 409,
+        error: "The restored clock-in overlaps another shift.",
+        code: "reject_clock_in_overlaps",
+      };
+    }
+    await tx
+      .update(workSessions)
+      .set({
+        clockInAt: restoredAt,
+        clockInLatitude: latitude,
+        clockInLongitude: longitude,
+        clockInAccuracy: accuracy,
+        clockInSource: source,
+        updatedAt: reviewedAt,
+      })
+      .where(eq(workSessions.id, workSession.id));
+    await recordAudit(tx, {
+      actorId: input.reviewerId,
+      action: "correction_punch_reverted",
+      entityType: "work_session",
+      entityId: workSession.id,
+      outletId: correction.outletId,
+      previousValues: {
+        clockInAt: workSession.clockInAt.toISOString(),
+        clockInSource: workSession.clockInSource,
+      },
+      newValues: { clockInAt: restoredAt.toISOString(), clockInSource: source },
+      reason: input.reason,
+    });
+  } else {
+    if (restoredAt) {
+      if (
+        getCorrectionTimeError("clock_out", restoredAt, workSession, reviewedAt)
+      ) {
+        return {
+          ok: false,
+          status: 409,
+          error: "The restored clock-out is no longer valid for this shift.",
+          code: "reject_out_of_order",
+        };
+      }
+    } else {
+      // Restoring an open shift is only possible if the user has no other open shift.
+      const [otherOpenSession] = await tx
+        .select({ id: workSessions.id })
+        .from(workSessions)
+        .where(
+          and(
+            eq(workSessions.userId, correction.requestedBy),
+            ne(workSessions.id, workSession.id),
+            isNull(workSessions.clockOutAt),
+          ),
+        )
+        .limit(1);
+      if (otherOpenSession) {
+        return {
+          ok: false,
+          status: 409,
+          error: "The user already has another open shift.",
+          code: "reject_open_shift_exists",
+        };
+      }
+    }
+    await tx
+      .update(workSessions)
+      .set({
+        clockOutAt: restoredAt,
+        clockOutLatitude: latitude,
+        clockOutLongitude: longitude,
+        clockOutAccuracy: accuracy,
+        clockOutSource: source,
+        updatedAt: reviewedAt,
+      })
+      .where(eq(workSessions.id, workSession.id));
+    await recordAudit(tx, {
+      actorId: input.reviewerId,
+      action: "correction_punch_reverted",
+      entityType: "work_session",
+      entityId: workSession.id,
+      outletId: correction.outletId,
+      previousValues: {
+        clockOutAt: workSession.clockOutAt?.toISOString() ?? null,
+        clockOutSource: workSession.clockOutSource,
+      },
+      newValues: {
+        clockOutAt: restoredAt?.toISOString() ?? null,
+        clockOutSource: source,
+      },
+      reason: input.reason,
+    });
+  }
+
+  await markCorrectionRejected(tx, { correction, ...input, reviewedAt });
+  return { ok: true };
+}
+
+async function rejectBreakCorrection(
+  tx: DbTransaction,
+  input: {
+    correction: CorrectionRow;
+    reason: string;
+    reviewerId: string;
+    reviewedAt: Date;
+  },
+): Promise<{ ok: true } | ReviewFailure> {
+  const { correction, reviewedAt, reviewerId } = input;
+  if (!correction.workSessionId) {
+    return {
+      ok: false,
+      status: 409,
+      error: "The related shift no longer exists.",
+      code: "related_shift_missing",
+    };
+  }
+  const [shift] = await tx
+    .select()
+    .from(workSessions)
+    .where(
+      and(
+        eq(workSessions.id, correction.workSessionId),
+        eq(workSessions.userId, correction.requestedBy),
+        eq(workSessions.outletId, correction.outletId),
+      ),
+    )
+    .limit(1)
+    .for("update");
+  if (!shift) {
+    return {
+      ok: false,
+      status: 409,
+      error: "The related shift no longer exists.",
+      code: "related_shift_missing",
+    };
+  }
+
+  const breaks = await loadShiftBreaks(tx, shift.id);
+  const current = correction.workBreakId
+    ? breaks.find((item) => item.id === correction.workBreakId)
+    : undefined;
+  const appliedStart = correction.breakStartedAt;
+  const appliedEnd = correction.breakEndedAt;
+
+  if (correction.event === "break_add") {
+    if (
+      !current ||
+      !sameInstant(current.startedAt, appliedStart) ||
+      !sameInstant(current.endedAt, appliedEnd)
+    ) {
+      return changedSinceCorrectionFailure;
+    }
+    await tx.delete(workBreaks).where(eq(workBreaks.id, current.id));
+    await recordAudit(tx, {
+      actorId: reviewerId,
+      action: "correction_break_reverted",
+      entityType: "work_break",
+      entityId: current.id,
+      outletId: correction.outletId,
+      previousValues: {
+        startedAt: current.startedAt.toISOString(),
+        endedAt: current.endedAt?.toISOString() ?? null,
+      },
+      newValues: null,
+      reason: input.reason,
+    });
+  } else if (correction.event === "break_update") {
+    const snapshot = breakSnapshotSchema.safeParse(correction.previousValues);
+    if (!snapshot.success || !current) {
+      return snapshot.success
+        ? changedSinceCorrectionFailure
+        : notRestorableFailure;
+    }
+    if (
+      !sameInstant(current.startedAt, appliedStart) ||
+      !sameInstant(current.endedAt, appliedEnd)
+    ) {
+      return changedSinceCorrectionFailure;
+    }
+    const restoredStart = new Date(snapshot.data.startedAt);
+    const restoredEnd = snapshot.data.endedAt
+      ? new Date(snapshot.data.endedAt)
+      : null;
+    const plan = planBreakChange(
+      shift,
+      breaks,
+      {
+        kind: "update",
+        workBreakId: current.id,
+        startedAt: restoredStart,
+        endedAt: restoredEnd,
+      },
+      reviewedAt,
+    );
+    if (!plan.ok) return { ok: false, ...breakErrorDetails(plan.error) };
+    await tx
+      .update(workBreaks)
+      .set({
+        startedAt: restoredStart,
+        endedAt: restoredEnd,
+        updatedAt: reviewedAt,
+      })
+      .where(eq(workBreaks.id, current.id));
+    await recordAudit(tx, {
+      actorId: reviewerId,
+      action: "correction_break_reverted",
+      entityType: "work_break",
+      entityId: current.id,
+      outletId: correction.outletId,
+      previousValues: {
+        startedAt: current.startedAt.toISOString(),
+        endedAt: current.endedAt?.toISOString() ?? null,
+      },
+      newValues: {
+        startedAt: restoredStart.toISOString(),
+        endedAt: restoredEnd?.toISOString() ?? null,
+      },
+      reason: input.reason,
+    });
+  } else {
+    // The deleted break's last known times are kept on the correction itself.
+    if (!appliedStart) return notRestorableFailure;
+    const plan = planBreakChange(
+      shift,
+      breaks,
+      { kind: "add", startedAt: appliedStart, endedAt: appliedEnd },
+      reviewedAt,
+    );
+    if (!plan.ok) return { ok: false, ...breakErrorDetails(plan.error) };
+    const [restored] = await tx
+      .insert(workBreaks)
+      .values({
+        workSessionId: shift.id,
+        startedAt: appliedStart,
+        endedAt: appliedEnd,
+        updatedAt: reviewedAt,
+      })
+      .returning({ id: workBreaks.id });
+    await recordAudit(tx, {
+      actorId: reviewerId,
+      action: "correction_break_reverted",
+      entityType: "work_break",
+      entityId: restored.id,
+      outletId: correction.outletId,
+      previousValues: null,
+      newValues: {
+        startedAt: appliedStart.toISOString(),
+        endedAt: appliedEnd?.toISOString() ?? null,
+      },
+      reason: input.reason,
+    });
+  }
+
+  await markCorrectionRejected(tx, input);
+  return { ok: true };
+}
+
 const reviewSchema = z
   .object({
     requestId: z.string().uuid(),
     outletId: z.string().uuid(),
-    decision: z.enum(["confirm", "adjust"]),
+    decision: z.enum(["confirm", "adjust", "reject", "save_note"]),
     reason: z.string().trim().max(500),
     requestedAt: timestampSchema.optional(),
     breakStartedAt: timestampSchema.optional(),
     breakEndedAt: timestampSchema.nullable().optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (value) =>
+      (value.decision !== "reject" && value.decision !== "save_note") ||
+      value.reason.length > 0,
+    { path: ["reason"], message: "A note is required." },
+  );
 
 export async function PATCH(request: Request) {
   if (!hasServerConfiguration()) return unavailable();
@@ -681,10 +1089,26 @@ export async function PATCH(request: Request) {
       } | null = null;
 
       if (correction.status === "reconciliation") {
+        const { decision } = parsed.data;
+        if (decision === "save_note") {
+          return saveCorrectionNote(tx, {
+            correction,
+            reason: parsed.data.reason,
+            reviewerId: session.user.id,
+          });
+        }
         if (isBreakCorrectionEvent(correction.event)) {
+          if (decision === "reject") {
+            return rejectBreakCorrection(tx, {
+              correction,
+              reason: parsed.data.reason,
+              reviewerId: session.user.id,
+              reviewedAt,
+            });
+          }
           return reconcileBreakCorrection(tx, {
             correction,
-            decision: parsed.data.decision,
+            decision,
             reason: parsed.data.reason,
             reviewerId: session.user.id,
             reviewedAt,
@@ -720,6 +1144,14 @@ export async function PATCH(request: Request) {
             error: "The related shift no longer exists.",
             code: "related_shift_missing",
           };
+        }
+
+        if (decision === "reject") {
+          return rejectClockCorrection(tx, correction, workSession, {
+            reason: parsed.data.reason,
+            reviewerId: session.user.id,
+            reviewedAt,
+          });
         }
 
         let reconciledTime = correction.requestedAt;
@@ -886,11 +1318,13 @@ export async function PATCH(request: Request) {
         { status: outcome.status },
       );
     }
-    await notifyOutletManagers({
-      outletId: parsed.data.outletId,
-      actorId: session.user.id,
-      event: "correction_reviewed",
-    });
+    if (parsed.data.decision !== "save_note") {
+      await notifyOutletManagers({
+        outletId: parsed.data.outletId,
+        actorId: session.user.id,
+        event: "correction_reviewed",
+      });
+    }
     return Response.json({ success: true });
   } catch {
     return Response.json(
@@ -1171,6 +1605,24 @@ export async function POST(request: Request) {
               clockOutSource: workSession.clockOutSource,
             }
         : {};
+      // Full punch snapshot (including coordinates) so a reject can restore it exactly.
+      const punchSnapshot: PunchSnapshot | null = workSession
+        ? input.event === "clock_in"
+          ? {
+              at: workSession.clockInAt.toISOString(),
+              source: workSession.clockInSource,
+              latitude: workSession.clockInLatitude,
+              longitude: workSession.clockInLongitude,
+              accuracy: workSession.clockInAccuracy,
+            }
+          : {
+              at: workSession.clockOutAt?.toISOString() ?? null,
+              source: workSession.clockOutSource,
+              latitude: workSession.clockOutLatitude,
+              longitude: workSession.clockOutLongitude,
+              accuracy: workSession.clockOutAccuracy,
+            }
+        : null;
       let updatedSession;
       if (workSession) {
         [updatedSession] = await tx
@@ -1230,6 +1682,7 @@ export async function POST(request: Request) {
           reason: input.reason,
           status: "reconciliation",
           appliedAt: now,
+          previousValues: punchSnapshot,
         })
         .returning();
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { RefreshIcon } from "@/app/_components/icons";
 import { OutletAvatar } from "@/app/_components/outlet-avatar";
 import { OutletHero } from "@/app/_components/outlet-hero";
 import { OutletAlertBell } from "@/app/(management)/manage/_components/outlet-alert-bell";
@@ -257,7 +258,7 @@ export default function ManagePage() {
             disabled={isLoading}
             onClick={() => setRefreshCount((count) => count + 1)}
           >
-            <span aria-hidden="true">↻</span>
+            <RefreshIcon />
           </button>
         </div>
       </div>

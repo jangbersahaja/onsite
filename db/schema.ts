@@ -468,6 +468,8 @@ export const correctionRequests = pgTable(
     }),
     reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
     reviewReason: text("review_reason"),
+    // Values replaced when the correction was applied, used to restore them on reject.
+    previousValues: jsonb("previous_values"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

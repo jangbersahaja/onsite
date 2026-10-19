@@ -225,3 +225,13 @@ test("tolerates small clock skew but rejects times beyond the tolerance", () => 
   );
   assert.deepEqual(beyondTolerance, { ok: false, error: "break_in_future" });
 });
+
+test("re-adding an open break on an open shift is allowed", () => {
+  const plan = planBreakChange(
+    openShift,
+    [],
+    { kind: "add", startedAt: at("14:00"), endedAt: null },
+    now,
+  );
+  assert.deepEqual(plan, { ok: true, target: null });
+});

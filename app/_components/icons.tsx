@@ -59,6 +59,15 @@ export function PlusIcon(props: IconProps) {
   );
 }
 
+export function RefreshIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+      <path d="M21 4v5h-5" />
+    </IconBase>
+  );
+}
+
 export function BellIcon(props: IconProps) {
   return (
     <IconBase {...props}>

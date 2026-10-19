@@ -36,14 +36,11 @@ export type BreakChange =
       startedAt: Date;
       endedAt: Date | null;
     }
-  | { kind: "add"; startedAt: Date; endedAt: Date }
+  | { kind: "add"; startedAt: Date; endedAt: Date | null }
   | { kind: "delete"; workBreakId: string };
 
 export type BreakChangeError =
-  | "break_not_found"
-  | "break_end_locked"
-  | "break_in_future"
-  | "break_invalid";
+  "break_not_found" | "break_end_locked" | "break_in_future" | "break_invalid";
 
 export type BreakChangePlan =
   | { ok: true; target: ShiftBreak | null }
