@@ -6232,6 +6232,23 @@ small,
     margin-top: 36px;
     padding: 0 16px 28px;
   }
+  #clock .clock-recent-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 9px 12px;
+    padding: 12px 4px;
+  }
+  #clock .clock-recent-outlet {
+    min-width: 0;
+  }
+  #clock .clock-recent-times {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+  #clock .clock-recent-duration {
+    grid-column: 2;
+    grid-row: 1;
+    text-align: right;
+  }
   #clock .day-column {
     padding: 36px 16px 28px;
   }
