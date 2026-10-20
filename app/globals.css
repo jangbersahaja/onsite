@@ -5695,7 +5695,7 @@ small,
 
 #clock .recent-section {
   margin: 48px auto 0;
-  max-width: 560px;
+  max-width: 680px;
 }
 #clock .clock-recent-list {
   display: grid;
