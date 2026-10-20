@@ -4355,22 +4355,6 @@ small,
   border-top: 1px solid var(--line);
 }
 
-@media (max-width: 760px) {
-  .clock-recent-row {
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 9px 12px;
-    padding: 12px 8px;
-  }
-  .clock-recent-times {
-    grid-column: 1 / -1;
-    grid-row: 2;
-  }
-  .clock-recent-duration {
-    grid-column: 2;
-    grid-row: 1;
-  }
-}
-
 .auth-screen
   :is(
     .eyebrow,
@@ -5441,9 +5425,6 @@ small,
     margin-top: 2px;
     font-size: 20px;
   }
-  #clock .recent-section {
-    margin-top: 16px;
-  }
 }
 
 /* Clock page redesign: large centered clock, round primary control, fewer hard boxes.
@@ -6229,8 +6210,12 @@ small,
   }
   #clock .recent-section,
   #clock .correction-section {
-    margin-top: 36px;
     padding: 0 16px 28px;
+  }
+  #clock .recent-section {
+    width: 100%;
+    max-width: none;
+    margin: 36px 0 0;
   }
   #clock .clock-recent-row {
     grid-template-columns: minmax(0, 1fr) auto;
