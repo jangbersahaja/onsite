@@ -27,6 +27,7 @@ import {
   getStaffDeviceCookieName,
   isApprovedStaffDevice,
   isStaffDeviceRequired,
+  staffDeviceCookieOptions,
 } from "@/lib/staff-device";
 import { getTeamAccess } from "@/lib/team-access";
 import { and, desc, eq, gt, inArray, isNull, lte, ne, or } from "drizzle-orm";
@@ -1470,6 +1471,12 @@ export async function POST(request: Request) {
           { status: 403 },
         );
       }
+      if (deviceToken)
+        cookieStore.set(
+          getStaffDeviceCookieName(session.user.id),
+          deviceToken,
+          staffDeviceCookieOptions(),
+        );
     }
 
     const now = new Date();

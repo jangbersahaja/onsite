@@ -15,6 +15,7 @@ import {
   getStaffDeviceCookieName,
   isApprovedStaffDevice,
   matchesStaffDeviceToken,
+  staffDeviceCookieOptions,
 } from "@/lib/staff-device";
 import { getTeamAccess } from "@/lib/team-access";
 import { and, desc, eq, inArray } from "drizzle-orm";
@@ -154,9 +155,21 @@ export async function GET(request: Request) {
       .orderBy(desc(staffDeviceEnrollments.createdAt));
     const pending = enrollments.find((device) => device.status === "pending");
     const active = enrollments.find((device) => device.status === "active");
-    const currentToken = (await cookies()).get(
+    const cookieStore = await cookies();
+    const currentToken = cookieStore.get(
       getStaffDeviceCookieName(session.user.id),
     )?.value;
+    if (
+      active &&
+      currentToken &&
+      isApprovedStaffDevice(currentToken, active.status, active.tokenHash)
+    ) {
+      cookieStore.set(
+        getStaffDeviceCookieName(session.user.id),
+        currentToken,
+        staffDeviceCookieOptions(),
+      );
+    }
 
     return Response.json({
       required: true,
@@ -292,13 +305,7 @@ export async function POST(request: Request) {
       return enrollment;
     });
 
-    cookieStore.set(cookieName, credential.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 365,
-    });
+    cookieStore.set(cookieName, credential.token, staffDeviceCookieOptions());
 
     return Response.json({
       status: "pending",

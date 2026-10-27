@@ -18,7 +18,10 @@ import {
   findActiveRegistrationLink,
   isRegistrationTokenFormat,
 } from "@/lib/registration";
-import { getStaffDeviceCookieName } from "@/lib/staff-device";
+import {
+  getStaffDeviceCookieName,
+  staffDeviceCookieOptions,
+} from "@/lib/staff-device";
 import { eq, sql } from "drizzle-orm";
 import { cookies } from "next/headers";
 import { randomUUID } from "node:crypto";
@@ -262,13 +265,11 @@ export async function POST(request: Request) {
     });
 
     const cookieStore = await cookies();
-    cookieStore.set(getStaffDeviceCookieName(createdUserId), device.token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 365,
-    });
+    cookieStore.set(
+      getStaffDeviceCookieName(createdUserId),
+      device.token,
+      staffDeviceCookieOptions(),
+    );
 
     return Response.json({ submitted: true }, { status: 201 });
   } catch {

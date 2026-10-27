@@ -17,6 +17,7 @@ import {
   getStaffDeviceCookieName,
   isApprovedStaffDevice,
   isStaffDeviceRequired,
+  staffDeviceCookieOptions,
 } from "@/lib/staff-device";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { cookies } from "next/headers";
@@ -463,6 +464,12 @@ export async function POST(request: Request) {
           { status: 403 },
         );
       }
+      if (deviceToken)
+        cookieStore.set(
+          getStaffDeviceCookieName(session.user.id),
+          deviceToken,
+          staffDeviceCookieOptions(),
+        );
     }
 
     const [outlet] = await db

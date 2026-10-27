@@ -11,6 +11,16 @@ export function getStaffDeviceCookieName(userId: string) {
   return `shiftline_staff_device_${hashOneTimeToken(userId).slice(0, 16)}`;
 }
 
+export function staffDeviceCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+  } as const;
+}
+
 export function matchesStaffDeviceToken(
   token: string | undefined,
   storedTokenHash: string | undefined,
