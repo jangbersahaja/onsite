@@ -19,7 +19,7 @@ export function outletPhotoUrl(outletId: string, imagePath: string | null) {
 export function validateOutletPhotoBytes(size: number, header: Uint8Array) {
   if (size === 0) return { error: "Choose an image to upload." } as const;
   if (size > MAX_OUTLET_PHOTO_BYTES) {
-    return { error: "Outlet photos must be 2 MB or smaller." } as const;
+    return { error: "Outlet photos must be 4 MB or smaller." } as const;
   }
   const contentType = detectProfilePhotoContentType(header);
   if (!contentType) {

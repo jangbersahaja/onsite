@@ -11,7 +11,7 @@ export const idErrors: typeof enErrors = {
   pin_not_recognized: "Masuk dengan PIN tidak dikenali untuk peramban ini.",
   password_mismatch: "Kata sandi tidak cocok.",
   photo_required: "Foto profil diperlukan.",
-  photo_too_large: "Foto profil harus 2 MB atau kurang.",
+  photo_too_large: "Foto profil harus 4 MB atau kurang.",
   register_failed: "Pendaftaran ini tidak dapat dikirim.",
   registration_link_invalid: "Tautan pendaftaran ini tidak tersedia.",
   registration_link_missing: "Tautan pendaftaran ini tidak memiliki token.",

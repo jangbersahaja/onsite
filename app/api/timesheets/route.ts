@@ -30,6 +30,7 @@ import {
 } from "@/lib/timesheet-create-rules";
 import { getTimesheetRows, parseTimesheetFilters } from "@/lib/timesheet-data";
 import { buildTimesheetImportExport } from "@/lib/timesheet-import";
+import { getOffDayDateKeys } from "@/lib/timesheet-off-days";
 import {
   getCompletedBreakMinutes,
   getWorkedMinutes,
@@ -302,6 +303,7 @@ export async function GET(request: Request) {
         );
 
         let totalWorkedMinutes = 0;
+        const dayLines: { date: string; cells: string[] }[] = [];
         for (const row of group.rows) {
           const clockInLocal = formatCsvOutletTimestamp(
             row.clockInAt,
@@ -330,7 +332,7 @@ export async function GET(request: Request) {
               : getWorkedMinutes(row.clockInAt, row.clockOutAt, row.breaks);
           if (workedMinutes !== null) totalWorkedMinutes += workedMinutes;
 
-          csvRows.push([
+          const cells = [
             clockInLocal,
             clockOutLocal ?? "Open",
             grossMinutes === null ? "" : (grossMinutes / 60).toFixed(2),
@@ -342,8 +344,35 @@ export async function GET(request: Request) {
                   row.clockOutSource === "manual"
                 ? "Manually adjusted"
                 : "GPS verified",
-          ]);
+          ];
+          dayLines.push({
+            date: formatOutletTimestamp(row.clockInAt, row.timezone).slice(
+              0,
+              10,
+            ),
+            cells,
+          });
         }
+        if (group.rows.every((row) => row.source === "onsite")) {
+          const today = formatOutletTimestamp(
+            new Date(),
+            group.rows[0].timezone,
+          ).slice(0, 10);
+          for (const date of getOffDayDateKeys({
+            from: parsed.data.from,
+            to: parsed.data.to,
+            today,
+            workedDateKeys: dayLines.map((line) => line.date),
+          })) {
+            const [year, month, day] = date.split("-");
+            dayLines.push({
+              date,
+              cells: [`${day}/${month}/${year}`, "", "", "", "", "Off day"],
+            });
+          }
+        }
+        dayLines.sort((left, right) => left.date.localeCompare(right.date));
+        csvRows.push(...dayLines.map((line) => line.cells));
         csvRows.push(
           ["Total shift records", group.rows.length],
           ["Total work hours", (totalWorkedMinutes / 60).toFixed(2)],

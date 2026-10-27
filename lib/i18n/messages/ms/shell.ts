@@ -21,7 +21,7 @@ export const msShell: typeof enShell = {
     changePhoto: "Tukar foto",
     removePhoto: "Alih keluar foto",
     choosePhoto: "Pilih foto profil",
-    tooLarge: "Foto profil mestilah 2 MB atau kurang.",
+    tooLarge: "Foto profil mestilah 4 MB atau kurang.",
     updateTitle: "Kemas kini foto profil?",
     updateDescription: "Foto ini akan menggantikan foto profil semasa anda.",
     updateConfirm: "Kemas kini foto",

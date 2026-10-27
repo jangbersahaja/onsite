@@ -152,7 +152,7 @@ export function OutletsManager() {
       return;
     }
     if (file.size > MAX_OUTLET_PHOTO_BYTES) {
-      setOutletMessage("Outlet photos must be 2 MB or smaller.");
+      setOutletMessage("Outlet photos must be 4 MB or smaller.");
       return;
     }
     setOutletMessage("");
@@ -645,7 +645,7 @@ export function OutletsManager() {
                       onChange={handlePhotoChange}
                     />
                     <p className="outlet-photo-hint">
-                      JPEG, PNG, or WebP, up to 2 MB.
+                      JPEG, PNG, or WebP, up to 4 MB.
                     </p>
                     {(photoFile ||
                       (editingOutlet?.imageUrl && !photoRemoved)) && (

@@ -11,7 +11,7 @@ export const msErrors: typeof enErrors = {
   pin_not_recognized: "Log masuk PIN tidak dikenali untuk peranti ini.",
   password_mismatch: "Kata laluan tidak sepadan.",
   photo_required: "Foto profil diperlukan.",
-  photo_too_large: "Foto profil mesti 2 MB atau kurang.",
+  photo_too_large: "Foto profil mesti 4 MB atau kurang.",
   register_failed: "Pendaftaran ini tidak dapat dihantar.",
   registration_link_invalid: "Pautan pendaftaran ini tidak tersedia.",
   registration_link_missing: "Pautan pendaftaran ini tiada tokennya.",

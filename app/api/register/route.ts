@@ -101,7 +101,7 @@ export async function POST(request: Request) {
   ) {
     return Response.json(
       {
-        error: "Profile photos must be 2 MB or smaller.",
+        error: "Profile photos must be 4 MB or smaller.",
         code: "photo_too_large",
       },
       { status: 413 },

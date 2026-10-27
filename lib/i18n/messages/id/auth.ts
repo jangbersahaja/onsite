@@ -31,7 +31,7 @@ export const idAuth: typeof enAuth = {
       "Mendaftar untuk {outlet}. Manajer di outlet ini akan menyetujui akun Anda.",
     photoPreviewAlt: "Pratinjau foto profil Anda",
     addPhoto: "Tambah foto",
-    photoRequirements: "Wajib · JPEG, PNG, atau WebP · maks. 2 MB",
+    photoRequirements: "Wajib · JPEG, PNG, atau WebP · maks. 4 MB",
     fullName: "Nama lengkap",
     username: "Nama pengguna (Panggilan)",
     email: "Email",

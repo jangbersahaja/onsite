@@ -19,7 +19,7 @@ export const enShell = {
     changePhoto: "Change photo",
     removePhoto: "Remove photo",
     choosePhoto: "Choose a profile photo",
-    tooLarge: "Profile photos must be 2 MB or smaller.",
+    tooLarge: "Profile photos must be 4 MB or smaller.",
     updateTitle: "Update profile photo?",
     updateDescription: "This photo will replace your current profile photo.",
     updateConfirm: "Update photo",

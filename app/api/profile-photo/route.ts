@@ -21,7 +21,7 @@ function photoValidationCode(message: string) {
   if (message === "Choose an image to upload.") return "image_required";
   if (message === "Choose a JPEG, PNG, or WebP image.")
     return "photo_type_invalid";
-  if (message === "Profile photos must be 2 MB or smaller.")
+  if (message === "Profile photos must be 4 MB or smaller.")
     return "photo_too_large";
   return "photo_invalid";
 }
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   if (tooLarge(request)) {
     return Response.json(
       {
-        error: "Profile photos must be 2 MB or smaller.",
+        error: "Profile photos must be 4 MB or smaller.",
         code: "photo_too_large",
       },
       { status: 413 },

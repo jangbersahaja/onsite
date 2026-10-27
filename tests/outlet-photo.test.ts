@@ -16,8 +16,8 @@ const webpHeader = new Uint8Array([
 ]);
 const gifHeader = new Uint8Array([0x47, 0x49, 0x46, 0x38, 0x39, 0x61]);
 
-test("outlet photo limit matches the 2 MB rule", () => {
-  assert.equal(MAX_OUTLET_PHOTO_BYTES, 2 * 1024 * 1024);
+test("outlet photo limit matches the 4 MB rule", () => {
+  assert.equal(MAX_OUTLET_PHOTO_BYTES, 4 * 1024 * 1024);
 });
 
 test("outlet photo accepts JPEG, PNG, and WebP", () => {
@@ -41,7 +41,7 @@ test("outlet photo rejects empty, oversized, and unsupported files", () => {
   });
   assert.deepEqual(
     validateOutletPhotoBytes(MAX_OUTLET_PHOTO_BYTES + 1, jpegHeader),
-    { error: "Outlet photos must be 2 MB or smaller." },
+    { error: "Outlet photos must be 4 MB or smaller." },
   );
   assert.deepEqual(validateOutletPhotoBytes(1024, gifHeader), {
     error: "Choose a JPEG, PNG, or WebP image.",

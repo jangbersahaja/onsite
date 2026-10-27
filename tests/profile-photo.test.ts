@@ -30,7 +30,7 @@ test("profile photo type detection checks JPEG, PNG, and WebP signatures", () =>
     detectProfilePhotoContentType(new Uint8Array([0x25, 0x50])),
     null,
   );
-  assert.equal(MAX_PROFILE_PHOTO_BYTES, 2 * 1024 * 1024);
+  assert.equal(MAX_PROFILE_PHOTO_BYTES, 4 * 1024 * 1024);
 });
 
 test("profile photo extensions follow the detected content type", () => {
@@ -46,7 +46,7 @@ test("profile photo validation rejects empty, oversized, and unsupported files",
   });
   assert.deepEqual(
     validateProfilePhotoBytes(MAX_PROFILE_PHOTO_BYTES + 1, jpegHeader),
-    { error: "Profile photos must be 2 MB or smaller." },
+    { error: "Profile photos must be 4 MB or smaller." },
   );
   assert.deepEqual(validateProfilePhotoBytes(12, new Uint8Array(12)), {
     error: "Choose a JPEG, PNG, or WebP image.",

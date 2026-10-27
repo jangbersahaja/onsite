@@ -31,7 +31,7 @@ export const msAuth: typeof enAuth = {
       "Mendaftar untuk {outlet}. Pengurus di outlet ini akan meluluskan akaun anda.",
     photoPreviewAlt: "Pratonton foto profil anda",
     addPhoto: "Tambah foto",
-    photoRequirements: "Wajib · JPEG, PNG, atau WebP · sehingga 2 MB",
+    photoRequirements: "Wajib · JPEG, PNG, atau WebP · sehingga 4 MB",
     fullName: "Nama penuh",
     username: "Nama pengguna (Panggilan)",
     email: "E-mel",

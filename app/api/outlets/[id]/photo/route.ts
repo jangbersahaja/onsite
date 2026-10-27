@@ -27,7 +27,7 @@ function photoValidationCode(message: string) {
   if (message === "Choose an image to upload.") return "image_required";
   if (message === "Choose a JPEG, PNG, or WebP image.")
     return "photo_type_invalid";
-  if (message === "Outlet photos must be 2 MB or smaller.")
+  if (message === "Outlet photos must be 4 MB or smaller.")
     return "photo_too_large";
   return "photo_invalid";
 }
@@ -62,7 +62,7 @@ export async function POST(request: Request, { params }: RouteContext) {
   if (tooLarge(request)) {
     return Response.json(
       {
-        error: "Outlet photos must be 2 MB or smaller.",
+        error: "Outlet photos must be 4 MB or smaller.",
         code: "photo_too_large",
       },
       { status: 413 },

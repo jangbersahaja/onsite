@@ -422,8 +422,8 @@ a {
 .top-avatar {
   display: grid;
   flex: none;
-  width: 33px;
-  height: 33px;
+  width: 44px;
+  height: 44px;
   place-items: center;
   border: 1px solid #c7d2fe;
   border-radius: 50%;
@@ -579,8 +579,8 @@ a {
   background: #f43f5e;
 }
 .top-avatar {
-  width: 30px;
-  height: 30px;
+  width: 40px;
+  height: 40px;
 }
 .page-content {
   width: min(100%, 1280px);
@@ -2825,6 +2825,9 @@ h2 {
   font-size: 9px;
   line-height: 1.4;
 }
+.timesheet-break-item {
+  display: block;
+}
 .timesheet-record-cell {
   display: flex;
   align-items: center;
@@ -2882,6 +2885,12 @@ h2 {
   color: var(--muted);
   font-size: 12px;
   text-align: center;
+}
+.timesheet-off-day-row td {
+  padding: 8px 12px;
+  background: #f2f3f9;
+  color: var(--muted);
+  font-size: 12px;
 }
 .manual-adjustment-label,
 .gps-source-label,
@@ -3706,8 +3715,8 @@ h2 {
     font-size: 9px;
   }
   .top-avatar {
-    width: 28px;
-    height: 28px;
+    width: 36px;
+    height: 36px;
   }
   .page-content,
   .team-page-content {
@@ -6554,6 +6563,19 @@ small,
   .timesheet-table tbody tr.timesheet-empty-row td {
     padding: 4px 0;
     text-align: center;
+  }
+  .timesheet-table tbody tr.timesheet-off-day-row {
+    display: block;
+    margin: 4px 0;
+    padding: 6px 12px;
+    border: 0;
+    border-radius: 8px;
+    background: #f2f3f9;
+    box-shadow: none;
+  }
+  .timesheet-table tbody tr.timesheet-off-day-row td {
+    padding: 0;
+    background: transparent;
   }
   .timesheet-table .timesheet-record-cell {
     flex-wrap: wrap;

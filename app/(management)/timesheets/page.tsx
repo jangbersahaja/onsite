@@ -12,7 +12,11 @@ import { TimesheetImportDialog } from "@/app/(management)/timesheets/_components
 import { useConfirmDialog } from "@/app/_components/confirm-dialog";
 import { EditIcon, PlusIcon, TrashIcon } from "@/app/_components/icons";
 import { OutletAvatar } from "@/app/_components/outlet-avatar";
-import { outletDateTimeToISOString } from "@/lib/outlet-time";
+import {
+  formatOutletDateTime,
+  outletDateTimeToISOString,
+} from "@/lib/outlet-time";
+import { getOffDayDateKeys } from "@/lib/timesheet-off-days";
 import Link from "next/link";
 import { useEffect, useState, type FormEvent } from "react";
 
@@ -37,6 +41,10 @@ type TimesheetRow = {
   clockOutSource: "gps" | "manual" | "storehub" | null;
 };
 
+type TimelineItem =
+  | { kind: "shift"; date: string; row: TimesheetRow }
+  | { kind: "off-day"; date: string };
+
 type TimesheetStaffGroup = {
   key: string;
   userId: string | null;
@@ -46,6 +54,7 @@ type TimesheetStaffGroup = {
   employeeName: string;
   employeeEmail: string | null;
   rows: TimesheetRow[];
+  timeline: TimelineItem[];
 };
 
 type TimesheetStaff = {
@@ -172,6 +181,10 @@ function formatShiftDate(date: string) {
   }).format(new Date(Date.UTC(year, month - 1, day)));
 }
 
+function formatBreakTime(timestamp: string, timezone: string) {
+  return formatOutletDateTime(timestamp, timezone).slice(11);
+}
+
 function staffGroupKey(row: TimesheetRow) {
   const identity = row.userId
     ? `user:${row.userId}`
@@ -179,6 +192,28 @@ function staffGroupKey(row: TimesheetRow) {
       ? `email:${row.employeeEmail.toLowerCase()}`
       : `name:${row.employeeName.trim().toLowerCase()}`;
   return `${row.outletId}:${identity}`;
+}
+
+function buildTimeline(
+  group: TimesheetStaffGroup,
+  filters: Filters,
+): TimelineItem[] {
+  const items: TimelineItem[] = group.rows.map((row) => ({
+    kind: "shift" as const,
+    date: row.clockInLocal.slice(0, 10),
+    row,
+  }));
+  if (group.userId) {
+    const today = formatOutletDateTime(new Date(), group.timezone).slice(0, 10);
+    const offDays = getOffDayDateKeys({
+      from: filters.from,
+      to: filters.to,
+      today,
+      workedDateKeys: items.map((item) => item.date),
+    });
+    items.push(...offDays.map((date) => ({ kind: "off-day" as const, date })));
+  }
+  return items.sort((left, right) => left.date.localeCompare(right.date));
 }
 
 export default function TimesheetsPage() {
@@ -472,6 +507,7 @@ export default function TimesheetsPage() {
         employeeName: row.employeeName,
         employeeEmail: row.employeeEmail,
         rows: [row],
+        timeline: [],
       });
     }
   }
@@ -490,6 +526,7 @@ export default function TimesheetsPage() {
       employeeName: member.name,
       employeeEmail: member.email,
       rows: [],
+      timeline: [],
     });
   }
   staffGroups.sort(
@@ -505,6 +542,9 @@ export default function TimesheetsPage() {
       }) ||
       left.key.localeCompare(right.key),
   );
+  for (const group of staffGroups) {
+    group.timeline = buildTimeline(group, filters);
+  }
   const csvQuery = filterQuery(filters, "csv");
   const importExportHref = (outletId: string) =>
     `/api/timesheets?${filterQuery({ ...filters, outletId }, "import-csv")}`;
@@ -708,7 +748,24 @@ export default function TimesheetsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {group.rows.map((row) => {
+                  {group.timeline.map((item) => {
+                    if (item.kind === "off-day") {
+                      return (
+                        <tr
+                          className="timesheet-off-day-row"
+                          key={`off-day-${item.date}`}
+                        >
+                          <td colSpan={5}>
+                            <time dateTime={item.date}>
+                              {formatShiftDate(item.date)}
+                            </time>
+                            <span aria-hidden="true"> · </span>
+                            Off day
+                          </td>
+                        </tr>
+                      );
+                    }
+                    const row = item.row;
                     const clockIn = splitLocalTimestamp(row.clockInLocal);
                     const clockOut = splitLocalTimestamp(row.clockOutLocal);
                     const isExpanded = expandedShiftIds.has(row.id);
@@ -795,6 +852,26 @@ export default function TimesheetsPage() {
                               {row.breakMinutes === null
                                 ? "Not provided"
                                 : formatDuration(row.breakMinutes)}
+                              {row.breaks.map((breakInterval) => (
+                                <span
+                                  className="timesheet-break-item"
+                                  key={breakInterval.id}
+                                >
+                                  Break start{" "}
+                                  {formatBreakTime(
+                                    breakInterval.startedAt,
+                                    row.timezone,
+                                  )}
+                                  <span aria-hidden="true"> · </span>
+                                  end{" "}
+                                  {breakInterval.endedAt
+                                    ? formatBreakTime(
+                                        breakInterval.endedAt,
+                                        row.timezone,
+                                      )
+                                    : "Not ended"}
+                                </span>
+                              ))}
                             </small>
                           )}
                         </td>
@@ -844,7 +921,7 @@ export default function TimesheetsPage() {
                       </tr>
                     );
                   })}
-                  {group.rows.length === 0 && (
+                  {group.timeline.length === 0 && (
                     <tr className="timesheet-empty-row">
                       <td colSpan={5}>No shifts in this range.</td>
                     </tr>

@@ -28,7 +28,7 @@ export const enAuth = {
       "Registering for {outlet}. A manager at this outlet will approve your account.",
     photoPreviewAlt: "Your profile photo preview",
     addPhoto: "Add photo",
-    photoRequirements: "Required · JPEG, PNG, or WebP · up to 2 MB",
+    photoRequirements: "Required · JPEG, PNG, or WebP · up to 4 MB",
     fullName: "Full name",
     username: "Username (Nickname)",
     email: "Email",

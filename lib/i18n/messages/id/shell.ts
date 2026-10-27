@@ -21,7 +21,7 @@ export const idShell: typeof enShell = {
     changePhoto: "Ganti foto",
     removePhoto: "Hapus foto",
     choosePhoto: "Pilih foto profil",
-    tooLarge: "Foto profil harus 2 MB atau lebih kecil.",
+    tooLarge: "Foto profil harus 4 MB atau lebih kecil.",
     updateTitle: "Perbarui foto profil?",
     updateDescription: "Foto ini akan menggantikan foto profil Anda saat ini.",
     updateConfirm: "Perbarui foto",

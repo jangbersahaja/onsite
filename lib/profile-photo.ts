@@ -1,4 +1,4 @@
-export const MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024;
+export const MAX_PROFILE_PHOTO_BYTES = 4 * 1024 * 1024;
 
 export const PROFILE_PHOTO_CONTENT_TYPES = [
   "image/jpeg",
@@ -54,7 +54,7 @@ export function profilePhotoExtension(contentType: ProfilePhotoContentType) {
 export function validateProfilePhotoBytes(size: number, header: Uint8Array) {
   if (size === 0) return { error: "Choose an image to upload." } as const;
   if (size > MAX_PROFILE_PHOTO_BYTES) {
-    return { error: "Profile photos must be 2 MB or smaller." } as const;
+    return { error: "Profile photos must be 4 MB or smaller." } as const;
   }
   const contentType = detectProfilePhotoContentType(header);
   if (!contentType) {

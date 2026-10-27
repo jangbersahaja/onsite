@@ -9,7 +9,7 @@ export const enErrors = {
   pin_not_recognized: "PIN sign-in was not recognized for this browser.",
   password_mismatch: "The passwords do not match.",
   photo_required: "A profile photo is required.",
-  photo_too_large: "Profile photos must be 2 MB or smaller.",
+  photo_too_large: "Profile photos must be 4 MB or smaller.",
   register_failed: "Could not submit this registration.",
   registration_link_invalid: "This registration link is unavailable.",
   registration_link_missing: "This registration link is missing its token.",
