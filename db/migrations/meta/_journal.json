@@ -162,6 +162,13 @@
       "when": 1792261045762,
       "tag": "0022_supreme_toro",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1792745150687,
+      "tag": "0023_amused_sentinel",
+      "breakpoints": true
     }
   ]
 }

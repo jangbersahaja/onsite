@@ -7,6 +7,7 @@ import {
 import { CloseIcon } from "@/app/_components/icons";
 import { ModalDialog } from "@/app/_components/modal-dialog";
 import { formatOutletDateTime } from "@/lib/outlet-time";
+import { datePart, relinkShiftToDate } from "@/lib/timesheet-datetime";
 import { useState, type FormEvent } from "react";
 
 type EditableTimesheetRow = {
@@ -42,6 +43,9 @@ export function TimesheetEditDialog({
   const [clockInAt, setClockInAt] = useState(
     row.clockInLocal.slice(0, 16).replace(" ", "T"),
   );
+  const [anchorDate, setAnchorDate] = useState<string | null>(() =>
+    datePart(clockInAt),
+  );
   const [clockOutAt, setClockOutAt] = useState(
     row.clockOutLocal?.slice(0, 16).replace(" ", "T") ?? "",
   );
@@ -55,6 +59,19 @@ export function TimesheetEditDialog({
     })),
   );
   const [reason, setReason] = useState("");
+
+  function changeClockIn(value: string) {
+    const relinked = relinkShiftToDate({
+      fromDate: anchorDate,
+      clockIn: value,
+      clockOutAt,
+      breaks: editingBreaks,
+    });
+    setClockInAt(value);
+    setClockOutAt(relinked.clockOutAt);
+    setEditingBreaks(relinked.breaks);
+    setAnchorDate(datePart(value) ?? anchorDate);
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -95,7 +112,7 @@ export function TimesheetEditDialog({
               type="datetime-local"
               required
               value={clockInAt}
-              onChange={(event) => setClockInAt(event.target.value)}
+              onChange={(event) => changeClockIn(event.target.value)}
             />
           </label>
           <label>
@@ -108,6 +125,7 @@ export function TimesheetEditDialog({
           </label>
           <BreakEditor
             timezone={row.timezone}
+            clockInAt={clockInAt}
             breaks={editingBreaks}
             onChange={setEditingBreaks}
           />

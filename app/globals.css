@@ -2666,6 +2666,13 @@ h2 {
 .timesheet-reason {
   grid-column: auto;
 }
+.timesheet-import-note,
+.timesheet-import-export {
+  grid-column: 1 / -1;
+}
+.timesheet-import-export {
+  justify-self: start;
+}
 .timesheet-table-section {
   margin-top: 18px;
 }

@@ -1,0 +1,2 @@
+ALTER TABLE "user" ADD COLUMN "staff_code" text;--> statement-breakpoint
+CREATE UNIQUE INDEX "user_staff_code_lower_uq" ON "user" USING btree (lower("staff_code")) WHERE "user"."staff_code" is not null;

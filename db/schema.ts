@@ -46,6 +46,8 @@ export const user = pgTable(
     id: text("id").primaryKey(),
     name: text("name").notNull(),
     username: text("username").notNull(),
+    // Optional staff code used to match CSV timesheet imports.
+    staffCode: text("staff_code"),
     email: text("email").notNull().unique(),
     passwordHash: text("password_hash").notNull(),
     profilePhotoPath: text("profile_photo_path"),
@@ -77,6 +79,9 @@ export const user = pgTable(
   (table) => [
     uniqueIndex("user_username_lower_uq").on(sql`lower(${table.username})`),
     uniqueIndex("user_email_lower_uq").on(sql`lower(${table.email})`),
+    uniqueIndex("user_staff_code_lower_uq")
+      .on(sql`lower(${table.staffCode})`)
+      .where(sql`${table.staffCode} is not null`),
   ],
 );
 

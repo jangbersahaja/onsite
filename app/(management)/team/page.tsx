@@ -13,6 +13,7 @@ type TeamMember = {
   name: string;
   email: string;
   username: string;
+  staffCode: string | null;
   accountType: "super_admin" | "user";
   canAccessClock: boolean;
   canAccessBackoffice: boolean;
@@ -27,6 +28,7 @@ type TeamPerson = {
   userId: string;
   name: string;
   email: string;
+  staffCode: string | null;
   profilePhotoUrl: string | null;
   assignments: TeamMember[];
   canAccessClock: boolean;
@@ -240,6 +242,9 @@ export default function TeamPage() {
   const [message, setMessage] = useState("");
   const [resettingUserId, setResettingUserId] = useState("");
   const [resetUserId, setResetUserId] = useState("");
+  const [staffCodeUserId, setStaffCodeUserId] = useState("");
+  const [staffCodeDraft, setStaffCodeDraft] = useState("");
+  const [staffCodeBusy, setStaffCodeBusy] = useState(false);
   const [deviceActionId, setDeviceActionId] = useState("");
   const [permissionUserId, setPermissionUserId] = useState("");
   const [activeTeamView, setActiveTeamView] = useState<TeamView>("people");
@@ -428,6 +433,41 @@ export default function TeamPage() {
     }
   }
 
+  async function handleStaffCodeSave(userId: string, staffCode: string) {
+    if (staffCodeBusy) return;
+    setStaffCodeBusy(true);
+    setMessage("");
+    try {
+      const trimmed = staffCode.trim();
+      const response = await fetch("/api/team/staff-code", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, staffCode: trimmed || null }),
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      if (!response.ok)
+        throw new Error(body.error ?? "Could not update the staff code.");
+      setData(await loadTeamData(outletId));
+      setStaffCodeUserId("");
+      setMessage("Staff code updated.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not update the staff code.",
+      );
+    } finally {
+      setStaffCodeBusy(false);
+    }
+  }
+
+  function openStaffCodeDialog(person: TeamPerson) {
+    setStaffCodeDraft(person.staffCode ?? "");
+    setStaffCodeUserId(person.userId);
+  }
+
   async function handleStaffDeviceAction(deviceId: string, action: "revoke") {
     if (deviceActionId) return;
     if (
@@ -610,6 +650,7 @@ export default function TeamPage() {
         userId: member.userId,
         name: member.name,
         email: member.email,
+        staffCode: member.staffCode,
         profilePhotoUrl: member.profilePhotoUrl,
         assignments: [member],
         canAccessClock: member.canAccessClock,
@@ -625,6 +666,9 @@ export default function TeamPage() {
   visiblePeople.sort((left, right) => left.name.localeCompare(right.name));
   const resetPerson = visiblePeople.find(
     (person) => person.userId === resetUserId,
+  );
+  const staffCodePerson = visiblePeople.find(
+    (person) => person.userId === staffCodeUserId,
   );
   const pendingDeviceCount = data.staffDevices.filter(
     (device) => device.status === "pending",
@@ -832,6 +876,74 @@ export default function TeamPage() {
         )}
       </ModalDialog>
 
+      <ModalDialog
+        open={Boolean(staffCodePerson)}
+        onOpenChange={(open) => {
+          if (!open) setStaffCodeUserId("");
+        }}
+        labelledBy="staff-code-title"
+      >
+        {staffCodePerson && (
+          <div className="dialog-panel">
+            <header className="dialog-header">
+              <div>
+                <p className="eyebrow">ACCOUNT ACCESS</p>
+                <h2 id="staff-code-title">Staff code</h2>
+              </div>
+              <button
+                className="btn btn-ghost btn-icon btn-sm"
+                type="button"
+                aria-label="Close dialog"
+                title="Close dialog"
+                onClick={() => setStaffCodeUserId("")}
+              >
+                <CloseIcon />
+              </button>
+            </header>
+            <form
+              className="timesheet-edit-fields"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleStaffCodeSave(
+                  staffCodePerson.userId,
+                  staffCodeDraft,
+                );
+              }}
+            >
+              <label>
+                Staff code for {staffCodePerson.name}
+                <input
+                  maxLength={100}
+                  value={staffCodeDraft}
+                  onChange={(event) => setStaffCodeDraft(event.target.value)}
+                />
+              </label>
+              <p className="dialog-description">
+                Used to match staff in CSV timesheet imports. Use letters,
+                numbers, dashes, or underscores. Leave empty to clear it. Each
+                code must be unique.
+              </p>
+              <div className="dialog-actions">
+                <button
+                  className="btn btn-secondary"
+                  type="button"
+                  onClick={() => setStaffCodeUserId("")}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn btn-primary"
+                  type="submit"
+                  disabled={staffCodeBusy}
+                >
+                  {staffCodeBusy ? "Saving…" : "Save staff code"}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+      </ModalDialog>
+
       {activeTeamView === "people" && (
         <section
           className="team-list-section"
@@ -872,6 +984,9 @@ export default function TeamPage() {
                         <div className="team-person-text">
                           <strong>{person.name}</strong>
                           <small>{person.email}</small>
+                          <small>
+                            Staff code: {person.staffCode ?? "Not set"}
+                          </small>
                         </div>
                       </div>
                       {(person.canReset ||
@@ -986,6 +1101,15 @@ export default function TeamPage() {
                           onClick={() => setResetUserId(person.userId)}
                         >
                           Reset password
+                        </button>
+                      )}
+                      {person.canManageAccess && (
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          type="button"
+                          onClick={() => openStaffCodeDialog(person)}
+                        >
+                          Staff code
                         </button>
                       )}
                       {person.pendingDevice && (

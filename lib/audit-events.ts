@@ -47,6 +47,8 @@ export const AUDIT_ACTIONS = [
   "staff_device_pin_removed",
   "team_member_app_access_updated",
   "password_reset_link_issued",
+  "staff_code_updated",
+  "timesheet_import",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -161,6 +163,10 @@ const describers: Record<AuditAction, (parts: DescriptionParts) => string> = {
     `${actor} updated team app access`,
   password_reset_link_issued: ({ actor, target }) =>
     `${actor} issued a password reset link${target ? ` for ${target}` : ""}`,
+  staff_code_updated: ({ actor, target }) =>
+    `${actor} updated the staff code${target ? ` for ${target}` : ""}`,
+  timesheet_import: ({ actor, atOutlet }) =>
+    `${actor} imported shifts from CSV${atOutlet}`,
 };
 
 export function describeAuditEvent(event: AuditEventForDescription): string {

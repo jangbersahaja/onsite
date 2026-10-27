@@ -8,6 +8,7 @@ import {
   TimesheetEditDialog,
   type TimesheetEditValues,
 } from "@/app/(management)/timesheets/_components/timesheet-edit-dialog";
+import { TimesheetImportDialog } from "@/app/(management)/timesheets/_components/timesheet-import-dialog";
 import { useConfirmDialog } from "@/app/_components/confirm-dialog";
 import { EditIcon, PlusIcon, TrashIcon } from "@/app/_components/icons";
 import { OutletAvatar } from "@/app/_components/outlet-avatar";
@@ -124,7 +125,7 @@ function saveFilters(filters: Filters) {
   }
 }
 
-function filterQuery(filters: Filters, format?: "csv") {
+function filterQuery(filters: Filters, format?: "csv" | "import-csv") {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(filters)) {
     if (value) params.set(key, value);
@@ -188,6 +189,7 @@ export default function TimesheetsPage() {
   const [message, setMessage] = useState("");
   const [editing, setEditing] = useState<TimesheetRow | null>(null);
   const [creatingFor, setCreatingFor] = useState<ShiftTarget | null>(null);
+  const [importing, setImporting] = useState(false);
   const [expandedShiftIds, setExpandedShiftIds] = useState<
     Set<TimesheetRow["id"]>
   >(() => new Set());
@@ -504,6 +506,8 @@ export default function TimesheetsPage() {
       left.key.localeCompare(right.key),
   );
   const csvQuery = filterQuery(filters, "csv");
+  const importExportHref = (outletId: string) =>
+    `/api/timesheets?${filterQuery({ ...filters, outletId }, "import-csv")}`;
 
   return (
     <div className="team-page-content timesheet-content">
@@ -519,6 +523,15 @@ export default function TimesheetsPage() {
           <Link className="btn btn-secondary" href="/corrections/review">
             Review requests
           </Link>
+          <button
+            className="btn btn-secondary"
+            type="button"
+            disabled={!data?.outlets.length || !filters.outletId}
+            title={filters.outletId ? undefined : "Choose an outlet to import"}
+            onClick={() => setImporting(true)}
+          >
+            Import CSV
+          </button>
           <a className="btn btn-secondary" href={`/api/timesheets?${csvQuery}`}>
             <span aria-hidden="true">↓</span> Export CSV
           </a>
@@ -619,6 +632,25 @@ export default function TimesheetsPage() {
             if (!open) setEditing(null);
           }}
           onSave={saveEdit}
+        />
+      )}
+
+      {importing && data && (
+        <TimesheetImportDialog
+          outlets={data.outlets.map((outlet) => ({
+            id: outlet.id,
+            name: outlet.name,
+          }))}
+          outletId={filters.outletId}
+          importExportHref={importExportHref(filters.outletId)}
+          onOpenChange={(open) => {
+            if (!open) setImporting(false);
+          }}
+          onImported={(importMessage) => {
+            setImporting(false);
+            setMessage(importMessage);
+            void load(filters);
+          }}
         />
       )}
 

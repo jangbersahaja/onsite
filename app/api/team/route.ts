@@ -54,6 +54,7 @@ export async function GET(request: Request) {
             name: user.name,
             email: user.email,
             username: user.username,
+            staffCode: user.staffCode,
             accountType: user.accountType,
             canAccessClock: user.canAccessClock,
             canAccessBackoffice: user.canAccessBackoffice,

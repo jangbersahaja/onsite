@@ -1,6 +1,7 @@
 "use client";
 
 import { TrashIcon } from "@/app/_components/icons";
+import { suggestBreak } from "@/lib/timesheet-datetime";
 
 export type EditingBreak = {
   id: string | null;
@@ -10,6 +11,7 @@ export type EditingBreak = {
 
 type BreakEditorProps = {
   timezone: string;
+  clockInAt: string;
   breaks: EditingBreak[];
   onChange: (breaks: EditingBreak[]) => void;
   requireEnd?: boolean;
@@ -17,6 +19,7 @@ type BreakEditorProps = {
 
 export function BreakEditor({
   timezone,
+  clockInAt,
   breaks,
   onChange,
   requireEnd = false,
@@ -28,9 +31,11 @@ export function BreakEditor({
         <button
           className="btn btn-secondary btn-sm"
           type="button"
-          onClick={() =>
-            onChange([...breaks, { id: null, startedAt: "", endedAt: "" }])
-          }
+          onClick={() => {
+            const previous = breaks[breaks.length - 1];
+            const suggested = suggestBreak(clockInAt, previous?.endedAt ?? "");
+            onChange([...breaks, { id: null, ...suggested }]);
+          }}
         >
           Add break
         </button>

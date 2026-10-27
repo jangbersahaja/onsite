@@ -7,10 +7,8 @@ import {
 } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
 import { recordAudit } from "@/lib/audit";
-import { getAuth } from "@/lib/auth";
 import { addCalendarDays } from "@/lib/dashboard-data";
 import { getDb } from "@/lib/db";
-import { outletPhotoUrl } from "@/lib/outlet-photo";
 import {
   csvCell,
   formatOutletTimestamp,
@@ -22,7 +20,7 @@ import {
   mergeStoreHubAttendance,
 } from "@/lib/storehub-attendance";
 import { filterStoreHubTimesheets } from "@/lib/storehub-attendance-data";
-import { getTeamAccess } from "@/lib/team-access";
+import { getActor } from "@/lib/timesheet-actor";
 import {
   canChangeShiftFor,
   canDeleteShift,
@@ -31,6 +29,7 @@ import {
   type ManualBreak,
 } from "@/lib/timesheet-create-rules";
 import { getTimesheetRows, parseTimesheetFilters } from "@/lib/timesheet-data";
+import { buildTimesheetImportExport } from "@/lib/timesheet-import";
 import {
   getCompletedBreakMinutes,
   getWorkedMinutes,
@@ -58,51 +57,34 @@ function filenamePart(value: string) {
   );
 }
 
+function dateRangeLabel(filters: { from?: string; to?: string }) {
+  if (filters.from && filters.to) return `${filters.from}_to_${filters.to}`;
+  if (filters.from) return `From_${filters.from}`;
+  if (filters.to) return `Through_${filters.to}`;
+  return "All_Dates";
+}
+
+function csvDownloadHeaders(filename: string) {
+  const fallbackFilename = filename
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\x20-\x7e]/g, "_")
+    .replace(/["\\]/g, "_");
+  const encodedFilename = encodeURIComponent(filename).replace(
+    /['()*]/g,
+    (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return {
+    "Content-Type": "text/csv; charset=utf-8",
+    "Content-Disposition": `attachment; filename="${fallbackFilename}"; filename*=UTF-8''${encodedFilename}`,
+    "Cache-Control": "no-store",
+  };
+}
+
 function formatCsvOutletTimestamp(value: Date | string, timezone: string) {
   const [date, time] = formatOutletTimestamp(value, timezone).split(" ");
   const [year, month, day] = date.split("-");
   return `${day}/${month}/${year} ${time}`;
-}
-
-async function getActor(request: Request) {
-  const session = await getAuth().api.getSession({ headers: request.headers });
-  if (!session) return { error: "Sign in required.", status: 401 as const };
-  const access = await getTeamAccess(session.user.id);
-  if (!access) {
-    return {
-      error: "Timesheet access is not available.",
-      status: 403 as const,
-    };
-  }
-  const outletsForAccess = access.isSuperAdmin
-    ? (
-        await getDb()
-          .select({
-            id: outlets.id,
-            name: outlets.name,
-            address: outlets.address,
-            timezone: outlets.timezone,
-            isActive: outlets.isActive,
-            imagePath: outlets.imagePath,
-          })
-          .from(outlets)
-      ).map(({ imagePath, ...outlet }) => ({
-        ...outlet,
-        imageUrl: outletPhotoUrl(outlet.id, imagePath),
-      }))
-    : access.outlets.map((outlet) => ({ ...outlet, isActive: true }));
-  if (!outletsForAccess.length) {
-    return {
-      error: "Timesheet access is not available.",
-      status: 403 as const,
-    };
-  }
-  return {
-    userId: session.user.id,
-    access,
-    outlets: outletsForAccess,
-    outletIds: outletsForAccess.map((outlet) => outlet.id),
-  };
 }
 
 export async function GET(request: Request) {
@@ -216,6 +198,36 @@ export async function GET(request: Request) {
           new Date(first.clockInAt).getTime(),
       )
       .slice(0, 500);
+    if (params.get("format") === "import-csv") {
+      if (!parsed.data.outletId) {
+        return Response.json(
+          { error: "Choose one outlet to export an import file." },
+          { status: 400 },
+        );
+      }
+      const outletName =
+        actor.outlets.find((outlet) => outlet.id === parsed.data.outletId)
+          ?.name ?? "Outlet";
+      const filename =
+        [
+          "Timesheets-import",
+          filenamePart(outletName),
+          filenamePart(dateRangeLabel(parsed.data)),
+        ].join("_") + ".csv";
+      return new Response(
+        buildTimesheetImportExport(
+          onsiteRows.map((row) => ({
+            staffCode: row.staffCode,
+            timezone: row.timezone,
+            clockInAt: row.clockInAt,
+            clockOutAt: row.clockOutAt,
+            breaks: row.breaks,
+          })),
+        ),
+        { headers: csvDownloadHeaders(filename) },
+      );
+    }
+
     if (params.get("format") === "csv") {
       const employeeIdentity = (row: (typeof rows)[number]) =>
         "userId" in row && row.userId
@@ -348,14 +360,7 @@ export async function GET(request: Request) {
                 (outlet) => outlet.id === parsed.data.outletId,
               )?.name ?? null)
             : null;
-      const dateRange =
-        parsed.data.from && parsed.data.to
-          ? `${parsed.data.from}_to_${parsed.data.to}`
-          : parsed.data.from
-            ? `From_${parsed.data.from}`
-            : parsed.data.to
-              ? `Through_${parsed.data.to}`
-              : "All_Dates";
+      const dateRange = dateRangeLabel(parsed.data);
       const filename =
         [
           "Timesheets",
@@ -363,24 +368,9 @@ export async function GET(request: Request) {
           ...(outletName ? [filenamePart(outletName)] : []),
           filenamePart(dateRange),
         ].join("_") + ".csv";
-      const fallbackFilename = filename
-        .normalize("NFKD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^\x20-\x7e]/g, "_")
-        .replace(/["\\]/g, "_");
-      const encodedFilename = encodeURIComponent(filename).replace(
-        /['()*]/g,
-        (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
-      );
       return new Response(
         csvRows.map((row) => row.map(csvCell).join(",")).join("\r\n"),
-        {
-          headers: {
-            "Content-Type": "text/csv; charset=utf-8",
-            "Content-Disposition": `attachment; filename="${fallbackFilename}"; filename*=UTF-8''${encodedFilename}`,
-            "Cache-Control": "no-store",
-          },
-        },
+        { headers: csvDownloadHeaders(filename) },
       );
     }
 

@@ -61,6 +61,7 @@ export async function getTimesheetRows(
       userId: user.id,
       employeeName: user.name,
       employeeEmail: user.email,
+      staffCode: user.staffCode,
       outletId: outlets.id,
       outletName: outlets.name,
       timezone: workSessions.timezone,
