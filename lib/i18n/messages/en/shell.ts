@@ -12,6 +12,7 @@ export const enShell = {
   selectOutlet: "Select outlet",
   connectedWorkspace: "Connected workspace",
   installApp: "Install app",
+  iosInstallHint: "Tap Share, then Add to Home Screen.",
   signOut: "Sign out",
   signOutTitle: "Sign out?",
   signOutDescription: "You will need to sign in again to continue.",

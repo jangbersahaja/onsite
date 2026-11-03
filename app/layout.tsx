@@ -9,7 +9,11 @@ export const metadata: Metadata = {
   description: "Clock in, review shifts, and manage outlet timekeeping.",
   icons: {
     icon: "/onsite%20logo.png",
-    apple: "/onsite%20logo.png",
+    apple: "/apple-touch-icon.png",
+  },
+  appleWebApp: {
+    capable: true,
+    title: "OnSITE",
   },
 };
 

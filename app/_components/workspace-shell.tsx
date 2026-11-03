@@ -10,7 +10,13 @@ import { MAX_PROFILE_PHOTO_BYTES } from "@/lib/profile-photo";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
 
 export type WorkspaceNavigationItem = {
   href: string;
@@ -28,6 +34,20 @@ export type WorkspaceNavigationGroup = {
 };
 
 export const REVIEW_REQUESTS_CHANGED_EVENT = "review-requests-changed";
+
+function subscribeToNothing() {
+  return () => {};
+}
+
+function isIosBrowserOutsideApp() {
+  const isIos =
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const isStandalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true;
+  return isIos && !isStandalone;
+}
 
 export type WorkspaceOutlet = {
   id: string;
@@ -170,6 +190,12 @@ export function WorkspaceShell({
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(
     null,
   );
+  const isIosBrowser = useSyncExternalStore(
+    subscribeToNothing,
+    isIosBrowserOutsideApp,
+    () => false,
+  );
+  const [showIosHint, setShowIosHint] = useState(false);
   const canAccessBackoffice = session.data?.user.canAccessBackoffice === true;
   const userName = session.data?.user.name ?? messages.shell.account;
   const profilePhotoUrl = session.data?.user.profilePhotoUrl ?? null;
@@ -635,6 +661,21 @@ export function WorkspaceShell({
               >
                 {messages.shell.installApp}
               </button>
+            )}
+            {isIosBrowser && (
+              <button
+                className="btn btn-secondary btn-sm"
+                type="button"
+                aria-expanded={showIosHint}
+                onClick={() => setShowIosHint((value) => !value)}
+              >
+                {messages.shell.installApp}
+              </button>
+            )}
+            {isIosBrowser && showIosHint && (
+              <span className="today-label" role="status">
+                {messages.shell.iosInstallHint}
+              </span>
             )}
             {profilePhotoUrl ? (
               <Image

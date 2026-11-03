@@ -14,6 +14,7 @@ export const idShell: typeof enShell = {
   selectOutlet: "Pilih outlet",
   connectedWorkspace: "Ruang kerja terhubung",
   installApp: "Pasang aplikasi",
+  iosInstallHint: "Ketuk Bagikan, lalu Tambah ke Layar Utama.",
   signOut: "Keluar",
   signOutTitle: "Keluar?",
   signOutDescription: "Anda perlu masuk lagi untuk melanjutkan.",

@@ -14,6 +14,7 @@ export const msShell: typeof enShell = {
   selectOutlet: "Pilih outlet",
   connectedWorkspace: "Ruang kerja bersambung",
   installApp: "Pasang aplikasi",
+  iosInstallHint: "Tekan Kongsi, kemudian Add to Home Screen.",
   signOut: "Log keluar",
   signOutTitle: "Log keluar?",
   signOutDescription: "Anda perlu log masuk semula untuk meneruskan.",
