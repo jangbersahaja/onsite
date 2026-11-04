@@ -4659,10 +4659,13 @@ small,
 .dashboard-staff-name {
   display: grid;
   min-width: 0;
-  justify-items: start;
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: stretch;
   gap: 7px;
 }
 .dashboard-staff-name > strong {
+  min-width: 0;
+  max-width: 100%;
   overflow: hidden;
   color: var(--ink);
   font-size: 14px;
