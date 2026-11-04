@@ -116,7 +116,7 @@ function DashboardShiftItem({
           </span>
         )}
         <div className="dashboard-staff-name">
-          <strong>{shift.employeeName}</strong>
+          <strong title={shift.employeeName}>{shift.employeeName}</strong>
           {shift.source === "storehub" && (
             <span className="storehub-source-label">StoreHub · read-only</span>
           )}
