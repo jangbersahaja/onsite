@@ -4658,6 +4658,7 @@ small,
 }
 .dashboard-staff-name {
   display: grid;
+  flex: 1 1 auto;
   min-width: 0;
   grid-template-columns: minmax(0, 1fr);
   justify-items: stretch;
@@ -4747,7 +4748,7 @@ small,
   grid-column: auto;
 }
 .dashboard-status {
-  display: inline-flex;
+  display: flex;
   min-height: 24px;
   align-items: center;
   border-radius: 4px;
