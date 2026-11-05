@@ -169,6 +169,20 @@
       "when": 1792745150687,
       "tag": "0023_amused_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793848991094,
+      "tag": "0024_mighty_meggan",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793859649982,
+      "tag": "0025_wild_richard_fisk",
+      "breakpoints": true
     }
   ]
 }

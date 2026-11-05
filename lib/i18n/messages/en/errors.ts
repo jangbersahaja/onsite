@@ -106,5 +106,12 @@ export const enErrors = {
   photo_type_invalid: "Choose a JPEG, PNG, or WebP image.",
   account_not_found: "Account not found.",
   profile_photo_update_failed: "Could not update profile photo.",
+  invalid_profile: "Enter a display name and a valid email address.",
+  current_password_incorrect: "The current password is incorrect.",
+  invalid_password:
+    "Enter your current password and a new password of 12 to 128 characters.",
+  profile_update_failed: "Could not update profile.",
+  password_update_failed: "Could not update password.",
+  profile_forbidden: "You cannot edit this profile.",
   profile_photo_remove_failed: "Could not remove profile photo.",
 };

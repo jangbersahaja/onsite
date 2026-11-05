@@ -38,7 +38,13 @@ export function useReportClockWorkspace(report: ClockWorkspaceReport) {
   }, [setReport, report]);
 }
 
-export function ClockWorkspaceFrame({ children }: { children: ReactNode }) {
+export function ClockWorkspaceFrame({
+  children,
+  showWithoutClockAccess = false,
+}: {
+  children: ReactNode;
+  showWithoutClockAccess?: boolean;
+}) {
   const pathname = usePathname();
   const { messages } = useLocale();
   const session = authClient.useSession();
@@ -85,7 +91,7 @@ export function ClockWorkspaceFrame({ children }: { children: ReactNode }) {
 
   return (
     <ClockWorkspaceReportContext.Provider value={setReport}>
-      {user?.canAccessClock ? (
+      {user && (user.canAccessClock || showWithoutClockAccess) ? (
         <WorkspaceShell
           activeHref={pathname}
           pageTitle={report.pageTitle}

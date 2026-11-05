@@ -1,0 +1,1 @@
+ALTER TABLE "correction_requests" ADD COLUMN "reason_code" text;

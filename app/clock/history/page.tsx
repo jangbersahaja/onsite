@@ -3,6 +3,7 @@
 import { useLocale } from "@/app/_components/locale-provider";
 import { OutletAvatar } from "@/app/_components/outlet-avatar";
 import { useReportClockWorkspace } from "@/app/clock/_components/clock-workspace";
+import { ManualShiftDialog } from "@/app/clock/_components/manual-shift-dialog";
 import { ShiftCorrectionDialog } from "@/app/clock/_components/shift-correction-dialog";
 import { SignInForm } from "@/app/clock/_components/sign-in-form";
 import { authClient } from "@/lib/auth-client";
@@ -45,6 +46,19 @@ type HistoryRequest = {
   requestedAt: string;
   reason: string;
   status: "reconciliation" | "approved" | "rejected";
+  reviewReason: string | null;
+  createdAt: string;
+};
+
+type HistoryManualRequest = {
+  id: string;
+  outletId: string;
+  outletName: string;
+  timezone: string;
+  clockInAt: string;
+  clockOutAt: string;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
   reviewReason: string | null;
   createdAt: string;
 };
@@ -137,13 +151,19 @@ async function loadHistoryPage(month: string, offset: number) {
     limit: "20",
     offset: String(offset),
   });
-  const [clockResponse, correctionResponse] = await Promise.all([
-    fetch(`/api/clock?${params}`, { cache: "no-store" }),
-    fetch("/api/corrections", { cache: "no-store" }),
-  ]);
-  const [clockBody, correctionBody] = await Promise.all([
+  const [clockResponse, correctionResponse, manualResponse] = await Promise.all(
+    [
+      fetch(`/api/clock?${params}`, { cache: "no-store" }),
+      fetch("/api/corrections", { cache: "no-store" }),
+      fetch("/api/manual-shifts", { cache: "no-store" }),
+    ],
+  );
+  const [clockBody, correctionBody, manualBody] = await Promise.all([
     clockResponse.json(),
     correctionResponse.json(),
+    manualResponse.ok
+      ? manualResponse.json()
+      : Promise.resolve({ requests: [] }),
   ]);
   if (!clockResponse.ok)
     throw new HistoryLoadError(
@@ -162,6 +182,9 @@ async function loadHistoryPage(month: string, offset: number) {
       ? (correctionBody.requests as HistoryRequest[])
       : [],
     correctionError,
+    manualRequests: manualResponse.ok
+      ? (manualBody.requests as HistoryManualRequest[])
+      : [],
   };
 }
 
@@ -174,6 +197,10 @@ export default function ClockHistoryPage() {
   const [activeTab, setActiveTab] = useState<"shifts" | "requests">("shifts");
   const [data, setData] = useState<HistoryPageData | null>(null);
   const [requests, setRequests] = useState<HistoryRequest[]>([]);
+  const [manualRequests, setManualRequests] = useState<HistoryManualRequest[]>(
+    [],
+  );
+  const [isManualShiftOpen, setIsManualShiftOpen] = useState(false);
   const [selectedOutletId, setSelectedOutletId] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -193,6 +220,7 @@ export default function ClockHistoryPage() {
         if (!active) return;
         setData(result);
         setRequests(result.correctionRequests);
+        setManualRequests(result.manualRequests);
         setMessage(
           result.correctionError ? toErrorText(result.correctionError) : null,
         );
@@ -251,6 +279,7 @@ export default function ClockHistoryPage() {
           : result,
       );
       setRequests(result.correctionRequests);
+      setManualRequests(result.manualRequests);
       setMessage(
         result.correctionError ? toErrorText(result.correctionError) : null,
       );
@@ -266,6 +295,7 @@ export default function ClockHistoryPage() {
     const result = await loadHistoryPage(month, 0);
     setData(result);
     setRequests(result.correctionRequests);
+    setManualRequests(result.manualRequests);
     setMessage(
       result.correctionError ? toErrorText(result.correctionError) : null,
     );
@@ -294,6 +324,10 @@ export default function ClockHistoryPage() {
   const visibleRequests = requests.filter(
     (request) => !selectedOutletId || request.outletId === selectedOutletId,
   );
+  const visibleManualRequests = manualRequests.filter(
+    (request) => !selectedOutletId || request.outletId === selectedOutletId,
+  );
+  const manualT = messages.history.manualShift;
   const monthHours = visibleShifts.reduce((total, shift) => {
     const minutes = getWorkedMinutes(
       shift.clockInAt,
@@ -306,12 +340,33 @@ export default function ClockHistoryPage() {
   return (
     <>
       <main className="page-content history-page">
-        <div className="page-heading">
+        <div className="page-heading history-heading">
           <div>
             <p className="eyebrow">{messages.history.page.eyebrow}</p>
             <h1>{messages.history.page.title}</h1>
             <p className="subheading">{messages.history.page.subheading}</p>
           </div>
+          {data && data.outlets.length > 0 && (
+            <button
+              className="btn btn-primary history-add-shift"
+              type="button"
+              onClick={() => setIsManualShiftOpen(true)}
+            >
+              <svg
+                aria-hidden="true"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+              >
+                <path d="M12 5v14M5 12h14" />
+              </svg>
+              {manualT.addShift}
+            </button>
+          )}
         </div>
 
         <div className="history-controls">
@@ -458,10 +513,23 @@ export default function ClockHistoryPage() {
                   </small>
                 </strong>
                 <button
-                  className="btn btn-secondary btn-sm"
+                  className="btn btn-secondary history-row-action"
                   type="button"
                   onClick={() => setEditingShiftId(shift.id)}
                 >
+                  <svg
+                    aria-hidden="true"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M4 20h4L19 9l-4-4L4 16v4z" />
+                  </svg>
                   {messages.history.actions.requestCorrection}
                 </button>
               </article>
@@ -494,6 +562,50 @@ export default function ClockHistoryPage() {
             className="history-requests"
             aria-label={messages.history.aria.requests}
           >
+            {visibleManualRequests.map((request) => (
+              <article
+                className="history-request-row"
+                key={`manual-${request.id}`}
+              >
+                <div>
+                  <strong>
+                    {manualT.pastShift} · {request.outletName}
+                  </strong>
+                  <span>
+                    {formatDate(
+                      request.clockInAt,
+                      request.timezone,
+                      {
+                        weekday: "short",
+                        day: "numeric",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      },
+                      localeTag,
+                    )}
+                    {" – "}
+                    {formatDate(
+                      request.clockOutAt,
+                      request.timezone,
+                      { hour: "2-digit", minute: "2-digit" },
+                      localeTag,
+                    )}
+                  </span>
+                  <p>{request.reason}</p>
+                  {request.reviewReason && (
+                    <small>
+                      {format(messages.history.request.review, {
+                        reason: request.reviewReason,
+                      })}
+                    </small>
+                  )}
+                </div>
+                <span className={`correction-status ${request.status}`}>
+                  {manualT.status[request.status]}
+                </span>
+              </article>
+            ))}
             {visibleRequests.map((request) => (
               <article className="history-request-row" key={request.id}>
                 <div>
@@ -529,12 +641,27 @@ export default function ClockHistoryPage() {
                 </span>
               </article>
             ))}
-            {visibleRequests.length === 0 && (
-              <p className="history-empty">
-                {messages.history.states.noRequests}
-              </p>
-            )}
+            {visibleRequests.length === 0 &&
+              visibleManualRequests.length === 0 && (
+                <p className="history-empty">
+                  {messages.history.states.noRequests}
+                </p>
+              )}
           </section>
+        )}
+        {isManualShiftOpen && data && data.outlets.length > 0 && (
+          <ManualShiftDialog
+            outlets={data.outlets}
+            defaultOutletId={selectedOutletId || data.outlets[0].id}
+            onOpenChange={(open) => {
+              if (!open) setIsManualShiftOpen(false);
+            }}
+            onSaved={async (error) => {
+              await refreshHistory();
+              if (error) setMessage(error);
+              else setActiveTab("requests");
+            }}
+          />
         )}
         {editingShift && (
           <ShiftCorrectionDialog

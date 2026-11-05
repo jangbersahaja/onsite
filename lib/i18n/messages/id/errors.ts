@@ -116,5 +116,12 @@ export const idErrors: typeof enErrors = {
   photo_type_invalid: "Pilih gambar JPEG, PNG, atau WebP.",
   account_not_found: "Akun tidak ditemukan.",
   profile_photo_update_failed: "Foto profil tidak dapat diperbarui.",
+  invalid_profile: "Masukkan nama tampilan dan alamat email yang valid.",
+  current_password_incorrect: "Kata sandi saat ini salah.",
+  invalid_password:
+    "Masukkan kata sandi saat ini dan kata sandi baru 12 hingga 128 karakter.",
+  profile_update_failed: "Profil tidak dapat diperbarui.",
+  password_update_failed: "Kata sandi tidak dapat diperbarui.",
+  profile_forbidden: "Anda tidak dapat mengubah profil ini.",
   profile_photo_remove_failed: "Foto profil tidak dapat dihapus.",
 };

@@ -27,6 +27,28 @@ export const idHistory: typeof enHistory = {
   filters: {
     month: "Bulan",
   },
+  manualShift: {
+    addShift: "Tambah shift lampau",
+    title: "Tambah shift lampau",
+    description:
+      "Untuk shift yang Anda kerjakan tetapi tidak pernah di-clock. Manajer di outlet ini akan meninjaunya sebelum muncul di riwayat Anda.",
+    outlet: "Outlet",
+    submit: "Kirim untuk ditinjau",
+    submitting: "Mengirim…",
+    confirmTitle: "Kirim shift lampau ini?",
+    confirmDescription:
+      "Manajer di outlet ini akan meninjaunya. Riwayat Anda tidak berubah sampai disetujui.",
+    confirmLabel: "Kirim permintaan",
+    fallbackError: "Permintaan tidak dapat dikirim.",
+    pastShift: "Shift lampau",
+    closeLabel: "Tutup permintaan shift lampau",
+    closeTitle: "Tutup",
+    status: {
+      pending: "Menunggu tinjauan",
+      approved: "Disetujui",
+      rejected: "Ditolak",
+    },
+  },
   summary: {
     allOutlets: "Semua outlet",
     workedHours: "jam kerja dalam shift yang dimuat",

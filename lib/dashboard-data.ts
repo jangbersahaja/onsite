@@ -145,3 +145,26 @@ export function getDashboardShiftStatus(
   );
   return isOnBreak ? "on_break" : "on_shift";
 }
+
+export type TimelineSpan = { left: number; width: number };
+
+export function getTimelineSpan(
+  startAt: Date | string,
+  endAt: Date | string | null,
+  windowStartAt: Date | string,
+  windowEndAt: Date | string,
+  evaluatedAt: Date | string,
+): TimelineSpan | null {
+  const now = timestamp(evaluatedAt);
+  const windowStart = timestamp(windowStartAt);
+  const windowEnd = timestamp(windowEndAt);
+  const start = Math.max(timestamp(startAt), windowStart);
+  const end = Math.min(endAt === null ? now : timestamp(endAt), windowEnd, now);
+  if (end <= start) return null;
+
+  const duration = windowEnd - windowStart;
+  return {
+    left: ((start - windowStart) / duration) * 100,
+    width: ((end - start) / duration) * 100,
+  };
+}

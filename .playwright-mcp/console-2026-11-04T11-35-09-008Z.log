@@ -1,0 +1,521 @@
+[      11ms] [LOG] [Fast Refresh] done in 231ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[     301ms] [LOG] %c Console Ninja extension is connected to Next.js browser, background: rgb(30,30,30); color: rgb(255,213,92) see https://tinyurl.com/2vt8jxzw for more info. @ :0
+[     308ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[     344ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[     677ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[     728ms] [LOG] [Fast Refresh] done in 151ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[    1136ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[    1144ms] [LOG] [Fast Refresh] done in 110ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[  198022ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[  198225ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[  198225ms] [LOG] [Fast Refresh] done in 109ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[37536700ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/api/staff-devices?view=review:0
+[37536935ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/api/corrections?view=review:0
+[38515131ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/api/staff-devices?view=review:0
+[38534373ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/api/corrections?view=review:0
+[39599340ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/api/staff-devices?view=review:0
+[39611210ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/api/corrections?view=review:0
+[39662545ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/api/staff-devices?view=review:0
+[39776738ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/api/corrections?view=review:0
+[39777085ms] [ERROR] CoreLocationProvider: CoreLocation framework reported a kCLErrorLocationUnknown failure. @ http://localhost:3000/clock:0
+[39820324ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/api/staff-devices?view=review:0
+[40801619ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/api/corrections?view=review:0
+[41157762ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/api/staff-devices?view=review:0
+[41170825ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/api/corrections?view=review:0
+[48333137ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/hmr?id=BW_bVkI30_a5c5NT_tsQv' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0_90u2t._.js:16348
+[48334142ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/hmr?id=BW_bVkI30_a5c5NT_tsQv' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0_90u2t._.js:16348
+[48335147ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/hmr?id=BW_bVkI30_a5c5NT_tsQv' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0_90u2t._.js:16348
+[48336150ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/hmr?id=BW_bVkI30_a5c5NT_tsQv' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0_90u2t._.js:16348
+[48337157ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/hmr?id=BW_bVkI30_a5c5NT_tsQv' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0_90u2t._.js:16348
+[48342168ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/hmr?id=BW_bVkI30_a5c5NT_tsQv' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0_90u2t._.js:16348
+[48347182ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/hmr?id=BW_bVkI30_a5c5NT_tsQv' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0_90u2t._.js:16348
+[48352200ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/hmr?id=BW_bVkI30_a5c5NT_tsQv' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0_90u2t._.js:16348
+[48357225ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/hmr?id=BW_bVkI30_a5c5NT_tsQv' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0_90u2t._.js:16348
+[48362254ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/hmr?id=BW_bVkI30_a5c5NT_tsQv' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0_90u2t._.js:16348
+[48367354ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/hmr?id=BW_bVkI30_a5c5NT_tsQv' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0_90u2t._.js:16348
+[48370806ms] [ERROR] Failed to load resource: net::ERR_FAILED @ http://localhost:3000/api/staff-devices?view=review:0
+[48370807ms] [ERROR] Failed to load resource: net::ERR_FAILED @ http://localhost:3000/api/corrections?view=review:0
+[48372446ms] [ERROR] WebSocket connection to 'ws://localhost:3000/_next/hmr?id=BW_bVkI30_a5c5NT_tsQv' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_client_0_90u2t._.js:16348
+[49369600ms] [LOG] %c Console Ninja extension is connected to Next.js browser, background: rgb(30,30,30); color: rgb(255,213,92) see https://tinyurl.com/2vt8jxzw for more info. @ :0
+[49369625ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[49369688ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[49371102ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[49371290ms] [LOG] [Fast Refresh] done in 288ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[49446876ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[49447211ms] [LOG] [Fast Refresh] done in 403ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[49447246ms] [LOG] [Fast Refresh] done in 403ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[49447388ms] [LOG] [Fast Refresh] done in 403ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[49447440ms] [INFO] Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner. @ http://localhost:3000/clock:0
+[49534253ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[49534271ms] [LOG] [Fast Refresh] done in 120ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[55830412ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56464252ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56464989ms] [LOG] [Fast Refresh] done in 840ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56465187ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56465379ms] [WARNING] [Fast Refresh] performing full reload
+
+Fast Refresh will perform a full reload when you edit a file that's imported by modules outside of the React rendering tree.
+You might have a file which exports a React component but also exports a value that is imported by a non-React component file.
+Consider migrating the non-React component export to a separate file and importing it into both files.
+
+It is also possible the parent component of the component you edited is a class component, which disables Fast Refresh.
+Fast Refresh requires at least one parent function component in your React tree. @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56465402ms] [LOG] [Fast Refresh] done in 291ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56465481ms] [LOG] [Fast Refresh] done in 291ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56465567ms] [LOG] [Fast Refresh] done in 291ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56465785ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56465901ms] [LOG] [Fast Refresh] done in 236ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56466145ms] [LOG] %c Console Ninja extension is connected to Next.js browser, background: rgb(30,30,30); color: rgb(255,213,92) see https://tinyurl.com/2vt8jxzw for more info. @ :0
+[56466160ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56466360ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56466533ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56467150ms] [LOG] [Fast Refresh] done in 718ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56468151ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56468208ms] [LOG] [Fast Refresh] done in 158ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56471952ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56472072ms] [LOG] [Fast Refresh] done in 159ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56472400ms] [LOG] [Fast Refresh] done in 159ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56472400ms] [LOG] [Fast Refresh] done in 159ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56472546ms] [LOG] [Fast Refresh] done in 159ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56472749ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56472866ms] [INFO] Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner. @ http://localhost:3000/clock:0
+[56472968ms] [LOG] [Fast Refresh] done in 321ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56473194ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56473296ms] [LOG] [Fast Refresh] done in 203ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56474643ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56474677ms] [LOG] [Fast Refresh] done in 135ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56505760ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56505917ms] [LOG] [Fast Refresh] done in 258ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56841116ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56841292ms] [LOG] [Fast Refresh] done in 280ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56846347ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56847183ms] [LOG] [Fast Refresh] done in 898ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56847274ms] [LOG] [Fast Refresh] done in 898ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56847437ms] [LOG] [Fast Refresh] done in 898ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56847548ms] [LOG] [Fast Refresh] done in 898ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56847564ms] [INFO] Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner. @ http://localhost:3000/clock:0
+[56852965ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56853091ms] [WARNING] [Fast Refresh] performing full reload
+
+Fast Refresh will perform a full reload when you edit a file that's imported by modules outside of the React rendering tree.
+You might have a file which exports a React component but also exports a value that is imported by a non-React component file.
+Consider migrating the non-React component export to a separate file and importing it into both files.
+
+It is also possible the parent component of the component you edited is a class component, which disables Fast Refresh.
+Fast Refresh requires at least one parent function component in your React tree. @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56853130ms] [LOG] [Fast Refresh] done in 244ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56853216ms] [LOG] [Fast Refresh] done in 244ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56853476ms] [LOG] [Fast Refresh] done in 244ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56853764ms] [LOG] %c Console Ninja extension is connected to Next.js browser, background: rgb(30,30,30); color: rgb(255,213,92) see https://tinyurl.com/2vt8jxzw for more info. @ :0
+[56853773ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56853812ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56854748ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56854881ms] [LOG] [Fast Refresh] done in 234ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56858230ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56858346ms] [LOG] [Fast Refresh] done in 258ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56858664ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56858848ms] [LOG] [Fast Refresh] done in 284ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56861569ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56861641ms] [LOG] [Fast Refresh] done in 127ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56861918ms] [LOG] [Fast Refresh] done in 127ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56861976ms] [INFO] Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner. @ http://localhost:3000/clock:0
+[56862485ms] [LOG] [Fast Refresh] done in 127ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56862558ms] [LOG] [Fast Refresh] done in 127ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56862674ms] [LOG] [Fast Refresh] done in 127ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56863090ms] [LOG] [Fast Refresh] done in 127ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56882382ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56882387ms] [LOG] [Fast Refresh] done in 108ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56911689ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56912370ms] [LOG] [Fast Refresh] done in 754ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56912428ms] [LOG] [Fast Refresh] done in 754ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56912469ms] [LOG] [Fast Refresh] done in 754ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56912561ms] [LOG] [Fast Refresh] done in 754ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56912725ms] [LOG] [Fast Refresh] done in 754ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56912736ms] [INFO] Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner. @ http://localhost:3000/clock:0
+[56915809ms] [LOG] [Fast Refresh] done in 754ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56916347ms] [LOG] [Fast Refresh] done in 754ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56916440ms] [LOG] [Fast Refresh] done in 754ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56916712ms] [LOG] [Fast Refresh] done in 754ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56916751ms] [LOG] [Fast Refresh] done in 754ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56928091ms] [LOG] [Fast Refresh] done in 754ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56928540ms] [LOG] [Fast Refresh] done in 754ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56941823ms] [LOG] [Fast Refresh] done in 754ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56942444ms] [LOG] [Fast Refresh] done in 754ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56945298ms] [LOG] [Fast Refresh] done in 754ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56945597ms] [LOG] [Fast Refresh] done in 754ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56963614ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56964291ms] [LOG] [Fast Refresh] done in 718ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56964343ms] [LOG] [Fast Refresh] done in 718ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56964514ms] [LOG] [Fast Refresh] done in 718ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56964550ms] [LOG] [Fast Refresh] done in 718ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56964592ms] [INFO] Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner. @ http://localhost:3000/clock:0
+[56967214ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56967326ms] [WARNING] [Fast Refresh] performing full reload
+
+Fast Refresh will perform a full reload when you edit a file that's imported by modules outside of the React rendering tree.
+You might have a file which exports a React component but also exports a value that is imported by a non-React component file.
+Consider migrating the non-React component export to a separate file and importing it into both files.
+
+It is also possible the parent component of the component you edited is a class component, which disables Fast Refresh.
+Fast Refresh requires at least one parent function component in your React tree. @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56967373ms] [LOG] [Fast Refresh] done in 213ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56967483ms] [LOG] [Fast Refresh] done in 213ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56967633ms] [LOG] [Fast Refresh] done in 213ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56967842ms] [LOG] %c Console Ninja extension is connected to Next.js browser, background: rgb(30,30,30); color: rgb(255,213,92) see https://tinyurl.com/2vt8jxzw for more info. @ :0
+[56967853ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56967891ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56968128ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56968252ms] [LOG] [Fast Refresh] done in 225ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56968627ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56968720ms] [LOG] [Fast Refresh] done in 193ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56969621ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56969630ms] [LOG] [Fast Refresh] done in 110ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56972474ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56972475ms] [LOG] [Fast Refresh] done in 112ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56979859ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56979871ms] [WARNING] [Fast Refresh] performing full reload
+
+Fast Refresh will perform a full reload when you edit a file that's imported by modules outside of the React rendering tree.
+You might have a file which exports a React component but also exports a value that is imported by a non-React component file.
+Consider migrating the non-React component export to a separate file and importing it into both files.
+
+It is also possible the parent component of the component you edited is a class component, which disables Fast Refresh.
+Fast Refresh requires at least one parent function component in your React tree. @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56979949ms] [LOG] [Fast Refresh] done in 31ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56980004ms] [LOG] [Fast Refresh] done in 31ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56980058ms] [LOG] [Fast Refresh] done in 31ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56980287ms] [LOG] %c Console Ninja extension is connected to Next.js browser, background: rgb(30,30,30); color: rgb(255,213,92) see https://tinyurl.com/2vt8jxzw for more info. @ :0
+[56980295ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56980329ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56980648ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56980743ms] [LOG] [Fast Refresh] done in 197ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56981661ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56981747ms] [LOG] [Fast Refresh] done in 187ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56984343ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[56984427ms] [LOG] [Fast Refresh] done in 185ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57012705ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57012790ms] [LOG] [Fast Refresh] done in 85ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57012798ms] [LOG] [Fast Refresh] done in 85ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57012869ms] [LOG] [Fast Refresh] done in 85ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57013036ms] [LOG] [Fast Refresh] done in 85ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57013262ms] [LOG] [Fast Refresh] done in 85ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57013348ms] [INFO] Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner. @ http://localhost:3000/clock:0
+[57013551ms] [LOG] [Fast Refresh] done in 85ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57014021ms] [LOG] [Fast Refresh] done in 85ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57014088ms] [LOG] [Fast Refresh] done in 85ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57014685ms] [LOG] [Fast Refresh] done in 85ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57014814ms] [LOG] [Fast Refresh] done in 85ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57014936ms] [LOG] [Fast Refresh] done in 85ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57015139ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57015227ms] [LOG] [Fast Refresh] done in 188ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57061255ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57061898ms] [LOG] [Fast Refresh] done in 710ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57062254ms] [LOG] [Fast Refresh] done in 710ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57062553ms] [LOG] [Fast Refresh] done in 710ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57062569ms] [LOG] [Fast Refresh] done in 710ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57076124ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57076258ms] [LOG] [Fast Refresh] done in 236ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57145511ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57147015ms] [LOG] [Fast Refresh] done in 1568ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57147078ms] [LOG] [Fast Refresh] done in 1568ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57147199ms] [LOG] [Fast Refresh] done in 1568ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57147474ms] [LOG] [Fast Refresh] done in 1568ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57147573ms] [INFO] Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner. @ http://localhost:3000/clock:0
+[57162044ms] [LOG] [Fast Refresh] done in 1568ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57162632ms] [LOG] [Fast Refresh] done in 1568ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57167880ms] [LOG] [Fast Refresh] done in 1568ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57167986ms] [LOG] [Fast Refresh] done in 1568ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57172758ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57173567ms] [LOG] [Fast Refresh] done in 911ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57365754ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[57365760ms] [LOG] [Fast Refresh] done in 109ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[59711057ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[59711273ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[59711320ms] [LOG] [Fast Refresh] done in 150ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[66976476ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/api/corrections?view=review:0
+[66976990ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://localhost:3000/api/staff-devices?view=review:0
+[67386996ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67387153ms] [LOG] [Fast Refresh] done in 260ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67534054ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67534547ms] [LOG] [Fast Refresh] done in 566ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67534614ms] [LOG] [Fast Refresh] done in 566ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67534797ms] [LOG] [Fast Refresh] done in 566ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67534869ms] [LOG] [Fast Refresh] done in 566ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67534881ms] [INFO] Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner. @ http://localhost:3000/clock:0
+[67536375ms] [LOG] [Fast Refresh] done in 566ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67536837ms] [LOG] [Fast Refresh] done in 566ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67536986ms] [LOG] [Fast Refresh] done in 566ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67594890ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67594925ms] [LOG] [Fast Refresh] done in 136ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67601725ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67602100ms] [LOG] [Fast Refresh] done in 392ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67602166ms] [LOG] [Fast Refresh] done in 392ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67602207ms] [INFO] Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner. @ http://localhost:3000/clock:0
+[67602240ms] [LOG] [Fast Refresh] done in 392ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67625028ms] [LOG] [Fast Refresh] done in 392ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67625191ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67626128ms] [LOG] [Fast Refresh] done in 358ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67626282ms] [WARNING] [Fast Refresh] performing full reload
+
+Fast Refresh will perform a full reload when you edit a file that's imported by modules outside of the React rendering tree.
+You might have a file which exports a React component but also exports a value that is imported by a non-React component file.
+Consider migrating the non-React component export to a separate file and importing it into both files.
+
+It is also possible the parent component of the component you edited is a class component, which disables Fast Refresh.
+Fast Refresh requires at least one parent function component in your React tree. @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67626503ms] [LOG] [Fast Refresh] done in 1155ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67626633ms] [LOG] [Fast Refresh] done in 1155ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67629763ms] [LOG] %c Console Ninja extension is connected to Next.js browser, background: rgb(30,30,30); color: rgb(255,213,92) see https://tinyurl.com/2vt8jxzw for more info. @ :0
+[67629773ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67629874ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67632249ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67632309ms] [LOG] [Fast Refresh] done in 162ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67659968ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67660513ms] [LOG] [Fast Refresh] done in 626ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67660586ms] [LOG] [Fast Refresh] done in 626ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67660798ms] [LOG] [Fast Refresh] done in 626ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67660808ms] [INFO] Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner. @ http://localhost:3000/clock:0
+[67669022ms] [LOG] [Fast Refresh] done in 626ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67670249ms] [LOG] [Fast Refresh] done in 626ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67736683ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67736966ms] [LOG] [Fast Refresh] done in 385ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67829040ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67829057ms] [LOG] [Fast Refresh] done in 119ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67861438ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67861824ms] [WARNING] [Fast Refresh] performing full reload
+
+Fast Refresh will perform a full reload when you edit a file that's imported by modules outside of the React rendering tree.
+You might have a file which exports a React component but also exports a value that is imported by a non-React component file.
+Consider migrating the non-React component export to a separate file and importing it into both files.
+
+It is also possible the parent component of the component you edited is a class component, which disables Fast Refresh.
+Fast Refresh requires at least one parent function component in your React tree. @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67861990ms] [LOG] [Fast Refresh] done in 611ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67862103ms] [LOG] [Fast Refresh] done in 611ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67862340ms] [LOG] %c Console Ninja extension is connected to Next.js browser, background: rgb(30,30,30); color: rgb(255,213,92) see https://tinyurl.com/2vt8jxzw for more info. @ :0
+[67862351ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67862405ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67870948ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67871148ms] [LOG] [Fast Refresh] done in 302ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67911565ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67912633ms] [LOG] [Fast Refresh] done in 1115ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67912671ms] [LOG] [Fast Refresh] done in 1115ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67912814ms] [LOG] [Fast Refresh] done in 1115ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67913198ms] [INFO] Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner. @ http://localhost:3000/clock:0
+[67913381ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67914285ms] [LOG] [Fast Refresh] done in 1005ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67915204ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67915233ms] [LOG] [Fast Refresh] done in 130ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67952175ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67952800ms] [LOG] [Fast Refresh] done in 671ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67952928ms] [LOG] [Fast Refresh] done in 671ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67953012ms] [LOG] [Fast Refresh] done in 671ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67953085ms] [INFO] Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner. @ http://localhost:3000/clock:0
+[67958194ms] [LOG] [Fast Refresh] done in 671ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67958917ms] [LOG] [Fast Refresh] done in 671ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67959002ms] [LOG] [Fast Refresh] done in 671ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67985365ms] [LOG] [Fast Refresh] done in 671ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67985920ms] [LOG] [Fast Refresh] done in 671ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67986293ms] [LOG] [Fast Refresh] done in 671ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67987277ms] [LOG] [Fast Refresh] done in 671ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67987892ms] [LOG] [Fast Refresh] done in 671ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67988167ms] [LOG] [Fast Refresh] done in 671ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67988249ms] [LOG] [Fast Refresh] done in 671ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67988336ms] [LOG] [Fast Refresh] done in 671ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67988430ms] [LOG] [Fast Refresh] done in 671ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67991665ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67991869ms] [LOG] [Fast Refresh] done in 283ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67994450ms] [LOG] [Fast Refresh] done in 283ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[67994588ms] [LOG] [Fast Refresh] done in 283ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68001070ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68001317ms] [LOG] [Fast Refresh] done in 352ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68002760ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68002821ms] [LOG] [Fast Refresh] done in 80ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68002881ms] [LOG] [Fast Refresh] done in 80ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68002925ms] [LOG] [Fast Refresh] done in 80ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68003008ms] [LOG] [Fast Refresh] done in 80ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68003128ms] [LOG] [Fast Refresh] done in 80ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68003228ms] [LOG] [Fast Refresh] done in 80ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68003247ms] [INFO] Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner. @ http://localhost:3000/clock:0
+[68003326ms] [LOG] [Fast Refresh] done in 80ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68003530ms] [LOG] [Fast Refresh] done in 80ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68003704ms] [LOG] [Fast Refresh] done in 80ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68083881ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68084218ms] [LOG] [Fast Refresh] done in 396ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68086732ms] [LOG] [Fast Refresh] done in 396ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68086846ms] [LOG] [Fast Refresh] done in 396ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68087015ms] [LOG] [Fast Refresh] done in 396ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68087118ms] [LOG] [Fast Refresh] done in 396ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68088361ms] [LOG] [Fast Refresh] done in 396ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68100314ms] [LOG] [Fast Refresh] done in 396ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68100316ms] [LOG] [Fast Refresh] done in 396ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68101087ms] [LOG] [Fast Refresh] done in 396ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68101152ms] [LOG] [Fast Refresh] done in 396ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68105919ms] [LOG] [Fast Refresh] done in 396ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68106288ms] [LOG] [Fast Refresh] done in 396ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68106837ms] [LOG] [Fast Refresh] done in 396ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68106955ms] [LOG] [Fast Refresh] done in 396ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68107411ms] [LOG] [Fast Refresh] done in 396ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68107494ms] [LOG] [Fast Refresh] done in 396ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68108230ms] [LOG] [Fast Refresh] done in 396ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68108921ms] [LOG] [Fast Refresh] done in 396ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68108998ms] [LOG] [Fast Refresh] done in 396ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68111849ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68112520ms] [LOG] [Fast Refresh] done in 773ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68213130ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68213153ms] [LOG] [Fast Refresh] done in 124ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68367222ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68367421ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68367468ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68367504ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68367636ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68367723ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68367846ms] [INFO] Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner. @ http://localhost:3000/clock:0
+[68379202ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68394610ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68395709ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68395807ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68401949ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68402801ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68402879ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68406331ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68407055ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68407134ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68432277ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68433326ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68433434ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68434448ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68436287ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68436955ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68437037ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68454507ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68455280ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68455368ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68466284ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68466946ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68467029ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68477130ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68477254ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68477410ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68477558ms] [LOG] [Fast Refresh] done in 271ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68687350ms] [LOG] [Fast Refresh] done in 67966ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68687412ms] [LOG] [Fast Refresh] done in 67966ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68687463ms] [LOG] [Fast Refresh] done in 67966ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68687644ms] [LOG] [Fast Refresh] done in 67966ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68687829ms] [INFO] Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner. @ http://localhost:3000/clock:0
+[68687847ms] [LOG] [Fast Refresh] done in 67966ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68696277ms] [LOG] [Fast Refresh] done in 67966ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68703320ms] [LOG] [Fast Refresh] done in 67966ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68704159ms] [LOG] [Fast Refresh] done in 67966ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68704222ms] [LOG] [Fast Refresh] done in 67966ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68704962ms] [LOG] [Fast Refresh] done in 67966ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68705277ms] [LOG] [Fast Refresh] done in 67966ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68705338ms] [LOG] [Fast Refresh] done in 67966ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68706317ms] [LOG] [Fast Refresh] done in 67966ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68707050ms] [LOG] [Fast Refresh] done in 67966ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68707126ms] [LOG] [Fast Refresh] done in 67966ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68707499ms] [LOG] [Fast Refresh] done in 67966ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68707812ms] [LOG] [Fast Refresh] done in 67966ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68708062ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68708097ms] [LOG] [Fast Refresh] done in 136ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68778506ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68778589ms] [WARNING] [Fast Refresh] performing full reload
+
+Fast Refresh will perform a full reload when you edit a file that's imported by modules outside of the React rendering tree.
+You might have a file which exports a React component but also exports a value that is imported by a non-React component file.
+Consider migrating the non-React component export to a separate file and importing it into both files.
+
+It is also possible the parent component of the component you edited is a class component, which disables Fast Refresh.
+Fast Refresh requires at least one parent function component in your React tree. @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68778729ms] [LOG] [Fast Refresh] done in 182ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68778835ms] [LOG] [Fast Refresh] done in 182ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68779078ms] [LOG] %c Console Ninja extension is connected to Next.js browser, background: rgb(30,30,30); color: rgb(255,213,92) see https://tinyurl.com/2vt8jxzw for more info. @ :0
+[68779087ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68779130ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68779340ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68779458ms] [LOG] [Fast Refresh] done in 220ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68781026ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68781096ms] [LOG] [Fast Refresh] done in 172ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68787669ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68787943ms] [LOG] [Fast Refresh] done in 374ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68794838ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68794846ms] [LOG] [Fast Refresh] done in 110ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68886766ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[68886805ms] [LOG] [Fast Refresh] done in 141ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69082177ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69082818ms] [LOG] [Fast Refresh] done in 713ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69082884ms] [LOG] [Fast Refresh] done in 713ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69082934ms] [LOG] [Fast Refresh] done in 713ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69083137ms] [LOG] [Fast Refresh] done in 713ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69083175ms] [LOG] [Fast Refresh] done in 713ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69083224ms] [INFO] Banner not shown: beforeinstallpromptevent.preventDefault() called. The page must call beforeinstallpromptevent.prompt() to show the banner. @ http://localhost:3000/clock:0
+[69084139ms] [LOG] [Fast Refresh] done in 713ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69084228ms] [LOG] [Fast Refresh] done in 713ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69084319ms] [LOG] [Fast Refresh] done in 713ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69087526ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69088495ms] [LOG] [Fast Refresh] done in 746ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69097832ms] [LOG] [Fast Refresh] done in 746ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69098876ms] [LOG] [Fast Refresh] done in 746ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69098941ms] [LOG] [Fast Refresh] done in 746ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69099032ms] [LOG] [Fast Refresh] done in 746ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69109265ms] [LOG] [Fast Refresh] done in 746ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69109357ms] [LOG] [Fast Refresh] done in 746ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69109562ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69109661ms] [LOG] [Fast Refresh] done in 202ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69145586ms] [LOG] %c Console Ninja extension is connected to Next.js browser, background: rgb(30,30,30); color: rgb(255,213,92) see https://tinyurl.com/2vt8jxzw for more info. @ :0
+[69145597ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69145648ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69147320ms] [ERROR] Failed to load resource: the server responded with a status of 403 (Forbidden) @ http://localhost:3000/api/manual-shifts:0
+[69148280ms] [ERROR] Failed to load resource: the server responded with a status of 403 (Forbidden) @ http://localhost:3000/api/manual-shifts:0
+[69166470ms] [LOG] %c Console Ninja extension is connected to Next.js browser, background: rgb(30,30,30); color: rgb(255,213,92) see https://tinyurl.com/2vt8jxzw for more info. @ :0
+[69166479ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69166507ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69168030ms] [ERROR] Failed to load resource: the server responded with a status of 403 (Forbidden) @ http://localhost:3000/api/manual-shifts:0
+[69169249ms] [ERROR] Failed to load resource: the server responded with a status of 403 (Forbidden) @ http://localhost:3000/api/manual-shifts:0
+[69233221ms] [ERROR] Failed to load resource: the server responded with a status of 403 (Forbidden) @ http://localhost:3000/api/manual-shifts:0
+[69237712ms] [LOG] %c Console Ninja extension is connected to Next.js browser, background: rgb(30,30,30); color: rgb(255,213,92) see https://tinyurl.com/2vt8jxzw for more info. @ :0
+[69237724ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69237752ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69240001ms] [ERROR] Failed to load resource: the server responded with a status of 403 (Forbidden) @ http://localhost:3000/api/manual-shifts:0
+[69241058ms] [ERROR] Failed to load resource: the server responded with a status of 403 (Forbidden) @ http://localhost:3000/api/manual-shifts:0
+[69269911ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69269929ms] [LOG] [Fast Refresh] done in 120ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69466029ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69467123ms] [LOG] [Fast Refresh] done in 452ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69493916ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69494622ms] [LOG] [Fast Refresh] done in 601ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69495682ms] [LOG] [Fast Refresh] done in 601ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69497441ms] [LOG] [Fast Refresh] done in 601ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69497533ms] [LOG] [Fast Refresh] done in 601ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69497641ms] [LOG] [Fast Refresh] done in 601ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69515945ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69516002ms] [LOG] [Fast Refresh] done in 99ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69517836ms] [LOG] [Fast Refresh] done in 99ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69520232ms] [LOG] [Fast Refresh] done in 99ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69520343ms] [LOG] [Fast Refresh] done in 99ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69520439ms] [LOG] [Fast Refresh] done in 99ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69521896ms] [LOG] [Fast Refresh] done in 99ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69521991ms] [LOG] [Fast Refresh] done in 99ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69523440ms] [LOG] [Fast Refresh] done in 99ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69523549ms] [LOG] [Fast Refresh] done in 99ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69523641ms] [LOG] [Fast Refresh] done in 99ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69524264ms] [LOG] [Fast Refresh] done in 99ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69535403ms] [LOG] [Fast Refresh] done in 99ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69536467ms] [LOG] [Fast Refresh] done in 99ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69536534ms] [LOG] [Fast Refresh] done in 99ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69536625ms] [LOG] [Fast Refresh] done in 99ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69557592ms] [LOG] [Fast Refresh] done in 99ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69557594ms] [LOG] [Fast Refresh] done in 99ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69557628ms] [LOG] [Fast Refresh] done in 99ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69560187ms] [LOG] [Fast Refresh] done in 99ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69560285ms] [LOG] [Fast Refresh] done in 99ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69560369ms] [LOG] [Fast Refresh] done in 99ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69570538ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69570883ms] [LOG] [Fast Refresh] done in 390ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69581917ms] [LOG] [Fast Refresh] done in 390ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69582040ms] [LOG] [Fast Refresh] done in 390ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69584298ms] [LOG] [Fast Refresh] done in 390ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69584367ms] [LOG] [Fast Refresh] done in 390ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69584464ms] [LOG] [Fast Refresh] done in 390ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69585115ms] [LOG] [Fast Refresh] done in 390ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[69600856ms] [LOG] [Fast Refresh] done in 390ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782

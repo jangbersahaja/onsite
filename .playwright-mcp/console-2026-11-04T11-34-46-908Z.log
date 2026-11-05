@@ -1,0 +1,19 @@
+[     382ms] [LOG] %c Console Ninja extension is connected to Next.js browser, background: rgb(30,30,30); color: rgb(255,213,92) see https://tinyurl.com/2vt8jxzw for more info. @ :0
+[     388ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[     417ms] [LOG] [HMR] connected @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[     664ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[    1311ms] [LOG] [Fast Refresh] done in 748ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[    3079ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[    3118ms] [LOG] [Fast Refresh] done in 139ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[   20556ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[   21535ms] [LOG] [Fast Refresh] done in 231ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[   21588ms] [LOG] [Fast Refresh] done in 231ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[   21637ms] [LOG] [Fast Refresh] done in 231ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[   21686ms] [LOG] [Fast Refresh] done in 231ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[   21737ms] [LOG] [Fast Refresh] done in 231ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[   21787ms] [LOG] [Fast Refresh] done in 231ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[   21838ms] [LOG] [Fast Refresh] done in 231ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[   21888ms] [LOG] [Fast Refresh] done in 231ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[   21936ms] [LOG] [Fast Refresh] done in 231ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[   21996ms] [LOG] [Fast Refresh] done in 231ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782
+[   22055ms] [LOG] [Fast Refresh] done in 231ms @ http://localhost:3000/_next/static/chunks/node_modules_next_dist_1e8vcs8._.js:782

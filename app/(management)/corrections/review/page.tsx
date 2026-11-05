@@ -43,9 +43,25 @@ type DeviceRequest = {
   outletNames: string[];
 };
 
+type ManualShiftReviewRequest = {
+  id: string;
+  outletId: string;
+  outletName: string;
+  requestedBy: string;
+  requesterName: string;
+  requesterUsername: string;
+  timezone: string;
+  clockInAt: string;
+  clockOutAt: string;
+  reason: string;
+  status: "pending";
+  createdAt: string;
+};
+
 type ReviewData = {
   corrections: ReviewList<ReviewRequest>;
   devices: ReviewList<DeviceRequest>;
+  manualShifts: ReviewList<ManualShiftReviewRequest>;
 };
 
 type ReviewList<T> = {
@@ -122,7 +138,7 @@ async function loadReviewList<T>(
 async function loadReviewRequests(outletId?: string): Promise<ReviewData> {
   const query = new URLSearchParams({ view: "review" });
   if (outletId) query.set("outletId", outletId);
-  const [corrections, devices] = await Promise.all([
+  const [corrections, devices, manualShifts] = await Promise.all([
     loadReviewList<ReviewRequest>(
       `/api/corrections?${query}`,
       "Could not load correction requests.",
@@ -131,8 +147,12 @@ async function loadReviewRequests(outletId?: string): Promise<ReviewData> {
       `/api/staff-devices?${query}`,
       "Could not load device requests.",
     ),
+    loadReviewList<ManualShiftReviewRequest>(
+      "/api/manual-shifts?view=review",
+      "Could not load past shift requests.",
+    ),
   ]);
-  return { corrections, devices };
+  return { corrections, devices, manualShifts };
 }
 
 function formatRequestedTime(value: string, timezone: string) {
@@ -169,6 +189,11 @@ export default function CorrectionReviewPage() {
   const [message, setMessage] = useState("");
   const [selectedCorrectionId, setSelectedCorrectionId] = useState("");
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
+  const [manualRequests, setManualRequests] = useState<
+    ManualShiftReviewRequest[] | null
+  >(null);
+  const [manualError, setManualError] = useState("");
+  const [selectedManualId, setSelectedManualId] = useState("");
   const requestList = requests ?? [];
   const deviceRequestList = deviceRequests ?? [];
   const reconciliationRequests = requestList.filter(
@@ -180,6 +205,12 @@ export default function CorrectionReviewPage() {
     ) ?? null;
   const selectedDevice =
     deviceRequestList.find((request) => request.id === selectedDeviceId) ??
+    null;
+  const manualRequestList = (manualRequests ?? []).filter(
+    (request) => !selectedOutletId || request.outletId === selectedOutletId,
+  );
+  const selectedManual =
+    manualRequestList.find((request) => request.id === selectedManualId) ??
     null;
   const messageNode = message ? (
     <p className="team-message" role="status">
@@ -193,6 +224,9 @@ export default function CorrectionReviewPage() {
       const loaded = await loadReviewRequests(outletId);
       if (loaded.corrections.items) setRequests(loaded.corrections.items);
       if (loaded.devices.items) setDeviceRequests(loaded.devices.items);
+      if (loaded.manualShifts.items)
+        setManualRequests(loaded.manualShifts.items);
+      setManualError(loaded.manualShifts.error ?? "");
       setCorrectionError(loaded.corrections.error ?? "");
       setDeviceError(loaded.devices.error ?? "");
       setMessage("");
@@ -225,6 +259,8 @@ export default function CorrectionReviewPage() {
         if (!active) return;
         setRequests(loaded.corrections.items);
         setDeviceRequests(loaded.devices.items);
+        setManualRequests(loaded.manualShifts.items);
+        setManualError(loaded.manualShifts.error ?? "");
         setCorrectionError(loaded.corrections.error ?? "");
         setDeviceError(loaded.devices.error ?? "");
       })
@@ -383,6 +419,85 @@ export default function CorrectionReviewPage() {
     }
   }
 
+  async function decideManual(
+    event: FormEvent<HTMLFormElement>,
+    requestId: string,
+  ) {
+    event.preventDefault();
+    if (busyId) return;
+    const target = manualRequestList.find(
+      (request) => request.id === requestId,
+    );
+    if (!target) return;
+    const formData = new FormData(event.currentTarget);
+    const reason = String(formData.get("reason") ?? "").trim();
+    const submitter = (event.nativeEvent as SubmitEvent).submitter;
+    const decision =
+      submitter instanceof HTMLButtonElement ? submitter.value : "";
+    if (decision !== "approve" && decision !== "reject") return;
+    if (decision === "reject" && !reason) {
+      setMessage("Add a reviewer note to reject a past shift.");
+      return;
+    }
+
+    if (
+      !(await confirm(
+        decision === "approve"
+          ? {
+              title: "Approve this past shift?",
+              description:
+                "This creates a real shift in the staff member's history.",
+              confirmLabel: "Approve shift",
+            }
+          : {
+              title: "Reject this past shift?",
+              description:
+                "The staff member will see this request as rejected.",
+              confirmLabel: "Reject shift",
+              tone: "danger",
+            },
+      ))
+    )
+      return;
+
+    setBusyId(`manual:${requestId}`);
+    setMessage("");
+    try {
+      const response = await fetch("/api/manual-shifts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestId,
+          outletId: target.outletId,
+          decision,
+          reason,
+        }),
+      });
+      const body = await response.json();
+      if (!response.ok)
+        throw new Error(body.error ?? "Could not record this decision.");
+      setManualRequests(
+        (current) =>
+          current?.filter((request) => request.id !== requestId) ?? null,
+      );
+      setSelectedManualId("");
+      window.dispatchEvent(new Event(REVIEW_REQUESTS_CHANGED_EVENT));
+      setMessage(
+        decision === "approve"
+          ? "Past shift approved and added to history."
+          : "Past shift rejected.",
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Could not record this decision.",
+      );
+    } finally {
+      setBusyId("");
+    }
+  }
+
   return (
     <div className="team-page-content timesheet-content">
       <div className="page-heading">
@@ -419,7 +534,7 @@ export default function CorrectionReviewPage() {
         </button>
       </div>
 
-      {!selectedCorrection && !selectedDevice && messageNode}
+      {!selectedCorrection && !selectedDevice && !selectedManual && messageNode}
       <section
         className="correction-review-list"
         aria-label="Applied punches awaiting reconciliation"
@@ -472,6 +587,66 @@ export default function CorrectionReviewPage() {
           reconciliationRequests.length === 0 && (
             <p className="correction-review-empty">
               No clock corrections need review.
+            </p>
+          )}
+      </section>
+      <section
+        className="correction-review-list"
+        aria-label="Past shift requests"
+      >
+        <header className="correction-review-section-heading">
+          <h2>Past shift requests</h2>
+          <span>
+            {manualRequests === null ? "—" : manualRequestList.length}
+          </span>
+        </header>
+        {manualError && (
+          <p className="team-message" role="alert">
+            {manualError}
+          </p>
+        )}
+        {manualRequests === null && !manualError && (
+          <p className="correction-review-empty">
+            Loading past shift requests…
+          </p>
+        )}
+        {manualRequestList.length > 0 && (
+          <ul className="correction-review-rows">
+            {manualRequestList.map((request) => (
+              <li key={request.id}>
+                <button
+                  className="correction-review-row"
+                  type="button"
+                  onClick={() => {
+                    setMessage("");
+                    setSelectedManualId(request.id);
+                  }}
+                >
+                  <span className="correction-review-row-main">
+                    <span className="eyebrow">
+                      {request.outletName} · PAST SHIFT
+                    </span>
+                    <strong>{request.requesterName}</strong>
+                    <small>
+                      {formatRequestedTime(request.clockInAt, request.timezone)}{" "}
+                      –{" "}
+                      {formatRequestedTime(
+                        request.clockOutAt,
+                        request.timezone,
+                      )}
+                    </small>
+                  </span>
+                  <span className="correction-review-row-action">Review</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {manualRequests !== null &&
+          !manualError &&
+          manualRequestList.length === 0 && (
+            <p className="correction-review-empty">
+              No past shift requests need review.
             </p>
           )}
       </section>
@@ -695,6 +870,88 @@ export default function CorrectionReviewPage() {
         )}
       </ModalDialog>
 
+      <ModalDialog
+        open={Boolean(selectedManual)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedManualId("");
+        }}
+        labelledBy="manual-review-title"
+      >
+        {selectedManual && (
+          <div className="dialog-panel">
+            <header className="dialog-header">
+              <div>
+                <p className="eyebrow">
+                  {selectedManual.outletName} · PAST SHIFT
+                </p>
+                <h2 id="manual-review-title">{selectedManual.requesterName}</h2>
+                <p className="correction-review-email">
+                  {selectedManual.requesterUsername}
+                </p>
+              </div>
+              <button
+                className="btn btn-ghost btn-icon btn-sm"
+                type="button"
+                aria-label="Close dialog"
+                title="Close dialog"
+                onClick={() => setSelectedManualId("")}
+              >
+                <CloseIcon />
+              </button>
+            </header>
+            <strong className="correction-requested-time">
+              {formatRequestedTime(
+                selectedManual.clockInAt,
+                selectedManual.timezone,
+              )}{" "}
+              –{" "}
+              {formatRequestedTime(
+                selectedManual.clockOutAt,
+                selectedManual.timezone,
+              )}
+            </strong>
+            <p className="correction-request-reason">{selectedManual.reason}</p>
+            {messageNode}
+            <form
+              className="correction-decision-form"
+              onSubmit={(event) => void decideManual(event, selectedManual.id)}
+            >
+              <label>
+                Reviewer note
+                <textarea
+                  name="reason"
+                  maxLength={500}
+                  rows={2}
+                  placeholder="Required to reject. Optional when approving."
+                />
+              </label>
+              <div className="dialog-actions correction-decision-actions">
+                <button
+                  className="btn btn-danger"
+                  type="submit"
+                  name="decision"
+                  value="reject"
+                  formNoValidate
+                  disabled={Boolean(busyId)}
+                >
+                  Reject
+                </button>
+                <button
+                  className="btn btn-primary"
+                  type="submit"
+                  name="decision"
+                  value="approve"
+                  disabled={Boolean(busyId)}
+                >
+                  {busyId === `manual:${selectedManual.id}`
+                    ? "Saving…"
+                    : "Approve"}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
+      </ModalDialog>
       <ModalDialog
         open={Boolean(selectedDevice)}
         onOpenChange={(open) => {

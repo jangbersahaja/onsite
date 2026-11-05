@@ -19,7 +19,9 @@ const pageTitles: Record<string, string> = {
 export function ManagementShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [canManageOutlets, setCanManageOutlets] = useState(false);
-  const pageTitle = pageTitles[pathname] ?? "Management";
+  const pageTitle =
+    pageTitles[pathname] ??
+    (pathname.startsWith("/profile/") ? "Team profile" : "Management");
 
   useEffect(() => {
     let active = true;

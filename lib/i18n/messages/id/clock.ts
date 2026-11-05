@@ -28,6 +28,18 @@ export const idClock: typeof enClock = {
   inProgress: "Sedang berjalan",
   timeIn: "Masuk",
   timeOut: "Keluar",
+  progress: {
+    label: "Progres absen",
+    location: "Mencari lokasi",
+    recording: "Mencatat",
+    refreshing: "Memperbarui",
+  },
+  today: {
+    heading: "Hari ini",
+    worked: "Kerja",
+    breaks: "Istirahat",
+    shifts: "Shift",
+  },
   shifts: {
     heading: "Shift terbaru",
     viewAll: "Lihat semua shift",
@@ -95,6 +107,12 @@ export const idClock: typeof enClock = {
     permissionTitle: "Akses lokasi nonaktif",
     permissionDetail:
       "Aktifkan akses lokasi di pengaturan browser Anda, lalu coba lagi.",
+    permissionHintIos:
+      "Di iPhone: Pengaturan > Privasi & Keamanan > Layanan Lokasi > Safari (atau browser Anda), pilih Saat Menggunakan Aplikasi. Lalu muat ulang halaman ini.",
+    permissionHintAndroid:
+      "Di Android: ketuk ikon gembok di samping alamat, buka Izin atau Pengaturan situs, lalu izinkan Lokasi. Lalu muat ulang halaman ini.",
+    permissionHintDesktop:
+      "Di komputer: klik ikon gembok di bilah alamat, atur Lokasi ke Izinkan, lalu muat ulang halaman ini.",
     noLocationTitle: "Lokasi tidak andal",
     noLocationDetail:
       "Dekati jendela atau coba lagi saat ponsel Anda mendapat sinyal GPS yang jelas.",
@@ -111,6 +129,10 @@ export const idClock: typeof enClock = {
     notApprovedDetail: "Ajukan persetujuan untuk browser ini sebelum absen.",
   },
   notices: {
+    clockedIn: "Berhasil absen masuk. Selamat bekerja.",
+    clockedOut: "Berhasil absen keluar. Shift tersimpan.",
+    breakStarted: "Istirahat dimulai.",
+    breakEnded: "Istirahat selesai. Kembali bekerja.",
     browserNotApproved:
       "Browser ini belum disetujui untuk tindakan absensi. Daftarkan browser ini dan minta manajer Anda untuk menyetujuinya.",
     locationUnavailable:

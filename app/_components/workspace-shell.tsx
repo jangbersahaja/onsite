@@ -1,12 +1,9 @@
 "use client";
 
 import { useConfirmDialog } from "@/app/_components/confirm-dialog";
-import { LanguageSwitcher } from "@/app/_components/language-switcher";
 import { useLocale } from "@/app/_components/locale-provider";
 import { OutletAvatar } from "@/app/_components/outlet-avatar";
 import { authClient } from "@/lib/auth-client";
-import { errorMessage, type ErrorText } from "@/lib/i18n/errors";
-import { MAX_PROFILE_PHOTO_BYTES } from "@/lib/profile-photo";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -177,16 +174,13 @@ export function WorkspaceShell({
   const [expandedNavigationGroups, setExpandedNavigationGroups] = useState<
     Set<string>
   >(() => new Set());
-  const [profilePhotoMessage, setProfilePhotoMessage] =
-    useState<ErrorText | null>(null);
-  const [isPhotoSaving, setIsPhotoSaving] = useState(false);
   const { confirm, confirmDialog } = useConfirmDialog();
   const { messages } = useLocale();
   const workspaceName = workspaceNameProp ?? messages.shell.workspace;
   const accountMenuRef = useRef<HTMLDivElement>(null);
-  const profilePhotoInputRef = useRef<HTMLInputElement>(null);
   const [pendingDeviceRequestCount, setPendingDeviceRequestCount] = useState(0);
   const [pendingCorrectionCount, setPendingCorrectionCount] = useState(0);
+  const [pendingManualShiftCount, setPendingManualShiftCount] = useState(0);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(
     null,
   );
@@ -215,7 +209,10 @@ export function WorkspaceShell({
           if (item.href === "/corrections/review")
             return {
               ...item,
-              count: pendingDeviceRequestCount + pendingCorrectionCount,
+              count:
+                pendingDeviceRequestCount +
+                pendingCorrectionCount +
+                pendingManualShiftCount,
             };
           return item;
         }),
@@ -262,13 +259,15 @@ export function WorkspaceShell({
     let refreshGeneration = 0;
     async function refreshReviewCount() {
       const generation = ++refreshGeneration;
-      const [devices, corrections] = await Promise.all([
+      const [devices, corrections, manualShifts] = await Promise.all([
         fetchReviewRows("/api/staff-devices?view=review"),
         fetchReviewRows("/api/corrections?view=review"),
+        fetchReviewRows("/api/manual-shifts?view=review"),
       ]);
       if (!active || generation !== refreshGeneration) return;
       if (devices) setPendingDeviceRequestCount(devices.length);
       if (corrections) setPendingCorrectionCount(corrections.length);
+      if (manualShifts) setPendingManualShiftCount(manualShifts.length);
     }
 
     function onReviewRequestsChanged() {
@@ -315,86 +314,6 @@ export function WorkspaceShell({
     await installPrompt.prompt();
     await installPrompt.userChoice;
     setInstallPrompt(null);
-  }
-
-  async function updateProfilePhoto(file: File) {
-    setProfilePhotoMessage(null);
-    if (file.size > MAX_PROFILE_PHOTO_BYTES) {
-      setProfilePhotoMessage({
-        code: null,
-        text: messages.shell.profile.tooLarge,
-      });
-      return;
-    }
-    if (
-      !(await confirm({
-        title: messages.shell.profile.updateTitle,
-        description: messages.shell.profile.updateDescription,
-        confirmLabel: messages.shell.profile.updateConfirm,
-      }))
-    )
-      return;
-
-    setIsPhotoSaving(true);
-    try {
-      const form = new FormData();
-      form.set("photo", file);
-      const response = await fetch("/api/profile-photo", {
-        method: "POST",
-        body: form,
-      });
-      const body = (await response.json()) as { code?: string; error?: string };
-      if (!response.ok) {
-        setProfilePhotoMessage({
-          code: body.code ?? null,
-          text: body.error ?? messages.shell.profile.updateFailed,
-        });
-        return;
-      }
-      window.dispatchEvent(new Event("shiftline-session-changed"));
-      setIsAccountMenuOpen(false);
-    } catch {
-      setProfilePhotoMessage({
-        code: null,
-        text: messages.shell.profile.updateFailed,
-      });
-    } finally {
-      setIsPhotoSaving(false);
-    }
-  }
-
-  async function removeProfilePhoto() {
-    setProfilePhotoMessage(null);
-    if (
-      !(await confirm({
-        title: messages.shell.profile.removeTitle,
-        description: messages.shell.profile.removeDescription,
-        confirmLabel: messages.shell.profile.removeConfirm,
-        tone: "danger",
-      }))
-    )
-      return;
-    setIsPhotoSaving(true);
-    try {
-      const response = await fetch("/api/profile-photo", { method: "DELETE" });
-      const body = (await response.json()) as { code?: string; error?: string };
-      if (!response.ok) {
-        setProfilePhotoMessage({
-          code: body.code ?? null,
-          text: body.error ?? messages.shell.profile.removeFailed,
-        });
-        return;
-      }
-      window.dispatchEvent(new Event("shiftline-session-changed"));
-      setIsAccountMenuOpen(false);
-    } catch {
-      setProfilePhotoMessage({
-        code: null,
-        text: messages.shell.profile.removeFailed,
-      });
-    } finally {
-      setIsPhotoSaving(false);
-    }
   }
 
   async function signOut() {
@@ -553,10 +472,7 @@ export function WorkspaceShell({
               type="button"
               aria-expanded={isAccountMenuOpen}
               aria-controls="profile-account-menu"
-              onClick={() => {
-                setProfilePhotoMessage(null);
-                setIsAccountMenuOpen((isOpen) => !isOpen);
-              }}
+              onClick={() => setIsAccountMenuOpen((isOpen) => !isOpen)}
             >
               {profilePhotoUrl ? (
                 <Image
@@ -580,46 +496,16 @@ export function WorkspaceShell({
             </button>
             {isAccountMenuOpen && (
               <div className="profile-menu" id="profile-account-menu">
-                <input
-                  ref={profilePhotoInputRef}
-                  type="file"
-                  hidden
-                  accept="image/jpeg,image/png,image/webp"
-                  aria-label={messages.shell.profile.choosePhoto}
-                  onChange={(event) => {
-                    const file = event.currentTarget.files?.[0];
-                    event.currentTarget.value = "";
-                    if (file) void updateProfilePhoto(file);
-                  }}
-                />
-                <button
+                <Link
                   className="btn btn-secondary btn-block"
-                  type="button"
-                  disabled={isPhotoSaving}
-                  onClick={() => profilePhotoInputRef.current?.click()}
+                  href="/profile"
+                  onClick={() => setIsAccountMenuOpen(false)}
                 >
-                  {messages.shell.profile.changePhoto}
-                </button>
-                {profilePhotoUrl && (
-                  <button
-                    className="btn btn-secondary btn-block"
-                    type="button"
-                    disabled={isPhotoSaving}
-                    onClick={() => void removeProfilePhoto()}
-                  >
-                    {messages.shell.profile.removePhoto}
-                  </button>
-                )}
-                {profilePhotoMessage && (
-                  <p className="profile-menu-message" role="status">
-                    {errorMessage(messages, profilePhotoMessage)}
-                  </p>
-                )}
-                <LanguageSwitcher className="profile-language" />
+                  {messages.profile.title}
+                </Link>
                 <button
                   className="btn btn-danger btn-block"
                   type="button"
-                  disabled={isPhotoSaving}
                   onClick={() => void signOut()}
                 >
                   {messages.shell.signOut}

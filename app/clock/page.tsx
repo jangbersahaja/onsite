@@ -8,7 +8,12 @@ import { PinSettingsPanel } from "@/app/clock/_components/pin-settings-panel";
 import { SetupScreen } from "@/app/clock/_components/setup-screen";
 import { SignInForm } from "@/app/clock/_components/sign-in-form";
 import { authClient } from "@/lib/auth-client";
-import { requestCurrentLocation } from "@/lib/browser-location";
+import {
+  getLocationSettingsPlatform,
+  requestCurrentLocation,
+  type LocationSettingsPlatform,
+} from "@/lib/browser-location";
+import { getTodaySummary } from "@/lib/clock-today";
 import { verifyGeofence } from "@/lib/geofence";
 import { localeTags, type Locale } from "@/lib/i18n/config";
 import { errorMessage, type ErrorText } from "@/lib/i18n/errors";
@@ -84,6 +89,19 @@ type ClockPageData = {
 };
 
 type NoticeKey = keyof Messages["clock"]["notices"];
+type ProgressStage = keyof Messages["clock"]["progress"];
+const PROGRESS_STAGES: ProgressStage[] = [
+  "location",
+  "recording",
+  "refreshing",
+];
+const SUCCESS_NOTICE_KEYS: NoticeKey[] = [
+  "clockedIn",
+  "clockedOut",
+  "breakStarted",
+  "breakEnded",
+];
+const SUCCESS_NOTICE_MS = 4_000;
 type ActionNotice = { tone: "status" | "blocked" } & (
   | { key: NoticeKey }
   | { error: ErrorText }
@@ -246,17 +264,21 @@ type ClockCheck = {
 };
 
 function ClockCheckItem({
+  step,
   label,
   check,
   children,
 }: {
+  step: number;
   label: string;
   check: ClockCheck;
   children?: ReactNode;
 }) {
   return (
     <div className={`clock-check is-${check.state}`}>
-      <span className="clock-check-dot" aria-hidden="true" />
+      <span className="clock-check-dot" aria-hidden="true">
+        {step}
+      </span>
       <div className="clock-check-copy">
         <span className="clock-check-label">{label}</span>
         <strong>{check.title}</strong>
@@ -294,7 +316,10 @@ export default function Home() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
   const [deviceTimeZone, setDeviceTimeZone] = useState<string | null>(null);
   const [locationRetryCount, setLocationRetryCount] = useState(0);
+  const [locationSettingsPlatform, setLocationSettingsPlatform] =
+    useState<LocationSettingsPlatform | null>(null);
   const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
+  const [actionStage, setActionStage] = useState<ProgressStage | null>(null);
   const [isCorrectionDialogOpen, setIsCorrectionDialogOpen] = useState(false);
   const { confirm, confirmDialog } = useConfirmDialog();
   const [clockBlockInfo, setClockBlockInfo] = useState<{
@@ -396,10 +421,17 @@ export default function Home() {
       };
     }
     if (activeLocationError === "permission_denied") {
+      const hint = locationSettingsPlatform
+        ? {
+            ios: checks.permissionHintIos,
+            android: checks.permissionHintAndroid,
+            desktop: checks.permissionHintDesktop,
+          }[locationSettingsPlatform]
+        : null;
       return {
         state: "blocked",
         title: checks.permissionTitle,
-        detail: checks.permissionDetail,
+        detail: hint ?? checks.permissionDetail,
       };
     }
     if (activeLocationError === "unavailable") {
@@ -475,6 +507,12 @@ export default function Home() {
 
   const gpsCheck = getGpsCheck();
   const deviceCheck = getDeviceCheck();
+
+  useEffect(() => {
+    setLocationSettingsPlatform(
+      getLocationSettingsPlatform(navigator.userAgent),
+    );
+  }, []);
 
   useEffect(() => {
     const outletId = selectedOutlet?.id;
@@ -614,9 +652,24 @@ export default function Home() {
       setDeviceTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);
     };
     updateTime();
-    const timer = window.setInterval(updateTime, 30_000);
+    // Tick every second while a shift or break is running so the timer is live.
+    const timer = window.setInterval(updateTime, isClockedIn ? 1_000 : 30_000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [isClockedIn]);
+
+  useEffect(() => {
+    if (
+      !actionNotice ||
+      !("key" in actionNotice) ||
+      !SUCCESS_NOTICE_KEYS.includes(actionNotice.key)
+    )
+      return;
+    const timer = window.setTimeout(
+      () => setActionNotice(null),
+      SUCCESS_NOTICE_MS,
+    );
+    return () => window.clearTimeout(timer);
+  }, [actionNotice]);
 
   useReportClockWorkspace({
     pageTitle: messages.clock.pageTitle,
@@ -717,15 +770,18 @@ export default function Home() {
       }))
     )
       return;
+    const wasClockedIn = isClockedIn;
     setIsCheckingLocation(true);
     setClockBlockInfo(null);
+    setActionStage("location");
     setActionNotice({ tone: "status", key: "checkingLocation" });
-    let stage: "location" | "recording" | "refreshing" = "location";
+    let stage: ProgressStage = "location";
     try {
       const fix = await requestCurrentLocation(navigator.geolocation);
       setLocationFix({ ...fix, outletId: selectedOutlet.id });
       setLocationError(null);
       stage = "recording";
+      setActionStage("recording");
       setActionNotice({ tone: "status", key: "recordingAction" });
       const response = await fetch("/api/clock", {
         method: "POST",
@@ -756,9 +812,13 @@ export default function Home() {
       }
 
       stage = "refreshing";
+      setActionStage("refreshing");
       setActionNotice({ tone: "status", key: "refreshingShift" });
       setClockData(await loadClockData());
-      setActionNotice(null);
+      setActionNotice({
+        tone: "status",
+        key: wasClockedIn ? "clockedOut" : "clockedIn",
+      });
     } catch (error) {
       if (stage === "location") {
         setLocationError({
@@ -778,6 +838,7 @@ export default function Home() {
       );
     } finally {
       setIsCheckingLocation(false);
+      setActionStage(null);
     }
   }
 
@@ -812,7 +873,10 @@ export default function Home() {
       if (!response.ok)
         throw new ClockRequestError(serverNotice(result, "breakFailed"));
       setClockData(await loadClockData());
-      setActionNotice(null);
+      setActionNotice({
+        tone: "status",
+        key: isOnBreak ? "breakEnded" : "breakStarted",
+      });
     } catch (error) {
       setActionNotice(noticeFromError(error, "breakFailed"));
     } finally {
@@ -829,6 +893,15 @@ export default function Home() {
         })
       : "--:--",
   );
+
+  const todaySummary =
+    clockData && currentTime && selectedOutlet
+      ? getTodaySummary(
+          clockData.recentSessions,
+          currentTime,
+          selectedOutlet.timezone,
+        )
+      : null;
 
   return (
     <>
@@ -921,12 +994,12 @@ export default function Home() {
                   <p className="clock-next-step">{nextStepText}</p>
                 )}
                 <button
-                  className={`clock-action${isClockedIn && !isOnBreak ? " is-clocked-in" : ""}${shouldRequestManual ? " is-manual" : ""}`}
+                  className={`clock-action${isClockedIn && !isOnBreak && shouldRequestManual ? " is-clocked-in" : ""}${shouldRequestManual ? " is-manual" : ""}`}
                   type="button"
                   onClick={() =>
                     shouldRequestManual
                       ? setIsCorrectionDialogOpen(true)
-                      : void (isOnBreak
+                      : void (isClockedIn || isOnBreak
                           ? handleBreakAction()
                           : handleClockAction())
                   }
@@ -949,10 +1022,24 @@ export default function Home() {
                       : isOnBreak
                         ? messages.clock.actions.resumeShift
                         : isClockedIn
-                          ? messages.clock.actions.clockOut
+                          ? messages.clock.actions.startBreak
                           : messages.clock.actions.clockIn}
                 </button>
-                {isClockedIn && !isOnBreak && (
+                {isClockedIn && !isOnBreak && !shouldRequestManual && (
+                  <button
+                    className="btn btn-secondary btn-block btn-spaced"
+                    type="button"
+                    onClick={() => void handleClockAction()}
+                    disabled={
+                      isDeviceBlocked || isCheckingLocation || isLoadingData
+                    }
+                  >
+                    {isCheckingLocation
+                      ? messages.clock.actions.checkingLocation
+                      : messages.clock.actions.clockOut}
+                  </button>
+                )}
+                {isClockedIn && !isOnBreak && shouldRequestManual && (
                   <button
                     className="btn btn-secondary btn-block btn-spaced"
                     type="button"
@@ -967,6 +1054,28 @@ export default function Home() {
                   </button>
                 )}
               </div>
+              {actionStage && (
+                <ol className="clock-progress" aria-hidden="true">
+                  {PROGRESS_STAGES.map((stage) => {
+                    const currentIndex = PROGRESS_STAGES.indexOf(actionStage);
+                    const stageIndex = PROGRESS_STAGES.indexOf(stage);
+                    return (
+                      <li
+                        key={stage}
+                        className={
+                          stageIndex < currentIndex
+                            ? "is-done"
+                            : stageIndex === currentIndex
+                              ? "is-current"
+                              : undefined
+                        }
+                      >
+                        {messages.clock.progress[stage]}
+                      </li>
+                    );
+                  })}
+                </ol>
+              )}
               {actionNotice && (
                 <p
                   className={`clock-action-feedback${isCheckingLocation || actionNotice.tone === "status" ? "" : " is-blocked"}`}
@@ -980,22 +1089,9 @@ export default function Home() {
                 </p>
               )}
               <div className="clock-checks" role="status" aria-live="polite">
-                <ClockCheckItem
-                  label={messages.clock.checks.gps}
-                  check={gpsCheck}
-                >
-                  {canRetryLocation && (
-                    <button
-                      className="btn btn-ghost btn-sm"
-                      type="button"
-                      onClick={retryLocation}
-                    >
-                      {messages.clock.actions.retryLocation}
-                    </button>
-                  )}
-                </ClockCheckItem>
                 {isDeviceRequired && (
                   <ClockCheckItem
+                    step={1}
                     label={messages.clock.checks.device}
                     check={deviceCheck}
                   >
@@ -1021,6 +1117,21 @@ export default function Home() {
                     )}
                   </ClockCheckItem>
                 )}
+                <ClockCheckItem
+                  step={isDeviceRequired ? 2 : 1}
+                  label={messages.clock.checks.gps}
+                  check={gpsCheck}
+                >
+                  {canRetryLocation && (
+                    <button
+                      className="btn btn-ghost btn-sm"
+                      type="button"
+                      onClick={retryLocation}
+                    >
+                      {messages.clock.actions.retryLocation}
+                    </button>
+                  )}
+                </ClockCheckItem>
               </div>
             </article>
           </div>
@@ -1058,6 +1169,25 @@ export default function Home() {
               {messages.clock.shifts.viewAll} <span aria-hidden="true">→</span>
             </Link>
           </div>
+          {todaySummary && todaySummary.shiftCount > 0 && (
+            <div className="clock-today-summary">
+              <h3>{messages.clock.today.heading}</h3>
+              <dl>
+                <div>
+                  <dt>{messages.clock.today.worked}</dt>
+                  <dd>{formatMinutes(messages, todaySummary.workedMinutes)}</dd>
+                </div>
+                <div>
+                  <dt>{messages.clock.today.breaks}</dt>
+                  <dd>{formatMinutes(messages, todaySummary.breakMinutes)}</dd>
+                </div>
+                <div>
+                  <dt>{messages.clock.today.shifts}</dt>
+                  <dd>{todaySummary.shiftCount}</dd>
+                </div>
+              </dl>
+            </div>
+          )}
           <div className="clock-recent-list">
             {clockData?.recentSessions.slice(0, 3).map((record) => (
               <article className="clock-recent-row" key={record.id}>

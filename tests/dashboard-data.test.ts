@@ -3,6 +3,7 @@ import {
   getDashboardShiftMetrics,
   getDashboardShiftStatus,
   getScheduleWindow,
+  getTimelineSpan,
   orderDashboardShifts,
   outletScheduleDate,
 } from "@/lib/dashboard-data";
@@ -112,4 +113,44 @@ test("dashboard shifts are ordered by status and then staff name", () => {
       "finished:Zara",
     ],
   );
+});
+
+test("timeline span maps a shift to percentages of the 06:00-06:00 window", () => {
+  const windowStart = "2026-10-03T22:00:00.000Z";
+  const windowEnd = "2026-10-04T22:00:00.000Z";
+  const evaluatedAt = "2026-10-04T10:00:00.000Z";
+  assert.deepEqual(
+    getTimelineSpan(
+      windowStart,
+      "2026-10-04T10:00:00.000Z",
+      windowStart,
+      windowEnd,
+      evaluatedAt,
+    ),
+    { left: 0, width: 50 },
+  );
+});
+
+test("timeline span returns null for an interval outside the window", () => {
+  assert.equal(
+    getTimelineSpan(
+      "2026-10-04T23:00:00.000Z",
+      "2026-10-05T01:00:00.000Z",
+      "2026-10-03T22:00:00.000Z",
+      "2026-10-04T22:00:00.000Z",
+      "2026-10-05T02:00:00.000Z",
+    ),
+    null,
+  );
+});
+
+test("timeline span ends an open interval at the evaluation time", () => {
+  const span = getTimelineSpan(
+    "2026-10-03T22:00:00.000Z",
+    null,
+    "2026-10-03T22:00:00.000Z",
+    "2026-10-04T22:00:00.000Z",
+    "2026-10-04T04:00:00.000Z",
+  );
+  assert.deepEqual(span, { left: 0, width: 25 });
 });

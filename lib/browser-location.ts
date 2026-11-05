@@ -1,5 +1,15 @@
 import type { LocationFix } from "./geofence";
 
+export type LocationSettingsPlatform = "ios" | "android" | "desktop";
+
+export function getLocationSettingsPlatform(
+  userAgent: string,
+): LocationSettingsPlatform {
+  if (/iPhone|iPad|iPod/.test(userAgent)) return "ios";
+  if (/Android/.test(userAgent)) return "android";
+  return "desktop";
+}
+
 export function requestCurrentLocation(
   geolocation: Pick<Geolocation, "getCurrentPosition">,
   timeoutMilliseconds = 30_000,

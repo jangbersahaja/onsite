@@ -1,6 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { requestCurrentLocation } from "../lib/browser-location";
+import {
+  getLocationSettingsPlatform,
+  requestCurrentLocation,
+} from "../lib/browser-location";
+
+test("maps user agents to location settings instructions", () => {
+  assert.equal(
+    getLocationSettingsPlatform(
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X)",
+    ),
+    "ios",
+  );
+  assert.equal(
+    getLocationSettingsPlatform("Mozilla/5.0 (Linux; Android 14; Pixel 8)"),
+    "android",
+  );
+  assert.equal(
+    getLocationSettingsPlatform("Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0)"),
+    "desktop",
+  );
+});
 
 function position(accuracy = 10): GeolocationPosition {
   return {

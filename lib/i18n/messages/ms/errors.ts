@@ -118,5 +118,12 @@ export const msErrors: typeof enErrors = {
   photo_type_invalid: "Pilih imej JPEG, PNG, atau WebP.",
   account_not_found: "Akaun tidak ditemui.",
   profile_photo_update_failed: "Foto profil tidak dapat dikemas kini.",
+  invalid_profile: "Masukkan nama paparan dan alamat e-mel yang sah.",
+  current_password_incorrect: "Kata laluan semasa tidak betul.",
+  invalid_password:
+    "Masukkan kata laluan semasa dan kata laluan baharu 12 hingga 128 aksara.",
+  profile_update_failed: "Profil tidak dapat dikemas kini.",
+  password_update_failed: "Kata laluan tidak dapat dikemas kini.",
+  profile_forbidden: "Anda tidak boleh menyunting profil ini.",
   profile_photo_remove_failed: "Foto profil tidak dapat dibuang.",
 };

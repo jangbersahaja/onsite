@@ -3,6 +3,9 @@ export const AUDIT_ACTIONS = [
   "password_reset_completed",
   "profile_photo_updated",
   "profile_photo_removed",
+  "profile_updated",
+  "password_changed",
+  "team_member_profile_updated",
   "clock_in",
   "clock_out",
   "start_break",
@@ -49,6 +52,8 @@ export const AUDIT_ACTIONS = [
   "password_reset_link_issued",
   "staff_code_updated",
   "timesheet_import",
+  "manual_shift_approved",
+  "manual_shift_rejected",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -84,6 +89,10 @@ const describers: Record<AuditAction, (parts: DescriptionParts) => string> = {
   password_reset_completed: ({ actor }) => `${actor} reset their password`,
   profile_photo_updated: ({ actor }) => `${actor} updated their profile photo`,
   profile_photo_removed: ({ actor }) => `${actor} removed their profile photo`,
+  profile_updated: ({ actor }) => `${actor} updated their profile`,
+  password_changed: ({ actor }) => `${actor} changed their password`,
+  team_member_profile_updated: ({ actor, target }) =>
+    `${actor} updated the profile${target ? ` of ${target}` : ""}`,
   clock_in: ({ actor, atOutlet }) => `${actor} clocked in${atOutlet}`,
   clock_out: ({ actor, atOutlet }) => `${actor} clocked out${atOutlet}`,
   start_break: ({ actor, atOutlet }) => `${actor} started a break${atOutlet}`,
@@ -94,6 +103,10 @@ const describers: Record<AuditAction, (parts: DescriptionParts) => string> = {
     `${actor} added a shift${target ? ` for ${target}` : ""}${atOutlet}`,
   timesheet_delete: ({ actor, atOutlet }) =>
     `${actor} deleted a shift${atOutlet}`,
+  manual_shift_approved: ({ actor, atOutlet }) =>
+    `${actor} approved a requested past shift${atOutlet}`,
+  manual_shift_rejected: ({ actor, atOutlet }) =>
+    `${actor} rejected a requested past shift${atOutlet}`,
   correction_applied: ({ actor, atOutlet }) =>
     `${actor} submitted a time correction${atOutlet}`,
   correction_punch_applied: ({ actor, atOutlet }) =>

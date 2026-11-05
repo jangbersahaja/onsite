@@ -1,11 +1,14 @@
 "use client";
 
+import { OutletAlertBell } from "@/app/(management)/manage/_components/outlet-alert-bell";
 import { RefreshIcon } from "@/app/_components/icons";
 import { OutletAvatar } from "@/app/_components/outlet-avatar";
 import { OutletHero } from "@/app/_components/outlet-hero";
-import { OutletAlertBell } from "@/app/(management)/manage/_components/outlet-alert-bell";
+import { getTimelineSpan } from "@/lib/dashboard-data";
+import { animate, motion, MotionConfig, useReducedMotion } from "motion/react";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 
 type DashboardView = "today" | "yesterday" | "custom";
 type ShiftStatus = "on_shift" | "on_break" | "finished";
@@ -23,6 +26,7 @@ type DashboardShift = {
   status: ShiftStatus;
   workedMinutes: number | null;
   breakMinutes: number | null;
+  breaks: { startedAt: string; endedAt: string | null }[];
 };
 
 type DashboardOutlet = {
@@ -71,82 +75,248 @@ function formatShiftTime(value: string, scheduleDate: string) {
   return date === scheduleDate ? time : `${date.slice(5)} ${time}`;
 }
 
+type ViewTransitionDocument = Document & {
+  startViewTransition?: (update: () => void) => unknown;
+};
+
+function formatClock(value: string, timeZone: string) {
+  return new Intl.DateTimeFormat("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    timeZone,
+  }).format(new Date(value));
+}
+
+function timestampMs(value: string) {
+  return Date.parse(value);
+}
+
+function AnimatedNumber({
+  value,
+  format,
+}: {
+  value: number | null;
+  format: (value: number) => string;
+}) {
+  const reduceMotion = useReducedMotion();
+  const [display, setDisplay] = useState(0);
+  const current = useRef(0);
+
+  useEffect(() => {
+    if (value === null || reduceMotion) return;
+    const controls = animate(current.current, value, {
+      duration: 0.6,
+      ease: "easeOut",
+      onUpdate: (latest) => {
+        current.current = latest;
+        setDisplay(latest);
+      },
+    });
+    return () => controls.stop();
+  }, [value, reduceMotion]);
+
+  if (value === null) return <>Not provided</>;
+  return <>{format(Math.round(reduceMotion ? value : display))}</>;
+}
+
+function DashboardSkeleton() {
+  return (
+    <div
+      className="dashboard-skeleton"
+      role="status"
+      aria-label="Loading schedule"
+    >
+      <div className="dashboard-skeleton-block is-summary" />
+      <div className="dashboard-skeleton-block" />
+      <div className="dashboard-skeleton-block" />
+    </div>
+  );
+}
+
+function initialsOf(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+}
+
+function breakRange(
+  interval: { startedAt: string; endedAt: string | null },
+  timeZone: string,
+) {
+  const start = formatClock(interval.startedAt, timeZone);
+  const end = interval.endedAt
+    ? formatClock(interval.endedAt, timeZone)
+    : "ongoing";
+  return `Break ${start} – ${end}`;
+}
+
+function ShiftRoster({ outlet }: { outlet: DashboardOutlet }) {
+  const windowStart = timestampMs(outlet.windowStartAt);
+  const windowEnd = timestampMs(outlet.windowEndAt);
+  const nowPercent =
+    ((timestampMs(outlet.evaluatedAt) - windowStart) /
+      (windowEnd - windowStart)) *
+    100;
+  const showNow = nowPercent > 0 && nowPercent < 100;
+  const rows = [
+    ...outlet.shifts.filter((shift) => shift.status !== "finished"),
+    ...outlet.shifts.filter((shift) => shift.status === "finished"),
+  ];
+
+  return (
+    <div
+      className="dashboard-roster"
+      aria-label={`Staff shifts for ${outlet.name}`}
+    >
+      <div className="dashboard-roster-head" aria-hidden="true">
+        <span>Staff</span>
+        <div className="dashboard-roster-scale">
+          {["06:00", "12:00", "18:00", "00:00", "06:00"].map((label, index) => (
+            <span key={index} style={{ left: `${index * 25}%` }}>
+              {label}
+            </span>
+          ))}
+        </div>
+        <span>Worked</span>
+        <span>Break</span>
+      </div>
+      {rows.map((shift, index) => {
+        const span = getTimelineSpan(
+          shift.clockInAt,
+          shift.clockOutAt,
+          outlet.windowStartAt,
+          outlet.windowEndAt,
+          outlet.evaluatedAt,
+        );
+        const timeRange = `${formatShiftTime(shift.clockInLocal, outlet.date)} – ${
+          shift.clockOutLocal
+            ? formatShiftTime(shift.clockOutLocal, outlet.date)
+            : "In progress"
+        }`;
+        return (
+          <motion.div
+            layout
+            key={shift.id}
+            className={`dashboard-roster-row is-${shift.status}`}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25, delay: index * 0.03 }}
+          >
+            <div className="dashboard-roster-person">
+              {shift.profilePhotoUrl ? (
+                <Image
+                  className="dashboard-roster-avatar"
+                  src={shift.profilePhotoUrl}
+                  alt=""
+                  width={64}
+                  height={64}
+                  unoptimized
+                />
+              ) : (
+                <span
+                  className="dashboard-roster-avatar dashboard-roster-initials"
+                  aria-hidden="true"
+                >
+                  {initialsOf(shift.employeeName)}
+                </span>
+              )}
+              <div className="dashboard-roster-id">
+                <strong title={shift.employeeName}>{shift.employeeName}</strong>
+                <span className={`dashboard-status is-${shift.status}`}>
+                  {shift.status !== "finished" && (
+                    <span className="dashboard-live-dot" aria-hidden="true" />
+                  )}
+                  {statusLabels[shift.status]}
+                </span>
+                {shift.source === "storehub" && (
+                  <span className="storehub-source-label">
+                    StoreHub · read-only
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="dashboard-roster-track-cell">
+              <div className="dashboard-roster-track">
+                {span && (
+                  <motion.div
+                    className={`dashboard-roster-bar is-${shift.status}`}
+                    style={{ left: `${span.left}%`, width: `${span.width}%` }}
+                    initial={{ scaleX: 0 }}
+                    animate={{ scaleX: 1 }}
+                    transition={{
+                      duration: 0.5,
+                      delay: index * 0.03,
+                      ease: "easeOut",
+                    }}
+                  />
+                )}
+                {shift.breaks.map((interval, breakIndex) => {
+                  const breakSpan = getTimelineSpan(
+                    interval.startedAt,
+                    interval.endedAt,
+                    outlet.windowStartAt,
+                    outlet.windowEndAt,
+                    outlet.evaluatedAt,
+                  );
+                  if (!breakSpan) return null;
+                  return (
+                    <span
+                      key={breakIndex}
+                      className="dashboard-roster-break"
+                      title={breakRange(interval, outlet.timezone)}
+                      style={{
+                        left: `${breakSpan.left}%`,
+                        width: `${breakSpan.width}%`,
+                      }}
+                    />
+                  );
+                })}
+                {showNow && (
+                  <span
+                    className="dashboard-roster-now"
+                    style={{ left: `${nowPercent}%` }}
+                  />
+                )}
+              </div>
+              <div
+                className="dashboard-roster-meta"
+                style={{ marginLeft: span ? `${span.left}%` : undefined }}
+              >
+                <span className="dashboard-roster-time">{timeRange}</span>
+                {shift.breaks.map((interval, breakIndex) => (
+                  <span
+                    key={breakIndex}
+                    className="dashboard-roster-break-chip"
+                  >
+                    {breakRange(interval, outlet.timezone)}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="dashboard-roster-metric">
+              <small>Worked</small>
+              <strong>{formatDuration(shift.workedMinutes)}</strong>
+            </div>
+            <div className="dashboard-roster-metric">
+              <small>Break</small>
+              <strong>{formatDuration(shift.breakMinutes)}</strong>
+            </div>
+          </motion.div>
+        );
+      })}
+    </div>
+  );
+}
+
 const statusLabels: Record<ShiftStatus, string> = {
   on_shift: "On shift",
   on_break: "On break",
   finished: "Finished",
 };
-
-function DashboardShiftItem({
-  shift,
-  scheduleDate,
-  layout,
-}: {
-  shift: DashboardShift;
-  scheduleDate: string;
-  layout: "card" | "row";
-}) {
-  return (
-    <article
-      className={
-        layout === "card" ? "dashboard-staff-card" : "dashboard-staff-row"
-      }
-    >
-      <div className="dashboard-staff-person">
-        {shift.profilePhotoUrl ? (
-          <Image
-            className="dashboard-staff-avatar"
-            src={shift.profilePhotoUrl}
-            alt=""
-            width={72}
-            height={72}
-            unoptimized
-          />
-        ) : (
-          <span
-            className="dashboard-staff-avatar dashboard-staff-initials"
-            aria-hidden="true"
-          >
-            {shift.employeeName
-              .split(/\s+/)
-              .filter(Boolean)
-              .slice(0, 2)
-              .map((part) => part[0]?.toUpperCase())
-              .join("")}
-          </span>
-        )}
-        <div className="dashboard-staff-name">
-          <strong title={shift.employeeName}>{shift.employeeName}</strong>
-          {shift.source === "storehub" && (
-            <span className="storehub-source-label">StoreHub · read-only</span>
-          )}
-          {layout === "card" && (
-            <span className={`dashboard-status is-${shift.status}`}>
-              {statusLabels[shift.status]}
-            </span>
-          )}
-        </div>
-      </div>
-      <div className="dashboard-staff-detail dashboard-staff-shift">
-        <small>SHIFT</small>
-        <span>
-          {formatShiftTime(shift.clockInLocal, scheduleDate)} –{" "}
-          {shift.clockOutLocal
-            ? formatShiftTime(shift.clockOutLocal, scheduleDate)
-            : "In progress"}
-        </span>
-      </div>
-      <div className="dashboard-staff-detail">
-        <small>WORKED</small>
-        <strong>{formatDuration(shift.workedMinutes)}</strong>
-      </div>
-      <div className="dashboard-staff-detail">
-        <small>BREAK</small>
-        <strong>{formatDuration(shift.breakMinutes)}</strong>
-      </div>
-    </article>
-  );
-}
 
 export default function ManagePage() {
   const [view, setView] = useState<DashboardView>("today");
@@ -205,176 +375,172 @@ export default function ManagePage() {
         data?.outlets[0]?.date ?? new Date().toISOString().slice(0, 10),
       );
     }
-    setView(nextView);
+    const doc = document as ViewTransitionDocument;
+    if (!doc.startViewTransition) {
+      setView(nextView);
+      return;
+    }
+    doc.startViewTransition(() => flushSync(() => setView(nextView)));
   }
 
   return (
-    <main className="team-page-content dashboard-content">
-      <div className="page-heading dashboard-heading">
-        <div>
-          <p className="eyebrow">MANAGEMENT</p>
-          <h1>Daily schedule</h1>
-          <p className="subheading">
-            Staff activity and time totals across your outlets.
-          </p>
-        </div>
-        <div className="dashboard-date-controls" aria-label="Schedule date">
-          <div
-            className="dashboard-date-tabs"
-            role="group"
-            aria-label="Date range"
-          >
-            {(["today", "yesterday", "custom"] as const).map((option) => (
-              <button
-                className={`btn btn-ghost btn-sm${view === option ? " is-active" : ""}`}
-                type="button"
-                key={option}
-                aria-pressed={view === option}
-                onClick={() => chooseView(option)}
-              >
-                {option === "today"
-                  ? "Today"
-                  : option === "yesterday"
-                    ? "Yesterday"
-                    : "Custom"}
-              </button>
-            ))}
+    <MotionConfig reducedMotion="user">
+      <main className="team-page-content dashboard-content">
+        <div className="page-heading dashboard-heading">
+          <div>
+            <p className="eyebrow">MANAGEMENT</p>
+            <h1>Daily schedule</h1>
+            <p className="subheading">
+              Staff activity and time totals across your outlets.
+            </p>
           </div>
-          {view === "custom" && (
-            <label className="dashboard-custom-date">
-              <span className="sr-only">Custom schedule date</span>
-              <input
-                type="date"
-                value={customDate}
-                onChange={(event) => setCustomDate(event.target.value)}
-              />
-            </label>
-          )}
-          <button
-            className="btn btn-secondary btn-icon"
-            type="button"
-            aria-label="Refresh schedule"
-            title="Refresh schedule"
-            disabled={isLoading}
-            onClick={() => setRefreshCount((count) => count + 1)}
-          >
-            <RefreshIcon />
-          </button>
+          <div className="dashboard-date-controls" aria-label="Schedule date">
+            <div
+              className="dashboard-date-tabs"
+              role="group"
+              aria-label="Date range"
+            >
+              {(["today", "yesterday", "custom"] as const).map((option) => (
+                <button
+                  className={`dashboard-date-tab${view === option ? " is-active" : ""}`}
+                  type="button"
+                  key={option}
+                  aria-pressed={view === option}
+                  onClick={() => chooseView(option)}
+                >
+                  {option === "today"
+                    ? "Today"
+                    : option === "yesterday"
+                      ? "Yesterday"
+                      : "Custom"}
+                </button>
+              ))}
+            </div>
+            {view === "custom" && (
+              <label className="dashboard-custom-date">
+                <span className="sr-only">Custom schedule date</span>
+                <input
+                  type="date"
+                  value={customDate}
+                  onChange={(event) => setCustomDate(event.target.value)}
+                />
+              </label>
+            )}
+            <button
+              className="btn btn-secondary btn-icon"
+              type="button"
+              aria-label="Refresh schedule"
+              title="Refresh schedule"
+              disabled={isLoading}
+              onClick={() => setRefreshCount((count) => count + 1)}
+            >
+              <RefreshIcon />
+            </button>
+          </div>
         </div>
-      </div>
 
-      {message && (
-        <p className="team-message" role="status">
-          {message}
-        </p>
-      )}
-      {isLoading && !data && (
-        <p className="dashboard-empty">Loading schedule…</p>
-      )}
-      {!isLoading && !message && data?.outlets.length === 0 && (
-        <p className="dashboard-empty">No accessible outlets are available.</p>
-      )}
-      {!isLoading &&
-        !message &&
-        data?.outlets.map((outlet) => {
-          const activeShifts = outlet.shifts.filter(
-            (shift) => shift.status !== "finished",
-          );
-          const finishedShifts = outlet.shifts.filter(
-            (shift) => shift.status === "finished",
-          );
+        {message && (
+          <p className="team-message" role="status">
+            {message}
+          </p>
+        )}
+        {isLoading && !data && <DashboardSkeleton />}
+        {!isLoading && !message && data?.outlets.length === 0 && (
+          <p className="dashboard-empty">
+            No accessible outlets are available.
+          </p>
+        )}
+        {!isLoading &&
+          !message &&
+          data?.outlets.map((outlet) => {
+            return (
+              <section className="dashboard-outlet" key={outlet.id}>
+                <OutletHero
+                  name={outlet.name}
+                  imageUrl={outlet.imageUrl}
+                  muted={outlet.onShiftCount === 0}
+                />
+                <header className="dashboard-outlet-heading">
+                  <div className="outlet-inline">
+                    {!outlet.imageUrl && <OutletAvatar name={outlet.name} />}
+                    <div>
+                      <h2>{outlet.name}</h2>
+                      <p>{outlet.address}</p>
+                    </div>
+                  </div>
+                  <div className="dashboard-outlet-meta">
+                    <div className="dashboard-window">
+                      <strong>{formatDate(outlet.date)}</strong>
+                      <span>06:00 – 06:00 next day</span>
+                    </div>
+                    <OutletAlertBell
+                      outletId={outlet.id}
+                      outletName={outlet.name}
+                    />
+                  </div>
+                </header>
 
-          return (
-            <section className="dashboard-outlet" key={outlet.id}>
-              <OutletHero name={outlet.name} imageUrl={outlet.imageUrl} />
-              <header className="dashboard-outlet-heading">
-                <div className="outlet-inline">
-                  {!outlet.imageUrl && <OutletAvatar name={outlet.name} />}
+                <div className="dashboard-summary">
                   <div>
-                    <h2>{outlet.name}</h2>
-                    <p>{outlet.address}</p>
+                    <span>On shift</span>
+                    <strong>
+                      <AnimatedNumber
+                        value={outlet.onShiftCount}
+                        format={String}
+                      />
+                    </strong>
+                  </div>
+                  <div>
+                    <span>On break</span>
+                    <strong>
+                      <AnimatedNumber
+                        value={outlet.onBreakCount}
+                        format={String}
+                      />
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Worked</span>
+                    <strong>
+                      <AnimatedNumber
+                        value={outlet.workedMinutes}
+                        format={formatDuration}
+                      />
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Break time</span>
+                    <strong>
+                      <AnimatedNumber
+                        value={outlet.breakMinutes}
+                        format={formatDuration}
+                      />
+                    </strong>
                   </div>
                 </div>
-                <div className="dashboard-outlet-meta">
-                  <div className="dashboard-window">
-                    <strong>{formatDate(outlet.date)}</strong>
-                    <span>06:00 – 06:00 next day</span>
-                  </div>
-                  <OutletAlertBell
-                    outletId={outlet.id}
-                    outletName={outlet.name}
-                  />
-                </div>
-              </header>
+                {outlet.storeHubStatus === "unavailable" && (
+                  <p className="team-message" role="status">
+                    StoreHub attendance is temporarily unavailable. OnSITE
+                    shifts are still shown.
+                  </p>
+                )}
 
-              <div className="dashboard-summary">
-                <div>
-                  <span>On shift</span>
-                  <strong>{outlet.onShiftCount}</strong>
-                </div>
-                <div>
-                  <span>On break</span>
-                  <strong>{outlet.onBreakCount ?? "Not provided"}</strong>
-                </div>
-                <div>
-                  <span>Worked</span>
-                  <strong>{formatDuration(outlet.workedMinutes)}</strong>
-                </div>
-                <div>
-                  <span>Break time</span>
-                  <strong>{formatDuration(outlet.breakMinutes)}</strong>
-                </div>
-              </div>
-              {outlet.storeHubStatus === "unavailable" && (
-                <p className="team-message" role="status">
-                  StoreHub attendance is temporarily unavailable. OnSITE shifts
-                  are still shown.
-                </p>
-              )}
-
-              {outlet.shifts.length > 0 ? (
-                <>
-                  {activeShifts.length > 0 && (
-                    <div className="dashboard-staff-list">
-                      {activeShifts.map((shift) => (
-                        <DashboardShiftItem
-                          key={shift.id}
-                          shift={shift}
-                          scheduleDate={outlet.date}
-                          layout="card"
-                        />
-                      ))}
-                    </div>
-                  )}
-                  {finishedShifts.length > 0 && (
-                    <div className="dashboard-finished-section">
-                      <h3>Finished shifts</h3>
-                      <div className="dashboard-finished-list">
-                        {finishedShifts.map((shift) => (
-                          <DashboardShiftItem
-                            key={shift.id}
-                            shift={shift}
-                            scheduleDate={outlet.date}
-                            layout="row"
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <p className="dashboard-empty">
-                  No shift records for this date.
-                </p>
-              )}
-            </section>
-          );
-        })}
-      {isLoading && data && (
-        <p className="dashboard-updating" role="status">
-          Updating schedule…
-        </p>
-      )}
-    </main>
+                {outlet.shifts.length > 0 ? (
+                  <ShiftRoster outlet={outlet} />
+                ) : (
+                  <p className="dashboard-empty">
+                    No shift records for this date.
+                  </p>
+                )}
+              </section>
+            );
+          })}
+        {isLoading && data && (
+          <p className="dashboard-updating" role="status">
+            Updating schedule…
+          </p>
+        )}
+      </main>
+    </MotionConfig>
   );
 }

@@ -20,6 +20,7 @@ import {
   type BreakCorrectionEvent,
   type ShiftBreak,
 } from "@/lib/break-corrections";
+import { CORRECTION_REASON_CODES } from "@/lib/correction-reasons";
 import { getCorrectionTimeError } from "@/lib/correction-time";
 import { getDb } from "@/lib/db";
 import { notifyOutletManagers } from "@/lib/push-notifications";
@@ -45,6 +46,7 @@ const correctionSchema = z
     workBreakId: z.string().uuid().nullable(),
     breakStartedAt: timestampSchema.nullable(),
     breakEndedAt: timestampSchema.nullable(),
+    reasonCode: z.enum(CORRECTION_REASON_CODES),
     reason: z.string().trim().min(5).max(1000),
   })
   .strict()
@@ -395,6 +397,7 @@ async function submitBreakCorrection(
       workBreakId: change.kind === "delete" ? null : breakId,
       breakStartedAt: recordedStart,
       breakEndedAt: recordedEnd,
+      reasonCode: input.reasonCode,
       reason: input.reason,
       status: "reconciliation",
       appliedAt: now,
@@ -1686,6 +1689,7 @@ export async function POST(request: Request) {
           workSessionId: updatedSession.id,
           event: input.event,
           requestedAt,
+          reasonCode: input.reasonCode,
           reason: input.reason,
           status: "reconciliation",
           appliedAt: now,
@@ -1749,7 +1753,8 @@ export async function POST(request: Request) {
       { request: outcome.correction, session: outcome.session },
       { status: 201 },
     );
-  } catch {
+  } catch (error) {
+    console.error("[corrections] submit failed", error);
     return Response.json(
       {
         error: "Could not submit the correction request.",

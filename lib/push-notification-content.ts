@@ -7,7 +7,9 @@ export type OutletNotificationEvent =
   | "correction_reviewed"
   | "timesheet_edited"
   | "timesheet_created"
-  | "timesheet_deleted";
+  | "timesheet_deleted"
+  | "manual_shift_requested"
+  | "manual_shift_reviewed";
 
 const eventDescriptions: Record<OutletNotificationEvent, string> = {
   clock_in: "clocked in",
@@ -19,6 +21,8 @@ const eventDescriptions: Record<OutletNotificationEvent, string> = {
   timesheet_edited: "updated a timesheet",
   timesheet_created: "added a shift",
   timesheet_deleted: "deleted a shift",
+  manual_shift_requested: "requested a past shift be added",
+  manual_shift_reviewed: "reviewed a past shift request",
 };
 
 export function notificationBody(

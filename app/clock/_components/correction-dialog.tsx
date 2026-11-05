@@ -7,6 +7,10 @@ import {
   isBreakCorrectionEvent,
   type CorrectionEvent,
 } from "@/lib/break-corrections";
+import {
+  CORRECTION_REASON_CODES,
+  type CorrectionReasonCode,
+} from "@/lib/correction-reasons";
 import { localeTags } from "@/lib/i18n/config";
 import { errorMessage, type ErrorText } from "@/lib/i18n/errors";
 import {
@@ -84,6 +88,7 @@ export function CorrectionDialog({
   const [breakId, setBreakId] = useState("");
   const [breakStart, setBreakStart] = useState("");
   const [breakEnd, setBreakEnd] = useState("");
+  const [reasonCode, setReasonCode] = useState<CorrectionReasonCode | "">("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState<ErrorText | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -138,6 +143,10 @@ export function CorrectionDialog({
   async function handleSubmit(formEvent: FormEvent<HTMLFormElement>) {
     formEvent.preventDefault();
     if (!selectedOutlet || isSubmitting) return;
+    if (!reasonCode) {
+      setError({ code: null, text: t.reasonRequired });
+      return;
+    }
     const timezone = selectedOutlet.timezone;
     const breakStartedAt = breakStart
       ? outletDateTimeToISOString(breakStart, timezone)
@@ -174,7 +183,8 @@ export function CorrectionDialog({
             sendsBreakTimes && breakEnd && !isOpenBreak
               ? outletDateTimeToISOString(breakEnd, timezone)
               : null,
-          reason,
+          reasonCode,
+          reason: reasonCode === "other" ? reason : t.reasonOptions[reasonCode],
         }),
       });
       const result = await response.json();
@@ -364,18 +374,35 @@ export function CorrectionDialog({
               )}
             </div>
           )}
-          <label>
-            {t.reason}
-            <textarea
-              value={reason}
-              onChange={(inputEvent) => setReason(inputEvent.target.value)}
-              minLength={5}
-              maxLength={1000}
-              rows={3}
-              placeholder={t.reasonPlaceholder}
-              required
-            />
-          </label>
+          <fieldset className="correction-reason-options">
+            <legend>{t.reason}</legend>
+            {CORRECTION_REASON_CODES.map((code) => (
+              <label key={code} className="correction-reason-option">
+                <input
+                  type="checkbox"
+                  checked={reasonCode === code}
+                  onChange={(inputEvent) =>
+                    setReasonCode(inputEvent.target.checked ? code : "")
+                  }
+                />
+                {t.reasonOptions[code]}
+              </label>
+            ))}
+          </fieldset>
+          {reasonCode === "other" && (
+            <label>
+              {t.reasonDetails}
+              <textarea
+                value={reason}
+                onChange={(inputEvent) => setReason(inputEvent.target.value)}
+                minLength={5}
+                maxLength={1000}
+                rows={3}
+                placeholder={t.reasonDetailsPlaceholder}
+                required
+              />
+            </label>
+          )}
           {error && (
             <p className="form-error" role="alert">
               {errorMessage(messages, error)}

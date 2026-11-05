@@ -28,6 +28,10 @@ export const correctionStatusEnum = pgEnum("correction_status", [
   "approved",
   "rejected",
 ]);
+export const manualShiftRequestStatusEnum = pgEnum(
+  "manual_shift_request_status",
+  ["pending", "approved", "rejected"],
+);
 export const punchSourceEnum = pgEnum("punch_source", ["gps", "manual"]);
 export const staffDeviceStatusEnum = pgEnum("staff_device_status", [
   "pending",
@@ -461,6 +465,8 @@ export const correctionRequests = pgTable(
     }),
     breakStartedAt: timestamp("break_started_at", { withTimezone: true }),
     breakEndedAt: timestamp("break_ended_at", { withTimezone: true }),
+    // Curated staff-fault category (see lib/correction-reasons.ts). Null for legacy rows.
+    reasonCode: text("reason_code"),
     reason: text("reason").notNull(),
     status: correctionStatusEnum("status").notNull().default("reconciliation"),
     appliedAt: timestamp("applied_at", { withTimezone: true }),
@@ -485,6 +491,46 @@ export const correctionRequests = pgTable(
       table.status,
     ),
     index("correction_requests_requester_idx").on(table.requestedBy),
+  ],
+);
+
+export const manualShiftRequests = pgTable(
+  "manual_shift_requests",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    requestedBy: text("requested_by")
+      .notNull()
+      .references(() => user.id, { onDelete: "restrict" }),
+    outletId: uuid("outlet_id")
+      .notNull()
+      .references(() => outlets.id, { onDelete: "restrict" }),
+    timezone: text("timezone").notNull().default("UTC"),
+    clockInAt: timestamp("clock_in_at", { withTimezone: true }).notNull(),
+    clockOutAt: timestamp("clock_out_at", { withTimezone: true }).notNull(),
+    // [{ startedAt, endedAt }] ISO strings, one entry per break.
+    breaks: jsonb("breaks").notNull().default([]),
+    reasonCode: text("reason_code"),
+    reason: text("reason").notNull(),
+    status: manualShiftRequestStatusEnum("status").notNull().default("pending"),
+    reviewedBy: text("reviewed_by").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+    reviewReason: text("review_reason"),
+    // Set once approved and the real shift has been created.
+    workSessionId: uuid("work_session_id").references(() => workSessions.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("manual_shift_requests_outlet_status_idx").on(
+      table.outletId,
+      table.status,
+    ),
+    index("manual_shift_requests_requester_idx").on(table.requestedBy),
   ],
 );
 

@@ -26,6 +26,18 @@ export const enClock = {
   inProgress: "In progress",
   timeIn: "In",
   timeOut: "Out",
+  progress: {
+    label: "Clock progress",
+    location: "Locating",
+    recording: "Recording",
+    refreshing: "Updating",
+  },
+  today: {
+    heading: "Today",
+    worked: "Worked",
+    breaks: "Breaks",
+    shifts: "Shifts",
+  },
   shifts: {
     heading: "Recent shifts",
     viewAll: "View all shifts",
@@ -94,6 +106,12 @@ export const enClock = {
     permissionTitle: "Location access is off",
     permissionDetail:
       "Enable location access in your browser settings, then try again.",
+    permissionHintIos:
+      "On iPhone: Settings > Privacy & Security > Location Services > Safari Websites (or your browser), set to While Using. Then reload this page.",
+    permissionHintAndroid:
+      "On Android: tap the lock icon beside the address, open Permissions or Site settings, and allow Location. Then reload this page.",
+    permissionHintDesktop:
+      "On a computer: click the lock icon in the address bar, set Location to Allow, then reload this page.",
     noLocationTitle: "No reliable location",
     noLocationDetail:
       "Move near a window or retry when your phone has a clear GPS signal.",
@@ -110,6 +128,10 @@ export const enClock = {
     notApprovedDetail: "Request approval for this browser before clocking.",
   },
   notices: {
+    clockedIn: "Clocked in. Have a good shift.",
+    clockedOut: "Clocked out. Shift saved.",
+    breakStarted: "Break started.",
+    breakEnded: "Break ended. Back to work.",
     browserNotApproved:
       "This browser is not approved for clock actions. Enroll this browser and ask your manager to approve it.",
     locationUnavailable:

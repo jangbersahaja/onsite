@@ -28,6 +28,18 @@ export const msClock: typeof enClock = {
   inProgress: "Sedang berjalan",
   timeIn: "Masuk",
   timeOut: "Keluar",
+  progress: {
+    label: "Kemajuan jam",
+    location: "Mencari lokasi",
+    recording: "Merekod",
+    refreshing: "Mengemas kini",
+  },
+  today: {
+    heading: "Hari ini",
+    worked: "Bekerja",
+    breaks: "Rehat",
+    shifts: "Shif",
+  },
   shifts: {
     heading: "Shif terkini",
     viewAll: "Lihat semua shif",
@@ -95,6 +107,12 @@ export const msClock: typeof enClock = {
     permissionTitle: "Akses lokasi dimatikan",
     permissionDetail:
       "Dayakan akses lokasi dalam tetapan pelayar anda, kemudian cuba lagi.",
+    permissionHintIos:
+      "Pada iPhone: Tetapan > Privasi & Keselamatan > Perkhidmatan Lokasi > Safari (atau pelayar anda), pilih Semasa Menggunakan Apl. Kemudian muat semula halaman ini.",
+    permissionHintAndroid:
+      "Pada Android: ketik ikon kunci di sebelah alamat, buka Kebenaran atau Tetapan tapak, kemudian benarkan Lokasi. Kemudian muat semula halaman ini.",
+    permissionHintDesktop:
+      "Pada komputer: klik ikon kunci di bar alamat, tetapkan Lokasi kepada Benarkan, kemudian muat semula halaman ini.",
     noLocationTitle: "Lokasi tidak boleh dipercayai",
     noLocationDetail:
       "Dekati tingkap atau cuba semula apabila telefon anda mempunyai isyarat GPS yang jelas.",
@@ -112,6 +130,10 @@ export const msClock: typeof enClock = {
       "Mohon kelulusan untuk peranti ini sebelum mendaftar masuk.",
   },
   notices: {
+    clockedIn: "Clock masuk berjaya. Selamat bekerja.",
+    clockedOut: "Clock keluar berjaya. Shif disimpan.",
+    breakStarted: "Rehat dimulakan.",
+    breakEnded: "Rehat tamat. Kembali bekerja.",
     browserNotApproved:
       "Peranti ini tidak diluluskan untuk tindakan kehadiran. Daftarkan peranti ini dan minta pengurus anda meluluskannya.",
     locationUnavailable:

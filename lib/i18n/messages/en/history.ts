@@ -25,6 +25,28 @@ export const enHistory = {
   filters: {
     month: "Month",
   },
+  manualShift: {
+    addShift: "Add past shift",
+    title: "Add a past shift",
+    description:
+      "For a shift you worked but never clocked. A manager at this outlet will review it before it appears in your history.",
+    outlet: "Outlet",
+    submit: "Submit for review",
+    submitting: "Submitting…",
+    confirmTitle: "Submit this past shift?",
+    confirmDescription:
+      "A manager at this outlet will review it. Your history does not change until it is approved.",
+    confirmLabel: "Submit request",
+    fallbackError: "Could not submit the request.",
+    pastShift: "Past shift",
+    closeLabel: "Close past shift request",
+    closeTitle: "Close",
+    status: {
+      pending: "Waiting for review",
+      approved: "Approved",
+      rejected: "Rejected",
+    },
+  },
   summary: {
     allOutlets: "All outlets",
     workedHours: "worked hours in loaded shifts",

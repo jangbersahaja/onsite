@@ -4,6 +4,10 @@ import { useConfirmDialog } from "@/app/_components/confirm-dialog";
 import { CloseIcon, TrashIcon } from "@/app/_components/icons";
 import { useLocale } from "@/app/_components/locale-provider";
 import { ModalDialog } from "@/app/_components/modal-dialog";
+import {
+  CORRECTION_REASON_CODES,
+  type CorrectionReasonCode,
+} from "@/lib/correction-reasons";
 import { errorMessage, type ErrorText } from "@/lib/i18n/errors";
 import {
   formatOutletDateTime,
@@ -59,6 +63,7 @@ export function ShiftCorrectionDialog({
   const [clockInAt, setClockInAt] = useState(original.clockInAt);
   const [clockOutAt, setClockOutAt] = useState(original.clockOutAt);
   const [breaks, setBreaks] = useState<ShiftCorrectionBreak[]>(original.breaks);
+  const [reasonCode, setReasonCode] = useState<CorrectionReasonCode | "">("");
   const [reason, setReason] = useState("");
   const [error, setError] = useState<ErrorText | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -82,6 +87,10 @@ export function ShiftCorrectionDialog({
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (isSubmitting) return;
+    if (!reasonCode) {
+      setError({ code: null, text: t.reasonRequired });
+      return;
+    }
 
     let requests: ShiftCorrectionRequest[];
     try {
@@ -127,7 +136,9 @@ export function ShiftCorrectionDialog({
           body: JSON.stringify({
             outletId: shift.outletId,
             workSessionId: shift.id,
-            reason,
+            reasonCode,
+            reason:
+              reasonCode === "other" ? reason : t.reasonOptions[reasonCode],
             ...request,
           }),
         });
@@ -267,17 +278,34 @@ export function ShiftCorrectionDialog({
             })}
           </div>
 
-          <label className="timesheet-reason">
-            {t.reason}
-            <input
-              required
-              minLength={5}
-              maxLength={1000}
-              value={reason}
-              placeholder={t.reasonPlaceholder}
-              onChange={(event) => setReason(event.target.value)}
-            />
-          </label>
+          <fieldset className="timesheet-reason correction-reason-options">
+            <legend>{t.reason}</legend>
+            {CORRECTION_REASON_CODES.map((code) => (
+              <label key={code} className="correction-reason-option">
+                <input
+                  type="checkbox"
+                  checked={reasonCode === code}
+                  onChange={(event) =>
+                    setReasonCode(event.target.checked ? code : "")
+                  }
+                />
+                {t.reasonOptions[code]}
+              </label>
+            ))}
+          </fieldset>
+          {reasonCode === "other" && (
+            <label className="timesheet-reason">
+              {t.reasonDetails}
+              <input
+                required
+                minLength={5}
+                maxLength={1000}
+                value={reason}
+                placeholder={t.reasonDetailsPlaceholder}
+                onChange={(event) => setReason(event.target.value)}
+              />
+            </label>
+          )}
           {error && (
             <p className="form-error" role="alert">
               {errorMessage(messages, error)}
