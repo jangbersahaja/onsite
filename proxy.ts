@@ -18,6 +18,7 @@ export const config = {
     "/outlets/:path*",
     "/team/:path*",
     "/timesheets/:path*",
+    "/schedules/:path*",
     "/corrections/:path*",
   ],
 };
