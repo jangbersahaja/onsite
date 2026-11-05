@@ -4535,6 +4535,14 @@ small,
   .dashboard-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+  .dashboard-summary > div {
+    gap: 2px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+  .dashboard-summary strong {
+    font-size: 17px;
+  }
   .dashboard-summary > div:nth-child(4n + 1) {
     border-left: 1px solid var(--line);
     padding-left: 16px;
@@ -4689,9 +4697,6 @@ small,
   background: linear-gradient(135deg, #a5adc8 0%, #c7cce0 100%);
 }
 .dashboard-roster-break {
-  top: -3px;
-  bottom: -3px;
-  border-radius: 3px;
   background: var(--break);
   box-shadow: 0 0 0 1.5px #fff;
 }
@@ -4885,7 +4890,7 @@ small,
   }
   .dashboard-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 13px 0;
+    gap: 6px 0;
   }
   .dashboard-summary > div:nth-child(2) {
     border-right: 0;
