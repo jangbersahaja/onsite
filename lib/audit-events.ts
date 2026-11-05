@@ -54,6 +54,14 @@ export const AUDIT_ACTIONS = [
   "timesheet_import",
   "manual_shift_approved",
   "manual_shift_rejected",
+  "schedule_shift_created",
+  "schedule_shift_updated",
+  "schedule_shift_deleted",
+  "schedule_published",
+  "schedule_copied",
+  "shift_template_created",
+  "shift_template_updated",
+  "shift_template_deleted",
 ] as const;
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
@@ -180,6 +188,22 @@ const describers: Record<AuditAction, (parts: DescriptionParts) => string> = {
     `${actor} updated the staff code${target ? ` for ${target}` : ""}`,
   timesheet_import: ({ actor, atOutlet }) =>
     `${actor} imported shifts from CSV${atOutlet}`,
+  schedule_shift_created: ({ actor, target, atOutlet }) =>
+    `${actor} scheduled shifts${target ? ` for ${target}` : ""}${atOutlet}`,
+  schedule_shift_updated: ({ actor, target, atOutlet }) =>
+    `${actor} changed a scheduled shift${target ? ` for ${target}` : ""}${atOutlet}`,
+  schedule_shift_deleted: ({ actor, atOutlet }) =>
+    `${actor} removed scheduled shifts${atOutlet}`,
+  schedule_published: ({ actor, atOutlet }) =>
+    `${actor} published the schedule${atOutlet}`,
+  schedule_copied: ({ actor, atOutlet }) =>
+    `${actor} copied schedule shifts${atOutlet}`,
+  shift_template_created: ({ actor, atOutlet }) =>
+    `${actor} created a shift template${atOutlet}`,
+  shift_template_updated: ({ actor, atOutlet }) =>
+    `${actor} updated a shift template${atOutlet}`,
+  shift_template_deleted: ({ actor, atOutlet }) =>
+    `${actor} deleted a shift template${atOutlet}`,
 };
 
 export function describeAuditEvent(event: AuditEventForDescription): string {

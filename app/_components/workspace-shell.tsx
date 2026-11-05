@@ -93,6 +93,12 @@ export function createManagementNavigation(
           requiredAccess: "backoffice",
         },
         {
+          href: "/schedules",
+          label: "Schedules",
+          glyph: "▤",
+          requiredAccess: "backoffice",
+        },
+        {
           href: "/corrections/review",
           label: "Review requests",
           glyph: "↗",

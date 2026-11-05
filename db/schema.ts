@@ -43,6 +43,10 @@ export const userApprovalStatusEnum = pgEnum("user_approval_status", [
   "approved",
 ]);
 export const userLocaleEnum = pgEnum("user_locale", ["en", "ms", "id"]);
+export const scheduledShiftStatusEnum = pgEnum("scheduled_shift_status", [
+  "draft",
+  "published",
+]);
 
 export const user = pgTable(
   "user",
@@ -531,6 +535,81 @@ export const manualShiftRequests = pgTable(
       table.status,
     ),
     index("manual_shift_requests_requester_idx").on(table.requestedBy),
+  ],
+);
+
+export const shiftTemplates = pgTable(
+  "shift_templates",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    outletId: uuid("outlet_id")
+      .notNull()
+      .references(() => outlets.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    // Short label shown on compact roster cells, e.g. "AM".
+    code: text("code").notNull(),
+    // Outlet-local wall-clock times (HH:MM). An end at or before the start ends next day.
+    startTime: text("start_time").notNull(),
+    endTime: text("end_time").notNull(),
+    breakMinutes: integer("break_minutes").notNull().default(0),
+    color: text("color").notNull().default("violet"),
+    createdBy: text("created_by").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("shift_templates_outlet_idx").on(table.outletId)],
+);
+
+export const scheduledShifts = pgTable(
+  "scheduled_shifts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    outletId: uuid("outlet_id")
+      .notNull()
+      .references(() => outlets.id, { onDelete: "cascade" }),
+    // Outlet-local calendar date the shift starts on (YYYY-MM-DD).
+    shiftDate: text("shift_date").notNull(),
+    startAt: timestamp("start_at", { withTimezone: true }).notNull(),
+    endAt: timestamp("end_at", { withTimezone: true }).notNull(),
+    breakMinutes: integer("break_minutes").notNull().default(0),
+    templateId: uuid("template_id").references(() => shiftTemplates.id, {
+      onDelete: "set null",
+    }),
+    note: text("note"),
+    status: scheduledShiftStatusEnum("status").notNull().default("draft"),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    createdBy: text("created_by").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    updatedBy: text("updated_by").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    check(
+      "scheduled_shifts_end_after_start_chk",
+      sql`${table.endAt} > ${table.startAt}`,
+    ),
+    index("scheduled_shifts_outlet_date_idx").on(
+      table.outletId,
+      table.shiftDate,
+    ),
+    index("scheduled_shifts_user_start_idx").on(table.userId, table.startAt),
   ],
 );
 
