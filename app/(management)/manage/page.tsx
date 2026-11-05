@@ -275,7 +275,7 @@ function ShiftRoster({ outlet }: { outlet: DashboardOutlet }) {
                     />
                   );
                 })}
-                {showNow && (
+                {showNow && shift.status !== "finished" && (
                   <span
                     className="dashboard-roster-now"
                     style={{ left: `${nowPercent}%` }}
