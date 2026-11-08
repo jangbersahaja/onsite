@@ -139,9 +139,9 @@ export function templateMatches(
 ) {
   return Boolean(
     template &&
-      template.startTime === values.startTime &&
-      template.endTime === values.endTime &&
-      template.breakMinutes === values.breakMinutes,
+    template.startTime === values.startTime &&
+    template.endTime === values.endTime &&
+    template.breakMinutes === values.breakMinutes,
   );
 }
 
@@ -188,10 +188,35 @@ export function attendanceBadges(shift: ScheduledShift): AttendanceBadge[] {
       short: "OT",
     });
   }
+  if (attendance.flags.includes("missed_break")) {
+    badges.push({
+      tone: "warning",
+      label: `No break · ${formatMinutes(attendance.plannedBreakMinutes)} planned`,
+      short: "BRK",
+    });
+  }
+  if (
+    attendance.flags.includes("short_break") ||
+    attendance.flags.includes("long_break")
+  ) {
+    const kind = attendance.flags.includes("short_break") ? "Short" : "Long";
+    badges.push({
+      tone: "warning",
+      label: `${kind} break ${formatMinutes(attendance.actualBreakMinutes)} of ${formatMinutes(attendance.plannedBreakMinutes)}`,
+      short: "BRK",
+    });
+  }
   if (attendance.status === "in_progress") {
     badges.push({ tone: "info", label: "On shift", short: "ON" });
-  } else if (!badges.length) {
+  } else if (!attendance.flags.length) {
     badges.push({ tone: "success", label: "On time", short: "OK" });
+  }
+  if (attendance.earlyMinutes > 0) {
+    badges.push({
+      tone: "info",
+      label: `${formatMinutes(attendance.earlyMinutes)} early`,
+      short: "EARLY",
+    });
   }
   return badges;
 }

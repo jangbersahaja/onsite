@@ -16,6 +16,8 @@ export const LATE_GRACE_MINUTES = 5;
 export const EARLY_LEAVE_GRACE_MINUTES = 5;
 /** Minutes past the scheduled end before the extra time counts as overtime. */
 export const OVERTIME_THRESHOLD_MINUTES = 15;
+/** Tolerance around the planned break length before it counts as short or long. */
+export const BREAK_GRACE_MINUTES = 5;
 /** How far a clock-in may drift from a shift and still be attributed to it. */
 export const MATCH_WINDOW_MINUTES = 180;
 export const MAX_SHIFT_MINUTES = 16 * 60;
@@ -182,7 +184,14 @@ export type AttendanceStatus =
   | "completed"
   | "absent";
 
-export type AttendanceFlag = "late" | "left_early" | "overtime" | "absent";
+export type AttendanceFlag =
+  | "late"
+  | "left_early"
+  | "overtime"
+  | "absent"
+  | "short_break"
+  | "long_break"
+  | "missed_break";
 
 export type ShiftAttendance = {
   status: AttendanceStatus;
@@ -191,9 +200,12 @@ export type ShiftAttendance = {
   clockInAt: string | null;
   clockOutAt: string | null;
   lateMinutes: number;
+  earlyMinutes: number;
   earlyLeaveMinutes: number;
   overtimeMinutes: number;
   workedMinutes: number;
+  plannedBreakMinutes: number;
+  actualBreakMinutes: number;
 };
 
 export type AttendanceShift = {
@@ -201,6 +213,8 @@ export type AttendanceShift = {
   userId: string;
   startAt: Date | string;
   endAt: Date | string;
+  /** Planned break length; omitted means no break is planned. */
+  breakMinutes?: number;
 };
 
 export type AttendanceSession = {
@@ -209,6 +223,7 @@ export type AttendanceSession = {
   clockInAt: Date | string;
   clockOutAt: Date | string | null;
   workedMinutes: number | null;
+  completedBreakMinutes?: number;
 };
 
 function toMs(value: Date | string) {
@@ -249,7 +264,11 @@ export function evaluateAttendance(
       const distance = Math.abs(sessionStart - shiftStart);
       // Overlap wins outright; otherwise prefer the closest start in the window.
       const score =
-        overlap > 0 ? overlap + windowMs : distance <= windowMs ? -distance : null;
+        overlap > 0
+          ? overlap + windowMs
+          : distance <= windowMs
+            ? -distance
+            : null;
       if (score === null) continue;
       if (!best || score > best.score) best = { shift, score };
     }
@@ -289,9 +308,12 @@ export function evaluateAttendance(
         clockOutAt: null,
         lateMinutes:
           status === "not_clocked_in" ? minutesBetween(shiftStart, nowMs) : 0,
+        earlyMinutes: 0,
         earlyLeaveMinutes: 0,
         overtimeMinutes: 0,
         workedMinutes: 0,
+        plannedBreakMinutes: shift.breakMinutes ?? 0,
+        actualBreakMinutes: 0,
       });
       continue;
     }
@@ -301,12 +323,30 @@ export function evaluateAttendance(
     const isOpen = last.clockOutAt === null;
     const lastOut = isOpen ? nowMs : toMs(last.clockOutAt!);
     const lateMinutes = minutesBetween(shiftStart, firstIn);
+    const earlyMinutes = minutesBetween(firstIn, shiftStart);
     const earlyLeaveMinutes = isOpen ? 0 : minutesBetween(lastOut, shiftEnd);
     const overtimeMinutes = minutesBetween(shiftEnd, lastOut);
 
     if (lateMinutes > LATE_GRACE_MINUTES) flags.push("late");
     if (earlyLeaveMinutes > EARLY_LEAVE_GRACE_MINUTES) flags.push("left_early");
     if (overtimeMinutes > OVERTIME_THRESHOLD_MINUTES) flags.push("overtime");
+
+    const plannedBreakMinutes = shift.breakMinutes ?? 0;
+    const actualBreakMinutes = shiftSessions.reduce(
+      (total, session) => total + (session.completedBreakMinutes ?? 0),
+      0,
+    );
+    if (!isOpen && plannedBreakMinutes > 0 && actualBreakMinutes === 0) {
+      flags.push("missed_break");
+    } else if (
+      !isOpen &&
+      actualBreakMinutes < plannedBreakMinutes - BREAK_GRACE_MINUTES
+    ) {
+      flags.push("short_break");
+    }
+    if (actualBreakMinutes > plannedBreakMinutes + BREAK_GRACE_MINUTES) {
+      flags.push("long_break");
+    }
 
     results.set(shift.id, {
       status: isOpen ? "in_progress" : "completed",
@@ -315,6 +355,7 @@ export function evaluateAttendance(
       clockInAt: new Date(firstIn).toISOString(),
       clockOutAt: isOpen ? null : new Date(lastOut).toISOString(),
       lateMinutes,
+      earlyMinutes,
       earlyLeaveMinutes,
       overtimeMinutes:
         overtimeMinutes > OVERTIME_THRESHOLD_MINUTES ? overtimeMinutes : 0,
@@ -322,6 +363,8 @@ export function evaluateAttendance(
         (total, session) => total + (session.workedMinutes ?? 0),
         0,
       ),
+      plannedBreakMinutes,
+      actualBreakMinutes,
     });
   }
 
@@ -337,12 +380,17 @@ export type AttendanceSummaryRow = {
   onTime: number;
   late: number;
   lateMinutes: number;
+  earlyMinutes: number;
   absent: number;
   leftEarly: number;
   overtime: number;
   overtimeMinutes: number;
   unscheduled: number;
   unscheduledMinutes: number;
+  workedShifts: number;
+  breakPlannedMinutes: number;
+  breakActualMinutes: number;
+  breakIssues: number;
 };
 
 /** Aggregates scored shifts into per-staff totals. Upcoming shifts only add scheduled time. */
@@ -366,12 +414,17 @@ export function summarizeAttendance(
         onTime: 0,
         late: 0,
         lateMinutes: 0,
+        earlyMinutes: 0,
         absent: 0,
         leftEarly: 0,
         overtime: 0,
         overtimeMinutes: 0,
         unscheduled: 0,
         unscheduledMinutes: 0,
+        workedShifts: 0,
+        breakPlannedMinutes: 0,
+        breakActualMinutes: 0,
+        breakIssues: 0,
       };
       rows.set(userId, row);
     }
@@ -385,7 +438,23 @@ export function summarizeAttendance(
     const attendance = shift.attendance;
     if (!attendance || attendance.status === "upcoming") continue;
     row.scoredShifts += 1;
+    if (attendance.sessionIds.length) {
+      row.workedShifts += 1;
+      row.breakPlannedMinutes += attendance.plannedBreakMinutes;
+      row.breakActualMinutes += attendance.actualBreakMinutes;
+      if (
+        attendance.flags.some(
+          (flag) =>
+            flag === "missed_break" ||
+            flag === "short_break" ||
+            flag === "long_break",
+        )
+      ) {
+        row.breakIssues += 1;
+      }
+    }
     row.workedMinutes += attendance.workedMinutes;
+    row.earlyMinutes += attendance.earlyMinutes;
     if (attendance.flags.includes("absent")) row.absent += 1;
     if (attendance.flags.includes("late")) {
       row.late += 1;
@@ -409,6 +478,8 @@ export function summarizeAttendance(
 }
 
 /** Share of scored shifts started on time, or null when nothing has been scored yet. */
-export function punctualityRate(row: Pick<AttendanceSummaryRow, "onTime" | "scoredShifts">) {
+export function punctualityRate(
+  row: Pick<AttendanceSummaryRow, "onTime" | "scoredShifts">,
+) {
   return row.scoredShifts ? row.onTime / row.scoredShifts : null;
 }

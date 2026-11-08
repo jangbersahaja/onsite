@@ -6,11 +6,6 @@ import {
   type CopyValues,
 } from "@/app/(management)/schedules/_components/copy-dialog";
 import {
-  ScheduleGrid,
-  type ScheduleBrush,
-  type ScheduleCell,
-} from "@/app/(management)/schedules/_components/schedule-grid";
-import {
   cellKey,
   formatHours,
   formatRangeLabel,
@@ -20,6 +15,11 @@ import {
   type ScheduleView,
   type ShiftDraft,
 } from "@/app/(management)/schedules/_components/schedule-format";
+import {
+  ScheduleGrid,
+  type ScheduleBrush,
+  type ScheduleCell,
+} from "@/app/(management)/schedules/_components/schedule-grid";
 import { ShiftDialog } from "@/app/(management)/schedules/_components/shift-dialog";
 import { TemplateDialog } from "@/app/(management)/schedules/_components/template-dialog";
 import { useConfirmDialog } from "@/app/_components/confirm-dialog";
@@ -53,11 +53,15 @@ type DialogState =
 const prefsKey = "onsite-schedule-prefs";
 
 function readPrefs(): Query {
-  const fallback: Query = { outletId: "", view: "week", anchor: localDateKey() };
+  const fallback: Query = {
+    outletId: "",
+    view: "week",
+    anchor: localDateKey(),
+  };
   try {
-    const saved = JSON.parse(window.localStorage.getItem(prefsKey) ?? "null") as
-      | Partial<Query>
-      | null;
+    const saved = JSON.parse(
+      window.localStorage.getItem(prefsKey) ?? "null",
+    ) as Partial<Query> | null;
     if (!saved || typeof saved !== "object") return fallback;
     return {
       ...fallback,
@@ -152,7 +156,9 @@ export default function SchedulesPage() {
     } catch (error) {
       if (id === requestId.current) {
         setMessage(
-          error instanceof Error ? error.message : "Could not load the schedule.",
+          error instanceof Error
+            ? error.message
+            : "Could not load the schedule.",
         );
       }
     } finally {
@@ -183,7 +189,9 @@ export default function SchedulesPage() {
       .catch((error: unknown) => {
         if (active)
           setMessage(
-            error instanceof Error ? error.message : "Could not load the schedule.",
+            error instanceof Error
+              ? error.message
+              : "Could not load the schedule.",
           );
       })
       .finally(() => {
@@ -198,7 +206,8 @@ export default function SchedulesPage() {
     function onKey(event: KeyboardEvent) {
       if (dialog || event.metaKey || event.ctrlKey || event.altKey) return;
       const target = event.target as HTMLElement | null;
-      if (target?.closest("input, select, textarea, [contenteditable=true]")) return;
+      if (target?.closest("input, select, textarea, [contenteditable=true]"))
+        return;
       if (event.key === "Escape") setBrush(null);
     }
     window.addEventListener("keydown", onKey);
@@ -259,7 +268,10 @@ export default function SchedulesPage() {
     );
     return {
       count: shifts.length,
-      minutes: shifts.reduce((total, shift) => total + shiftDurationMinutes(shift), 0),
+      minutes: shifts.reduce(
+        (total, shift) => total + shiftDurationMinutes(shift),
+        0,
+      ),
       drafts: drafts.length,
       rostered: new Set(shifts.map((shift) => shift.userId)).size,
       alerts: alerts.length,
@@ -289,14 +301,17 @@ export default function SchedulesPage() {
       if (result) setMessage(result);
       await reload();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Something went wrong.");
+      setMessage(
+        error instanceof Error ? error.message : "Something went wrong.",
+      );
     } finally {
       setIsSaving(false);
     }
   }
 
   function openCreate(cell: ScheduleCell) {
-    const defaults = lastDraft.current ??
+    const defaults =
+      lastDraft.current ??
       (templates[0]
         ? {
             startTime: templates[0].startTime,
@@ -304,11 +319,21 @@ export default function SchedulesPage() {
             breakMinutes: templates[0].breakMinutes,
             templateId: templates[0].id,
           }
-        : { startTime: "09:00", endTime: "17:00", breakMinutes: 60, templateId: null });
+        : {
+            startTime: "09:00",
+            endTime: "17:00",
+            breakMinutes: 60,
+            templateId: null,
+          });
     setDialog({
       kind: "shift",
       mode: "create",
-      initial: { ...defaults, note: null, userId: cell.userId, date: cell.date },
+      initial: {
+        ...defaults,
+        note: null,
+        userId: cell.userId,
+        date: cell.date,
+      },
       readOnly: false,
     });
   }
@@ -336,7 +361,11 @@ export default function SchedulesPage() {
       } else {
         await scheduleRequest("/api/schedules", {
           method: "POST",
-          body: { outletId: outlet.id, shifts: [values], publish: options.publish },
+          body: {
+            outletId: outlet.id,
+            shifts: [values],
+            publish: options.publish,
+          },
         });
         setMessage(options.publish ? "Shift published." : "Draft shift added.");
       }
@@ -390,7 +419,9 @@ export default function SchedulesPage() {
         (cell) => shiftsByCell.get(cellKey(cell.userId, cell.date)) ?? [],
       );
       if (!targets.length) return;
-      const published = targets.filter((shift) => shift.status === "published").length;
+      const published = targets.filter(
+        (shift) => shift.status === "published",
+      ).length;
       if (
         !(await confirm({
           title: `Erase ${targets.length} shift${targets.length === 1 ? "" : "s"}?`,
@@ -425,7 +456,9 @@ export default function SchedulesPage() {
     );
     const skipped = cells.length - free.length;
     if (!free.length) {
-      setMessage("Those days already have shifts. Use the eraser or open a shift to change it.");
+      setMessage(
+        "Those days already have shifts. Use the eraser or open a shift to change it.",
+      );
       return;
     }
     await mutate(async () => {
@@ -444,14 +477,17 @@ export default function SchedulesPage() {
         },
       });
       return `Added ${free.length} draft shift${free.length === 1 ? "" : "s"}${
-        skipped ? ` · ${skipped} day${skipped === 1 ? "" : "s"} already had a shift` : ""
+        skipped
+          ? ` · ${skipped} day${skipped === 1 ? "" : "s"} already had a shift`
+          : ""
       }.`;
     });
   }
 
   function moveShift(shift: ScheduledShift, cell: ScheduleCell, copy: boolean) {
     if (!outlet) return;
-    if (!copy && shift.userId === cell.userId && shift.date === cell.date) return;
+    if (!copy && shift.userId === cell.userId && shift.date === cell.date)
+      return;
     const name = staffById.get(cell.userId)?.name ?? "staff";
     const values = {
       ...shiftDraftFrom(shift),
@@ -487,7 +523,10 @@ export default function SchedulesPage() {
     await mutate(async () => {
       const result = await scheduleRequest<{ published: number }>(
         "/api/schedules/publish",
-        { method: "POST", body: { outletId: outlet.id, from: data.from, to: data.to } },
+        {
+          method: "POST",
+          body: { outletId: outlet.id, from: data.from, to: data.to },
+        },
       );
       return `Published ${result.published} shift${result.published === 1 ? "" : "s"}.`;
     });
@@ -496,10 +535,13 @@ export default function SchedulesPage() {
   async function copyWeeks(values: CopyValues) {
     if (!outlet) return;
     await mutate(async () => {
-      const result = await scheduleRequest<{ created: number; skipped: number }>(
-        "/api/schedules/copy",
-        { method: "POST", body: { outletId: outlet.id, ...values } },
-      );
+      const result = await scheduleRequest<{
+        created: number;
+        skipped: number;
+      }>("/api/schedules/copy", {
+        method: "POST",
+        body: { outletId: outlet.id, ...values },
+      });
       setDialog(null);
       return `Copied ${result.created} shift${result.created === 1 ? "" : "s"} as drafts${
         result.skipped ? ` · ${result.skipped} skipped because of clashes` : ""
@@ -516,11 +558,13 @@ export default function SchedulesPage() {
       "Start",
       "End",
       "Break (min)",
+      "Break taken (min)",
       "Paid hours",
       "Template",
       "Status",
       "Attendance",
       "Late (min)",
+      "Early in (min)",
       "Overtime (min)",
       "Note",
     ];
@@ -536,19 +580,29 @@ export default function SchedulesPage() {
           shift.startTime,
           shift.endTime,
           shift.breakMinutes,
+          attendance?.sessionIds.length ? attendance.actualBreakMinutes : "",
           (shiftDurationMinutes(shift) / 60).toFixed(2),
-          shift.templateId ? templatesById.get(shift.templateId)?.name ?? "" : "Custom",
+          shift.templateId
+            ? (templatesById.get(shift.templateId)?.name ?? "")
+            : "Custom",
           shift.status,
           attendance
-            ? [attendance.status, ...attendance.flags].join(" ").replaceAll("_", " ")
+            ? [attendance.status, ...attendance.flags]
+                .join(" ")
+                .replaceAll("_", " ")
             : "",
           attendance?.lateMinutes || "",
+          attendance?.earlyMinutes || "",
           attendance?.overtimeMinutes || "",
           shift.note ?? "",
         ];
       });
-    const csv = [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const csv = [header, ...rows]
+      .map((row) => row.map(csvCell).join(","))
+      .join("\n");
+    const url = URL.createObjectURL(
+      new Blob([csv], { type: "text/csv;charset=utf-8" }),
+    );
     const link = document.createElement("a");
     link.href = url;
     link.download = `schedule-${outlet.name.replace(/\W+/g, "-").toLowerCase()}-${data.from}-to-${data.to}.csv`;
@@ -634,7 +688,11 @@ export default function SchedulesPage() {
             ))}
           </select>
         </label>
-        <div className="team-view-nav schedule-segmented" role="group" aria-label="Range">
+        <div
+          className="team-view-nav schedule-segmented"
+          role="group"
+          aria-label="Range"
+        >
           {(["week", "month"] as const).map((view) => (
             <button
               key={view}
@@ -679,12 +737,16 @@ export default function SchedulesPage() {
               aria-label="Jump to date"
               value={query.anchor}
               onChange={(event) => {
-                if (event.target.value) navigate({ anchor: event.target.value });
+                if (event.target.value)
+                  navigate({ anchor: event.target.value });
               }}
             />
           </label>
         </div>
-        <div className="team-view-nav schedule-segmented schedule-tabs" role="tablist">
+        <div
+          className="team-view-nav schedule-segmented schedule-tabs"
+          role="tablist"
+        >
           <button
             type="button"
             role="tab"
@@ -702,7 +764,9 @@ export default function SchedulesPage() {
             onClick={() => setTab("insights")}
           >
             Attendance
-            {stats.alerts ? <span className="schedule-tab-count">{stats.alerts}</span> : null}
+            {stats.alerts ? (
+              <span className="schedule-tab-count">{stats.alerts}</span>
+            ) : null}
           </button>
         </div>
         <button
@@ -729,7 +793,9 @@ export default function SchedulesPage() {
         <div>
           <span>Staff rostered</span>
           <strong>
-            {data ? `${stats.rostered}/${data.staff.filter((person) => person.isMember).length}` : "—"}
+            {data
+              ? `${stats.rostered}/${data.staff.filter((person) => person.isMember).length}`
+              : "—"}
           </strong>
         </div>
         <div className={stats.drafts ? "is-attention" : ""}>
@@ -757,7 +823,8 @@ export default function SchedulesPage() {
               <span aria-hidden="true">↖</span> Select
             </button>
             {templates.map((template) => {
-              const active = brush?.kind === "template" && brush.template.id === template.id;
+              const active =
+                brush?.kind === "template" && brush.template.id === template.id;
               return (
                 <button
                   key={template.id}
@@ -766,7 +833,9 @@ export default function SchedulesPage() {
                   aria-pressed={active}
                   title={`${template.name} · ${template.startTime}–${template.endTime}`}
                   disabled={!canEditAnyone}
-                  onClick={() => setBrush(active ? null : { kind: "template", template })}
+                  onClick={() =>
+                    setBrush(active ? null : { kind: "template", template })
+                  }
                 >
                   <span className="schedule-brush-code">{template.code}</span>
                   {template.startTime}–{template.endTime}
@@ -782,7 +851,11 @@ export default function SchedulesPage() {
                 disabled={!canEditAnyone || Boolean(customInvalid)}
                 title={customInvalid ?? "Paint a custom time"}
                 onClick={() =>
-                  setBrush(brush?.kind === "custom" ? null : { kind: "custom", ...customBrush })
+                  setBrush(
+                    brush?.kind === "custom"
+                      ? null
+                      : { kind: "custom", ...customBrush },
+                  )
                 }
               >
                 Custom
@@ -792,7 +865,10 @@ export default function SchedulesPage() {
                 aria-label="Custom start"
                 value={customBrush.startTime}
                 onChange={(event) => {
-                  const next = { ...customBrush, startTime: event.target.value };
+                  const next = {
+                    ...customBrush,
+                    startTime: event.target.value,
+                  };
                   setCustomBrush(next);
                   if (brush?.kind === "custom" && !validateShiftTimes(next))
                     setBrush({ kind: "custom", ...next });
@@ -816,7 +892,9 @@ export default function SchedulesPage() {
               className={`schedule-brush schedule-brush-erase${brush?.kind === "erase" ? " is-active" : ""}`}
               aria-pressed={brush?.kind === "erase"}
               disabled={!canEditAnyone}
-              onClick={() => setBrush(brush?.kind === "erase" ? null : { kind: "erase" })}
+              onClick={() =>
+                setBrush(brush?.kind === "erase" ? null : { kind: "erase" })
+              }
             >
               <span aria-hidden="true">⌫</span> Eraser
             </button>
@@ -847,15 +925,20 @@ export default function SchedulesPage() {
           ) : (
             <p className="schedule-hint">
               Click <strong>+</strong> to add a shift, drag a shift to move it
-              (hold <kbd>Alt</kbd> to copy), or pick a brush to paint many days at once.
-              {!templates.length && " Tip: create templates for your usual shifts first."}
+              (hold <kbd>Alt</kbd> to copy), or pick a brush to paint many days
+              at once.
+              {!templates.length &&
+                " Tip: create templates for your usual shifts first."}
             </p>
           )}
 
           {data && !data.staff.length ? (
             <div className="schedule-empty">
               <h2>No staff assigned to {outlet?.name}</h2>
-              <p>Assign people to this outlet from the Team page to start rostering.</p>
+              <p>
+                Assign people to this outlet from the Team page to start
+                rostering.
+              </p>
             </div>
           ) : data ? (
             <ScheduleGrid
@@ -878,7 +961,8 @@ export default function SchedulesPage() {
 
           <ul className="schedule-legend" aria-label="Legend">
             <li>
-              <span className="schedule-chip-swatch is-draft" /> Draft (not visible to staff)
+              <span className="schedule-chip-swatch is-draft" /> Draft (not
+              visible to staff)
             </li>
             <li>
               <span className="schedule-chip-swatch" /> Published
@@ -905,7 +989,10 @@ export default function SchedulesPage() {
 
       {dialog?.kind === "shift" && outlet && data && (
         <ShiftDialog
-          key={dialog.shift?.id ?? `${dialog.initial.userId}-${dialog.initial.date}`}
+          key={
+            dialog.shift?.id ??
+            `${dialog.initial.userId}-${dialog.initial.date}`
+          }
           mode={dialog.mode}
           initial={dialog.initial}
           shift={dialog.shift}

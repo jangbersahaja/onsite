@@ -48,25 +48,38 @@ export function AttendancePanel({
         onTime: acc.onTime + row.onTime,
         late: acc.late + row.late,
         lateMinutes: acc.lateMinutes + row.lateMinutes,
+        earlyMinutes: acc.earlyMinutes + row.earlyMinutes,
         absent: acc.absent + row.absent,
         leftEarly: acc.leftEarly + row.leftEarly,
         overtimeMinutes: acc.overtimeMinutes + row.overtimeMinutes,
         scheduledMinutes: acc.scheduledMinutes + row.scheduledMinutes,
         workedMinutes: acc.workedMinutes + row.workedMinutes,
+        workedShifts: acc.workedShifts + row.workedShifts,
+        breakPlannedMinutes: acc.breakPlannedMinutes + row.breakPlannedMinutes,
+        breakActualMinutes: acc.breakActualMinutes + row.breakActualMinutes,
+        breakIssues: acc.breakIssues + row.breakIssues,
       }),
       {
         scored: 0,
         onTime: 0,
         late: 0,
         lateMinutes: 0,
+        earlyMinutes: 0,
         absent: 0,
         leftEarly: 0,
         overtimeMinutes: 0,
         scheduledMinutes: 0,
         workedMinutes: 0,
+        workedShifts: 0,
+        breakPlannedMinutes: 0,
+        breakActualMinutes: 0,
+        breakIssues: 0,
       },
     );
-    return { ...sum, rate: punctualityRate({ onTime: sum.onTime, scoredShifts: sum.scored }) };
+    return {
+      ...sum,
+      rate: punctualityRate({ onTime: sum.onTime, scoredShifts: sum.scored }),
+    };
   }, [data.summary]);
 
   const exceptions = useMemo(
@@ -90,7 +103,9 @@ export function AttendancePanel({
           (a, b) =>
             (punctualityRate(a) ?? 2) - (punctualityRate(b) ?? 2) ||
             b.absent - a.absent ||
-            (names.get(a.userId)?.name ?? "").localeCompare(names.get(b.userId)?.name ?? ""),
+            (names.get(a.userId)?.name ?? "").localeCompare(
+              names.get(b.userId)?.name ?? "",
+            ),
         ),
     [data.summary, names],
   );
@@ -105,33 +120,69 @@ export function AttendancePanel({
       <section className="schedule-kpis" aria-label="Attendance overview">
         <article className={`schedule-kpi ${rateTone(totals.rate)}`}>
           <span>Punctuality</span>
-          <strong>{totals.rate === null ? "—" : `${Math.round(totals.rate * 100)}%`}</strong>
+          <strong>
+            {totals.rate === null ? "—" : `${Math.round(totals.rate * 100)}%`}
+          </strong>
           <small>
             {totals.onTime} of {totals.scored} completed shifts on time
           </small>
         </article>
-        <article className={`schedule-kpi ${totals.late ? "tone-warning" : ""}`}>
+        <article
+          className={`schedule-kpi ${totals.late ? "tone-warning" : ""}`}
+        >
           <span>Late arrivals</span>
           <strong>{totals.late}</strong>
-          <small>{totals.lateMinutes ? `${formatMinutes(totals.lateMinutes)} lost` : "No lateness"}</small>
+          <small>
+            {[
+              totals.lateMinutes
+                ? `${formatMinutes(totals.lateMinutes)} lost`
+                : "No lateness",
+              totals.earlyMinutes
+                ? `${formatMinutes(totals.earlyMinutes)} early in`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </small>
         </article>
-        <article className={`schedule-kpi ${totals.absent ? "tone-danger" : ""}`}>
+        <article
+          className={`schedule-kpi ${totals.absent ? "tone-danger" : ""}`}
+        >
           <span>Absences</span>
           <strong>{totals.absent}</strong>
           <small>No clock-in for a published shift</small>
         </article>
-        <article className={`schedule-kpi ${totals.overtimeMinutes ? "tone-overtime" : ""}`}>
+        <article
+          className={`schedule-kpi ${totals.overtimeMinutes ? "tone-overtime" : ""}`}
+        >
           <span>Overtime</span>
           <strong>{formatHours(totals.overtimeMinutes)}</strong>
           <small>
-            {totals.leftEarly ? `${totals.leftEarly} left early` : "Beyond scheduled end"}
+            {totals.leftEarly
+              ? `${totals.leftEarly} left early`
+              : "Beyond scheduled end"}
           </small>
         </article>
-        <article className={`schedule-kpi ${data.unscheduled.length ? "tone-info" : ""}`}>
+        <article
+          className={`schedule-kpi ${totals.breakIssues ? "tone-warning" : ""}`}
+        >
+          <span>Break issues</span>
+          <strong>{totals.breakIssues}</strong>
+          <small>
+            {totals.breakPlannedMinutes
+              ? `${formatMinutes(totals.breakActualMinutes)} taken of ${formatMinutes(totals.breakPlannedMinutes)} planned`
+              : "No breaks planned"}
+          </small>
+        </article>
+        <article
+          className={`schedule-kpi ${data.unscheduled.length ? "tone-info" : ""}`}
+        >
           <span>Unscheduled work</span>
           <strong>{data.unscheduled.length}</strong>
           <small>
-            {unscheduledMinutes ? `${formatHours(unscheduledMinutes)} worked off-roster` : "Everyone stuck to the roster"}
+            {unscheduledMinutes
+              ? `${formatHours(unscheduledMinutes)} worked off-roster`
+              : "Everyone stuck to the roster"}
           </small>
         </article>
       </section>
@@ -152,9 +203,11 @@ export function AttendancePanel({
                   <th scope="col">Worked</th>
                   <th scope="col">Punctuality</th>
                   <th scope="col">Late</th>
+                  <th scope="col">Early in</th>
                   <th scope="col">Absent</th>
                   <th scope="col">Left early</th>
                   <th scope="col">Overtime</th>
+                  <th scope="col">Breaks</th>
                   <th scope="col">Off-roster</th>
                 </tr>
               </thead>
@@ -186,11 +239,29 @@ export function AttendancePanel({
                         )}
                       </td>
                       <td>
-                        {row.late ? `${row.late} · ${formatMinutes(row.lateMinutes)}` : "—"}
+                        {row.late
+                          ? `${row.late} · ${formatMinutes(row.lateMinutes)}`
+                          : "—"}
                       </td>
-                      <td className={row.absent ? "is-danger" : ""}>{row.absent || "—"}</td>
+                      <td>
+                        {row.earlyMinutes
+                          ? formatMinutes(row.earlyMinutes)
+                          : "—"}
+                      </td>
+                      <td className={row.absent ? "is-danger" : ""}>
+                        {row.absent || "—"}
+                      </td>
                       <td>{row.leftEarly || "—"}</td>
-                      <td>{row.overtimeMinutes ? formatMinutes(row.overtimeMinutes) : "—"}</td>
+                      <td>
+                        {row.overtimeMinutes
+                          ? formatMinutes(row.overtimeMinutes)
+                          : "—"}
+                      </td>
+                      <td className={row.breakIssues ? "is-danger" : ""}>
+                        {row.breakPlannedMinutes
+                          ? `${formatMinutes(row.breakActualMinutes)} of ${formatMinutes(row.breakPlannedMinutes)}${row.breakIssues ? ` · ${row.breakIssues} flagged` : ""}`
+                          : "—"}
+                      </td>
                       <td>
                         {row.unscheduled
                           ? `${row.unscheduled} · ${formatMinutes(row.unscheduledMinutes)}`
@@ -223,7 +294,9 @@ export function AttendancePanel({
                   <li key={shift.id}>
                     <button type="button" onClick={() => onOpenShift(shift)}>
                       <span className="schedule-exception-who">
-                        <strong>{names.get(shift.userId)?.name ?? "Former staff"}</strong>
+                        <strong>
+                          {names.get(shift.userId)?.name ?? "Former staff"}
+                        </strong>
                         <small>{formatShortDate(shift.date)}</small>
                       </span>
                       <span className="schedule-exception-times">
@@ -232,12 +305,17 @@ export function AttendancePanel({
                         </span>
                         <span>
                           Actual {timeIn(attendance.clockInAt, timezone)}–
-                          {attendance.clockInAt ? timeIn(attendance.clockOutAt, timezone) : ""}
+                          {attendance.clockInAt
+                            ? timeIn(attendance.clockOutAt, timezone)
+                            : ""}
                         </span>
                       </span>
                       <span className="schedule-chip-badges">
                         {attendanceBadges(shift).map((badge) => (
-                          <span key={badge.label} className={`schedule-badge tone-${badge.tone}`}>
+                          <span
+                            key={badge.label}
+                            className={`schedule-badge tone-${badge.tone}`}
+                          >
                             {badge.label}
                           </span>
                         ))}
@@ -248,7 +326,9 @@ export function AttendancePanel({
               })}
             </ul>
           ) : (
-            <p className="schedule-empty-inline">No exceptions in this range. 🎉</p>
+            <p className="schedule-empty-inline">
+              No exceptions in this range. 🎉
+            </p>
           )}
         </section>
 
@@ -276,13 +356,17 @@ export function AttendancePanel({
                           : "In progress"}
                       </span>
                     </span>
-                    <span className="schedule-badge tone-info">Unscheduled</span>
+                    <span className="schedule-badge tone-info">
+                      Unscheduled
+                    </span>
                   </div>
                 </li>
               ))}
             </ul>
           ) : (
-            <p className="schedule-empty-inline">Every clock-in matched a shift.</p>
+            <p className="schedule-empty-inline">
+              Every clock-in matched a shift.
+            </p>
           )}
         </section>
       </div>

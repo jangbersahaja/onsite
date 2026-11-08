@@ -15,8 +15,8 @@ import {
 import {
   evaluateAttendance,
   findScheduleConflicts,
-  shiftLocalDateTimes,
   SHIFT_COLORS,
+  shiftLocalDateTimes,
   summarizeAttendance,
   type ShiftColor,
 } from "@/lib/schedule-rules";
@@ -27,10 +27,10 @@ import type {
   ScheduleStaff,
   ShiftTemplate,
 } from "@/lib/schedule-types";
-import { addDaysToDateKey } from "@/lib/timesheet-off-days";
-import { canChangeShiftFor } from "@/lib/timesheet-create-rules";
 import { getActor } from "@/lib/timesheet-actor";
-import { getWorkedMinutes } from "@/lib/work-breaks";
+import { canChangeShiftFor } from "@/lib/timesheet-create-rules";
+import { addDaysToDateKey } from "@/lib/timesheet-off-days";
+import { getCompletedBreakMinutes, getWorkedMinutes } from "@/lib/work-breaks";
 import { and, eq, gte, inArray, lt, lte, notInArray } from "drizzle-orm";
 
 export type ScheduleActor = Exclude<
@@ -167,8 +167,12 @@ export async function assertNoScheduleConflicts(
   if (!candidates.length) return;
   const internal = findScheduleConflicts(candidates);
   if (internal.length) {
-    const name = names.get(candidates[internal[0][0]].userId) ?? "A staff member";
-    throw new ScheduleError(`${name} has overlapping shifts in this change.`, 409);
+    const name =
+      names.get(candidates[internal[0][0]].userId) ?? "A staff member";
+    throw new ScheduleError(
+      `${name} has overlapping shifts in this change.`,
+      409,
+    );
   }
   const earliest = new Date(
     Math.min(...candidates.map((candidate) => candidate.startAt.getTime())),
@@ -186,13 +190,14 @@ export async function assertNoScheduleConflicts(
     .from(scheduledShifts)
     .where(
       and(
-        inArray(
-          scheduledShifts.userId,
-          [...new Set(candidates.map((candidate) => candidate.userId))],
-        ),
+        inArray(scheduledShifts.userId, [
+          ...new Set(candidates.map((candidate) => candidate.userId)),
+        ]),
         lt(scheduledShifts.startAt, latest),
         gte(scheduledShifts.endAt, earliest),
-        excludeIds.length ? notInArray(scheduledShifts.id, excludeIds) : undefined,
+        excludeIds.length
+          ? notInArray(scheduledShifts.id, excludeIds)
+          : undefined,
       ),
     );
   for (const candidate of candidates) {
@@ -282,14 +287,20 @@ export async function loadScheduleData(
           ),
         )
     : [];
-  const sessions = sessionRows.map((session) => ({
-    ...session,
-    workedMinutes: getWorkedMinutes(
-      session.clockInAt,
-      session.clockOutAt,
-      breakRows.filter((item) => item.workSessionId === session.id),
-    ),
-  }));
+  const sessions = sessionRows.map((session) => {
+    const breaks = breakRows.filter(
+      (item) => item.workSessionId === session.id,
+    );
+    return {
+      ...session,
+      workedMinutes: getWorkedMinutes(
+        session.clockInAt,
+        session.clockOutAt,
+        breaks,
+      ),
+      completedBreakMinutes: getCompletedBreakMinutes(breaks),
+    };
+  });
 
   const shifts = shiftRows.map((row) => toScheduledShift(row, outlet.timezone));
   const published = shifts.filter((shift) => shift.status === "published");
@@ -336,7 +347,9 @@ export async function loadScheduleData(
   const staff = [
     ...memberRows.map((member) => toStaff(member, true)),
     ...extraRows
-      .filter((member) => shifts.some((shift) => shift.userId === member.userId))
+      .filter((member) =>
+        shifts.some((shift) => shift.userId === member.userId),
+      )
       .map((member) => toStaff(member, false)),
   ];
   const names = new Map(
