@@ -4,6 +4,7 @@ import {
   TimesheetCreateDialog,
   type TimesheetCreateValues,
 } from "@/app/(management)/timesheets/_components/timesheet-create-dialog";
+import { TimesheetDeleteDialog } from "@/app/(management)/timesheets/_components/timesheet-delete-dialog";
 import {
   TimesheetEditDialog,
   type TimesheetEditValues,
@@ -18,7 +19,7 @@ import {
 } from "@/lib/outlet-time";
 import { getOffDayDateKeys } from "@/lib/timesheet-off-days";
 import Link from "next/link";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 
 type TimesheetRow = {
   id: string;
@@ -43,7 +44,7 @@ type TimesheetRow = {
 
 type TimelineItem =
   | { kind: "shift"; date: string; row: TimesheetRow }
-  | { kind: "off-day"; date: string };
+  | { kind: "off-days"; from: string; to: string; count: number };
 
 type TimesheetStaffGroup = {
   key: string;
@@ -79,15 +80,22 @@ type TimesheetData = {
     id: string;
     name: string;
     address: string;
+    timezone: string;
     imageUrl?: string | null;
   }[];
-  employees: { id: string; name: string; email: string }[];
+  employees: {
+    id: string;
+    name: string;
+    email: string;
+    outletIds: string[];
+  }[];
   staff: TimesheetStaff[];
   currentUserId: string;
   isSuperAdmin: boolean;
   rows: TimesheetRow[];
   storeHubStatus: "not_configured" | "available" | "unavailable";
   storeHubFetchedAt: string | null;
+  truncated: boolean;
 };
 
 type Filters = {
@@ -105,6 +113,9 @@ const emptyFilters: Filters = {
 };
 
 const timesheetFiltersStorageKey = "onsite-timesheet-filters";
+
+// Ignores responses from superseded filter requests.
+let latestLoadId = 0;
 
 function readSavedFilters(): Filters {
   try {
@@ -194,35 +205,162 @@ function staffGroupKey(row: TimesheetRow) {
   return `${row.outletId}:${identity}`;
 }
 
+function addDays(date: string, days: number) {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days))
+    .toISOString()
+    .slice(0, 10);
+}
+
+function timelineStart(item: TimelineItem) {
+  return item.kind === "shift" ? item.date : item.from;
+}
+
 function buildTimeline(
   group: TimesheetStaffGroup,
   filters: Filters,
+  truncated: boolean,
 ): TimelineItem[] {
-  const items: TimelineItem[] = group.rows.map((row) => ({
+  const shifts: TimelineItem[] = group.rows.map((row) => ({
     kind: "shift" as const,
     date: row.clockInLocal.slice(0, 10),
     row,
   }));
-  if (group.userId) {
+  const offDays: TimelineItem[] = [];
+  if (group.userId && !truncated) {
     const today = formatOutletDateTime(new Date(), group.timezone).slice(0, 10);
-    const offDays = getOffDayDateKeys({
+    const offDayDates = getOffDayDateKeys({
       from: filters.from,
       to: filters.to,
       today,
-      workedDateKeys: items.map((item) => item.date),
+      workedDateKeys: shifts.map((item) => timelineStart(item)),
     });
-    items.push(...offDays.map((date) => ({ kind: "off-day" as const, date })));
+    offDays.push(
+      ...offDayDates.map((date) => ({
+        kind: "off-days" as const,
+        from: date,
+        to: date,
+        count: 1,
+      })),
+    );
   }
-  return items.sort((left, right) => left.date.localeCompare(right.date));
+  const sorted = [...shifts, ...offDays].sort((left, right) =>
+    timelineStart(left).localeCompare(timelineStart(right)),
+  );
+
+  const timeline: TimelineItem[] = [];
+  for (const item of sorted) {
+    const last = timeline[timeline.length - 1];
+    if (
+      item.kind === "off-days" &&
+      last?.kind === "off-days" &&
+      addDays(last.to, 1) === item.from
+    ) {
+      last.to = item.to;
+      last.count += item.count;
+      continue;
+    }
+    timeline.push(item);
+  }
+  return timeline;
+}
+
+type DatePreset =
+  | "today"
+  | "week"
+  | "last7"
+  | "month"
+  | "lastMonth"
+  | "salary"
+  | "lastSalary"
+  | "all";
+
+// Payroll periods run from the day after this cutoff to the cutoff of the next month.
+const SALARY_CUTOFF_DAY = 25;
+
+const datePresets: { value: DatePreset; label: string }[] = [
+  { value: "today", label: "Today" },
+  { value: "week", label: "This week" },
+  { value: "last7", label: "Last 7 days" },
+  { value: "month", label: "This month" },
+  { value: "lastMonth", label: "Last month" },
+  { value: "salary", label: "Salary period" },
+  { value: "lastSalary", label: "Last salary period" },
+  { value: "all", label: "All dates" },
+];
+
+function utcDateKey(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+// Preset ranges are calculated from the outlet's "today" date key.
+function presetRange(preset: DatePreset, today: string) {
+  const [year, monthNumber, day] = today.split("-").map(Number);
+  const month = monthNumber - 1;
+  switch (preset) {
+    case "today":
+      return { from: today, to: today };
+    case "week": {
+      const offset = (new Date(Date.UTC(year, month, day)).getUTCDay() + 6) % 7;
+      return {
+        from: utcDateKey(new Date(Date.UTC(year, month, day - offset))),
+        to: utcDateKey(new Date(Date.UTC(year, month, day - offset + 6))),
+      };
+    }
+    case "last7":
+      return {
+        from: utcDateKey(new Date(Date.UTC(year, month, day - 6))),
+        to: today,
+      };
+    case "month":
+      return {
+        from: utcDateKey(new Date(Date.UTC(year, month, 1))),
+        to: utcDateKey(new Date(Date.UTC(year, month + 1, 0))),
+      };
+    case "lastMonth":
+      return {
+        from: utcDateKey(new Date(Date.UTC(year, month - 1, 1))),
+        to: utcDateKey(new Date(Date.UTC(year, month, 0))),
+      };
+    case "salary":
+      return salaryRange(year, month, day, 0);
+    case "lastSalary":
+      return salaryRange(year, month, day, -1);
+    case "all":
+      return { from: "", to: "" };
+  }
+}
+
+function salaryRange(year: number, month: number, day: number, shift: number) {
+  const base = day > SALARY_CUTOFF_DAY ? 0 : -1;
+  const start = Date.UTC(year, month + base + shift, SALARY_CUTOFF_DAY + 1);
+  const end = Date.UTC(year, month + base + shift + 1, SALARY_CUTOFF_DAY);
+  return {
+    from: utcDateKey(new Date(start)),
+    to: utcDateKey(new Date(end)),
+  };
+}
+
+function describeDateRange(from: string, to: string) {
+  if (from && to) {
+    return from === to
+      ? formatShiftDate(from)
+      : `${formatShiftDate(from)} – ${formatShiftDate(to)}`;
+  }
+  return from
+    ? `From ${formatShiftDate(from)}`
+    : `Until ${formatShiftDate(to)}`;
 }
 
 export default function TimesheetsPage() {
   const [filters, setFilters] = useState(emptyFilters);
+  const [appliedFilters, setAppliedFilters] = useState(emptyFilters);
   const [data, setData] = useState<TimesheetData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [editing, setEditing] = useState<TimesheetRow | null>(null);
+  const [deleting, setDeleting] = useState<TimesheetRow | null>(null);
   const [creatingFor, setCreatingFor] = useState<ShiftTarget | null>(null);
   const [importing, setImporting] = useState(false);
   const [expandedShiftIds, setExpandedShiftIds] = useState<
@@ -241,16 +379,79 @@ export default function TimesheetsPage() {
     });
   }
 
+  const [openLongTipId, setOpenLongTipId] = useState<TimesheetRow["id"] | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (openLongTipId === null) return;
+    function handlePointerDown(event: Event) {
+      if (!(event.target as Element).closest?.("[data-long-tip]"))
+        setOpenLongTipId(null);
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpenLongTipId(null);
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("touchstart", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("touchstart", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [openLongTipId]);
+
+  const [collapsedGroupKeys, setCollapsedGroupKeys] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  function toggleGroupCollapsed(key: string) {
+    setCollapsedGroupKeys((current) => {
+      const next = new Set(current);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  }
+
+  const [rangeOpen, setRangeOpen] = useState(false);
+  const [draftRange, setDraftRange] = useState({ from: "", to: "" });
+  const rangeRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!rangeOpen) return;
+    function handlePointerDown(event: MouseEvent) {
+      if (!rangeRef.current?.contains(event.target as Node))
+        setRangeOpen(false);
+    }
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setRangeOpen(false);
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [rangeOpen]);
+
   async function load(nextFilters: Filters) {
+    const requestId = ++latestLoadId;
     setIsLoading(true);
     try {
-      setData(await fetchTimesheetData(nextFilters));
+      const loaded = await fetchTimesheetData(nextFilters);
+      if (requestId === latestLoadId) setData(loaded);
     } catch (error) {
-      setMessage(
-        error instanceof Error ? error.message : "Could not load timesheets.",
-      );
+      if (requestId === latestLoadId)
+        setMessage(
+          error instanceof Error ? error.message : "Could not load timesheets.",
+        );
     } finally {
-      setIsLoading(false);
+      if (requestId === latestLoadId) setIsLoading(false);
     }
   }
 
@@ -272,6 +473,7 @@ export default function TimesheetsPage() {
       .finally(() => {
         if (active) {
           setFilters(savedFilters);
+          setAppliedFilters(savedFilters);
           setIsLoading(false);
         }
       });
@@ -280,11 +482,115 @@ export default function TimesheetsPage() {
     };
   }, []);
 
+  const presetTimezone =
+    data?.outlets.find((outlet) => outlet.id === filters.outletId)?.timezone ??
+    Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const today = formatOutletDateTime(new Date(), presetTimezone).slice(0, 10);
+  const activePreset =
+    datePresets.find((preset) => {
+      const range = presetRange(preset.value, today);
+      return range.from === filters.from && range.to === filters.to;
+    })?.value ?? null;
+  const activePresetLabel = datePresets.find(
+    (preset) => preset.value === activePreset,
+  )?.label;
+  const rangeTitle = activePresetLabel ?? "Custom range";
+  const rangeSubtitle =
+    filters.from || filters.to
+      ? describeDateRange(filters.from, filters.to)
+      : "No date limit";
+  const draftInvalid = Boolean(
+    draftRange.from && draftRange.to && draftRange.from > draftRange.to,
+  );
+  const employeeOptions = (data?.employees ?? [])
+    .filter(
+      (employee) =>
+        !filters.outletId || employee.outletIds.includes(filters.outletId),
+    )
+    .sort((left, right) =>
+      left.name.localeCompare(right.name, "en", {
+        numeric: true,
+        sensitivity: "base",
+      }),
+    );
+  const rangeInvalid = Boolean(
+    filters.from && filters.to && filters.from > filters.to,
+  );
+  const activeChips: { key: string; label: string; onRemove: () => void }[] =
+    [];
+  if (filters.outletId) {
+    activeChips.push({
+      key: "outlet",
+      label:
+        data?.outlets.find((outlet) => outlet.id === filters.outletId)?.name ??
+        "Outlet",
+      onRemove: () => updateFilters({ outletId: "" }),
+    });
+  }
+  if (filters.employeeId) {
+    activeChips.push({
+      key: "employee",
+      label:
+        data?.employees.find((employee) => employee.id === filters.employeeId)
+          ?.name ?? "Employee",
+      onRemove: () => updateFilters({ employeeId: "" }),
+    });
+  }
+  if (filters.from || filters.to) {
+    activeChips.push({
+      key: "range",
+      label: describeDateRange(filters.from, filters.to),
+      onRemove: () => updateFilters({ from: "", to: "" }),
+    });
+  }
+
+  function applyFilters(next: Filters) {
+    if (next.from && next.to && next.from > next.to) return;
+    saveFilters(next);
+    setAppliedFilters(next);
+    setMessage("");
+    void load(next);
+  }
+
+  // Every filter change applies immediately; invalid ranges wait for a fix.
+  function updateFilters(patch: Partial<Filters>) {
+    const next = { ...filters, ...patch };
+    const outletChanged =
+      patch.outletId !== undefined && patch.outletId !== filters.outletId;
+    if (outletChanged && next.employeeId) {
+      const employee = data?.employees.find(
+        (item) => item.id === next.employeeId,
+      );
+      if (
+        !employee ||
+        (next.outletId && !employee.outletIds.includes(next.outletId))
+      ) {
+        next.employeeId = "";
+      }
+    }
+    setFilters(next);
+    applyFilters(next);
+  }
+
+  function toggleRangePanel() {
+    if (!rangeOpen) setDraftRange({ from: filters.from, to: filters.to });
+    setRangeOpen(!rangeOpen);
+  }
+
+  function pickPreset(preset: DatePreset) {
+    updateFilters(presetRange(preset, today));
+    setRangeOpen(false);
+  }
+
+  function applyDraftRange() {
+    if (draftInvalid) return;
+    updateFilters(draftRange);
+    setRangeOpen(false);
+  }
+
   function handleFilterSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    saveFilters(filters);
-    setMessage("");
-    void load(filters);
+    applyFilters(filters);
   }
 
   function startEdit(row: TimesheetRow) {
@@ -335,8 +641,10 @@ export default function TimesheetsPage() {
       if (!response.ok)
         throw new Error(body.error ?? "Could not update this shift.");
       setEditing(null);
-      setMessage("Timesheet entry updated.");
-      await load(filters);
+      setMessage(
+        `Timesheet entry updated for ${editing.employeeName} on ${formatShiftDate(editing.clockInLocal.slice(0, 10))}.`,
+      );
+      await load(appliedFilters);
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "Could not update this shift.",
@@ -403,8 +711,8 @@ export default function TimesheetsPage() {
       if (!response.ok)
         throw new Error(body.error ?? "Could not add this shift.");
       const outsideDateFilter = Boolean(
-        (filters.from && shiftDate < filters.from) ||
-        (filters.to && shiftDate > filters.to),
+        (appliedFilters.from && shiftDate < appliedFilters.from) ||
+        (appliedFilters.to && shiftDate > appliedFilters.to),
       );
       setCreatingFor(null);
       setMessage(
@@ -414,7 +722,7 @@ export default function TimesheetsPage() {
             : ""
         }`,
       );
-      await load(filters);
+      await load(appliedFilters);
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "Could not add this shift.",
@@ -424,34 +732,28 @@ export default function TimesheetsPage() {
     }
   }
 
-  async function deleteShift(row: TimesheetRow) {
+  async function deleteShift(row: TimesheetRow, reason: string) {
     if (isSaving) return;
-    if (
-      !(await confirm({
-        title: "Delete this shift?",
-        description: `${row.employeeName}'s shift on ${formatShiftDate(row.clockInLocal.slice(0, 10))} and its breaks will be permanently removed. The deletion is kept in the audit log.`,
-        confirmLabel: "Delete shift",
-        tone: "danger",
-      }))
-    )
-      return;
     setIsSaving(true);
     setMessage("");
     try {
       const response = await fetch(
-        `/api/timesheets?id=${encodeURIComponent(row.id)}`,
+        `/api/timesheets?id=${encodeURIComponent(row.id)}&reason=${encodeURIComponent(reason)}`,
         { method: "DELETE" },
       );
       const body = await response.json();
       if (!response.ok)
         throw new Error(body.error ?? "Could not delete this shift.");
-      setMessage(`Shift deleted for ${row.employeeName}.`);
-      await load(filters);
+      setMessage(
+        `Shift deleted for ${row.employeeName} on ${formatShiftDate(row.clockInLocal.slice(0, 10))}.`,
+      );
+      await load(appliedFilters);
     } catch (error) {
       setMessage(
         error instanceof Error ? error.message : "Could not delete this shift.",
       );
     } finally {
+      setDeleting(null);
       setIsSaving(false);
     }
   }
@@ -543,11 +845,15 @@ export default function TimesheetsPage() {
       left.key.localeCompare(right.key),
   );
   for (const group of staffGroups) {
-    group.timeline = buildTimeline(group, filters);
+    group.timeline = buildTimeline(
+      group,
+      appliedFilters,
+      Boolean(data?.truncated),
+    );
   }
-  const csvQuery = filterQuery(filters, "csv");
+  const csvQuery = filterQuery(appliedFilters, "csv");
   const importExportHref = (outletId: string) =>
-    `/api/timesheets?${filterQuery({ ...filters, outletId }, "import-csv")}`;
+    `/api/timesheets?${filterQuery({ ...appliedFilters, outletId }, "import-csv")}`;
 
   return (
     <div className="team-page-content timesheet-content">
@@ -566,8 +872,10 @@ export default function TimesheetsPage() {
           <button
             className="btn btn-secondary"
             type="button"
-            disabled={!data?.outlets.length || !filters.outletId}
-            title={filters.outletId ? undefined : "Choose an outlet to import"}
+            disabled={!data?.outlets.length || !appliedFilters.outletId}
+            title={
+              appliedFilters.outletId ? undefined : "Choose an outlet to import"
+            }
             onClick={() => setImporting(true)}
           >
             Import CSV
@@ -578,13 +886,16 @@ export default function TimesheetsPage() {
         </div>
       </div>
 
-      <form className="timesheet-filters" onSubmit={handleFilterSubmit}>
+      <form
+        className="timesheet-filters timesheet-filter-bar"
+        onSubmit={handleFilterSubmit}
+      >
         <label>
           Outlet
           <select
             value={filters.outletId}
             onChange={(event) =>
-              setFilters({ ...filters, outletId: event.target.value })
+              updateFilters({ outletId: event.target.value })
             }
           >
             <option value="">All managed outlets</option>
@@ -600,41 +911,140 @@ export default function TimesheetsPage() {
           <select
             value={filters.employeeId}
             onChange={(event) =>
-              setFilters({ ...filters, employeeId: event.target.value })
+              updateFilters({ employeeId: event.target.value })
             }
           >
             <option value="">All employees</option>
-            {data?.employees.map((employee) => (
+            {employeeOptions.map((employee) => (
               <option value={employee.id} key={employee.id}>
                 {employee.name}
               </option>
             ))}
           </select>
         </label>
-        <label>
-          From
-          <input
-            type="date"
-            value={filters.from}
-            onChange={(event) =>
-              setFilters({ ...filters, from: event.target.value })
-            }
-          />
-        </label>
-        <label>
-          To
-          <input
-            type="date"
-            value={filters.to}
-            onChange={(event) =>
-              setFilters({ ...filters, to: event.target.value })
-            }
-          />
-        </label>
-        <button className="btn btn-primary" type="submit" disabled={isLoading}>
-          Apply filters
-        </button>
+        <div className="timesheet-range-field" ref={rangeRef}>
+          <span className="timesheet-range-label">Date range</span>
+          <button
+            className="timesheet-range-trigger"
+            type="button"
+            aria-haspopup="dialog"
+            aria-expanded={rangeOpen}
+            onClick={toggleRangePanel}
+          >
+            <span>
+              <strong>{rangeTitle}</strong>
+              <small>{rangeSubtitle}</small>
+            </span>
+            <span aria-hidden="true">{rangeOpen ? "▴" : "▾"}</span>
+          </button>
+          {rangeOpen && (
+            <div
+              className="timesheet-range-panel"
+              role="dialog"
+              aria-label="Choose date range"
+            >
+              <p className="timesheet-range-heading">Quick ranges</p>
+              <div className="timesheet-range-quick">
+                {datePresets.map((preset) => (
+                  <button
+                    className="timesheet-range-option"
+                    type="button"
+                    key={preset.value}
+                    aria-pressed={activePreset === preset.value}
+                    onClick={() => pickPreset(preset.value)}
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+              <div className="timesheet-range-divider" />
+              <p className="timesheet-range-heading">Custom range</p>
+              <div className="timesheet-range-dates">
+                <label>
+                  From
+                  <input
+                    type="date"
+                    value={draftRange.from}
+                    max={draftRange.to || undefined}
+                    onChange={(event) =>
+                      setDraftRange((current) => ({
+                        ...current,
+                        from: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label>
+                  To
+                  <input
+                    type="date"
+                    value={draftRange.to}
+                    min={draftRange.from || undefined}
+                    onChange={(event) =>
+                      setDraftRange((current) => ({
+                        ...current,
+                        to: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+              </div>
+              <div className="timesheet-range-actions">
+                <button
+                  className="timesheet-range-cancel"
+                  type="button"
+                  onClick={() => setRangeOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="timesheet-range-apply"
+                  type="button"
+                  disabled={draftInvalid}
+                  onClick={applyDraftRange}
+                >
+                  Apply range
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </form>
+
+      {(rangeInvalid || activeChips.length > 0) && (
+        <div className="timesheet-filter-status">
+          {rangeInvalid && (
+            <p className="timesheet-filter-error" role="alert">
+              The From date must be on or before the To date.
+            </p>
+          )}
+          {activeChips.length > 0 && (
+            <ul className="timesheet-chips" aria-label="Active filters">
+              {activeChips.map((chip) => (
+                <li className="timesheet-chip" key={chip.key}>
+                  <span>{chip.label}</span>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${chip.label} filter`}
+                    onClick={chip.onRemove}
+                  >
+                    ×
+                  </button>
+                </li>
+              ))}
+              <li>
+                <button
+                  className="timesheet-chip-clear"
+                  type="button"
+                  onClick={() => updateFilters(emptyFilters)}
+                >
+                  Reset all
+                </button>
+              </li>
+            </ul>
+          )}
+        </div>
+      )}
 
       <div className="timesheet-summary" aria-live="polite">
         <div>
@@ -651,6 +1061,17 @@ export default function TimesheetsPage() {
         </div>
       </div>
 
+      {data && !appliedFilters.outletId && (
+        <p className="timesheet-footnote">
+          Choose one outlet to enable CSV import.
+        </p>
+      )}
+      {data?.truncated && (
+        <p className="team-message" role="status">
+          Showing the first 500 matching shifts. Narrow the date range to see
+          the rest.
+        </p>
+      )}
       {message && (
         <p className="team-message" role="status">
           {message}
@@ -681,16 +1102,28 @@ export default function TimesheetsPage() {
             id: outlet.id,
             name: outlet.name,
           }))}
-          outletId={filters.outletId}
-          importExportHref={importExportHref(filters.outletId)}
+          outletId={appliedFilters.outletId}
+          importExportHref={importExportHref(appliedFilters.outletId)}
           onOpenChange={(open) => {
             if (!open) setImporting(false);
           }}
           onImported={(importMessage) => {
             setImporting(false);
             setMessage(importMessage);
-            void load(filters);
+            void load(appliedFilters);
           }}
+        />
+      )}
+
+      {deleting && (
+        <TimesheetDeleteDialog
+          employeeName={deleting.employeeName}
+          shiftLabel={formatShiftDate(deleting.clockInLocal.slice(0, 10))}
+          isSaving={isSaving}
+          onOpenChange={(open) => {
+            if (!open) setDeleting(null);
+          }}
+          onConfirm={(reason) => deleteShift(deleting, reason)}
         />
       )}
 
@@ -707,11 +1140,45 @@ export default function TimesheetsPage() {
         />
       )}
 
+      {staffGroups.length > 1 && (
+        <nav className="timesheet-staff-index" aria-label="Jump to staff">
+          <button
+            className="timesheet-staff-index-toggle"
+            type="button"
+            onClick={() =>
+              setCollapsedGroupKeys(
+                collapsedGroupKeys.size === staffGroups.length
+                  ? new Set()
+                  : new Set(staffGroups.map((group) => group.key)),
+              )
+            }
+          >
+            {collapsedGroupKeys.size === staffGroups.length
+              ? "Expand all"
+              : "Collapse all"}
+          </button>
+          {staffGroups.map((group, groupIndex) => (
+            <a key={group.key} href={`#timesheet-staff-${groupIndex}`}>
+              <span>{group.employeeName}</span>
+              <small>
+                {formatDuration(
+                  group.rows.reduce(
+                    (total, row) => total + (row.durationMinutes ?? 0),
+                    0,
+                  ),
+                )}
+              </small>
+            </a>
+          ))}
+        </nav>
+      )}
+
       <section className="timesheet-table-section" aria-label="Shift records">
         {staffGroups.map((group, groupIndex) => (
           <section
             className="timesheet-staff-group"
             aria-labelledby={`timesheet-staff-${groupIndex}`}
+            data-collapsed={collapsedGroupKeys.has(group.key)}
             key={group.key}
           >
             <header className="timesheet-staff-heading">
@@ -720,8 +1187,27 @@ export default function TimesheetsPage() {
                   {group.employeeName}
                 </h2>
                 {group.employeeEmail && <small>{group.employeeEmail}</small>}
+                <small className="timesheet-staff-summary">
+                  {group.rows.length}{" "}
+                  {group.rows.length === 1 ? "record" : "records"} ·{" "}
+                  {formatDuration(
+                    group.rows.reduce(
+                      (total, row) => total + (row.durationMinutes ?? 0),
+                      0,
+                    ),
+                  )}
+                </small>
               </div>
               <div className="timesheet-staff-actions">
+                <button
+                  className="btn btn-secondary btn-sm timesheet-collapse-toggle"
+                  type="button"
+                  aria-expanded={!collapsedGroupKeys.has(group.key)}
+                  aria-controls={`timesheet-table-${groupIndex}`}
+                  onClick={() => toggleGroupCollapsed(group.key)}
+                >
+                  {collapsedGroupKeys.has(group.key) ? "Show" : "Hide"}
+                </button>
                 <span className="outlet-inline">
                   <OutletAvatar
                     name={group.outletName}
@@ -736,7 +1222,10 @@ export default function TimesheetsPage() {
                 </span>
               </div>
             </header>
-            <div className="team-table-wrap">
+            <div
+              className="team-table-wrap"
+              id={`timesheet-table-${groupIndex}`}
+            >
               <table className="team-table timesheet-table">
                 <thead>
                   <tr>
@@ -749,18 +1238,28 @@ export default function TimesheetsPage() {
                 </thead>
                 <tbody>
                   {group.timeline.map((item) => {
-                    if (item.kind === "off-day") {
+                    if (item.kind === "off-days") {
                       return (
                         <tr
                           className="timesheet-off-day-row"
-                          key={`off-day-${item.date}`}
+                          key={`off-days-${item.from}`}
                         >
                           <td colSpan={5}>
-                            <time dateTime={item.date}>
-                              {formatShiftDate(item.date)}
+                            <time dateTime={item.from}>
+                              {formatShiftDate(item.from)}
                             </time>
+                            {item.count > 1 && (
+                              <>
+                                <span aria-hidden="true"> – </span>
+                                <time dateTime={item.to}>
+                                  {formatShiftDate(item.to)}
+                                </time>
+                              </>
+                            )}
                             <span aria-hidden="true"> · </span>
-                            Off day
+                            {item.count === 1
+                              ? "Off day"
+                              : `${item.count} off days`}
                           </td>
                         </tr>
                       );
@@ -769,11 +1268,16 @@ export default function TimesheetsPage() {
                     const clockIn = splitLocalTimestamp(row.clockInLocal);
                     const clockOut = splitLocalTimestamp(row.clockOutLocal);
                     const isExpanded = expandedShiftIds.has(row.id);
+                    const isLongTipOpen = openLongTipId === row.id;
                     const isLongShift =
                       row.durationMinutes !== null &&
                       row.durationMinutes > LONG_SHIFT_MINUTES;
                     return (
-                      <tr key={row.id} data-expanded={isExpanded}>
+                      <tr
+                        key={row.id}
+                        data-expanded={isExpanded}
+                        data-long={isLongShift}
+                      >
                         <td>
                           <div className="timesheet-shift-date">
                             <time dateTime={row.clockInAt}>
@@ -812,12 +1316,26 @@ export default function TimesheetsPage() {
                                   ? "timesheet-worked timesheet-worked-long"
                                   : "timesheet-worked"
                               }
-                              title={
-                                isLongShift ? "Longer than 10 hours" : undefined
-                              }
                             >
                               {formatDuration(row.durationMinutes)}
                             </strong>
+                            {isLongShift && (
+                              <button
+                                className="timesheet-long-shift"
+                                type="button"
+                                aria-expanded={isLongTipOpen}
+                                aria-label="Over 10 hours. Check this shift for a missed clock-out or a long break."
+                                data-long-tip
+                                data-tip="Over 10 hours. Check this shift for a missed clock-out or a long break."
+                                onClick={() =>
+                                  setOpenLongTipId(
+                                    isLongTipOpen ? null : row.id,
+                                  )
+                                }
+                              >
+                                !
+                              </button>
+                            )}
                             <button
                               className="timesheet-details-toggle timesheet-icon-button"
                               type="button"
@@ -844,7 +1362,7 @@ export default function TimesheetsPage() {
                               </svg>
                             </button>
                           </div>
-                          {row.breakMinutes !== 0 && (
+                          {isExpanded && row.breakMinutes !== 0 && (
                             <small className="timesheet-duration-detail">
                               Gross {formatDuration(row.grossDurationMinutes)}
                               <span aria-hidden="true"> · </span>
@@ -909,7 +1427,7 @@ export default function TimesheetsPage() {
                                       type="button"
                                       aria-label="Delete shift"
                                       title="Delete shift"
-                                      onClick={() => void deleteShift(row)}
+                                      onClick={() => setDeleting(row)}
                                     >
                                       <TrashIcon />
                                     </button>

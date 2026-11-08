@@ -1,80 +1,63 @@
 "use client";
 
-import { useConfirmDialog } from "@/app/_components/confirm-dialog";
-import { CloseIcon, RefreshIcon } from "@/app/_components/icons";
-import { ModalDialog } from "@/app/_components/modal-dialog";
+import { RefreshIcon } from "@/app/_components/icons";
 import { REVIEW_REQUESTS_CHANGED_EVENT } from "@/app/_components/workspace-shell";
-import {
-  isBreakCorrectionEvent,
-  type CorrectionEvent,
-} from "@/lib/break-corrections";
+import { isBreakCorrectionEvent } from "@/lib/break-corrections";
 import {
   formatOutletDateTime,
   outletDateTimeToISOString,
 } from "@/lib/outlet-time";
-import { useEffect, useState, type FormEvent } from "react";
+import {
+  CORRECTION_EVENT_LABELS,
+  formatReviewDateTime,
+  loadReviewLists,
+  mergeReviewList,
+  sortOldestFirst,
+  type CorrectionReviewRequest,
+  type DeviceReviewRequest,
+  type OutletOption,
+  type PastShiftReviewRequest,
+  type ReviewList,
+  type ReviewLists,
+} from "@/lib/review-requests";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
+import {
+  DecisionButton,
+  DecisionForm,
+  ReviewDialog,
+  ReviewNotice,
+  type ReviewNoticeState,
+} from "./_components/review-dialog";
+import { ReviewQueue } from "./_components/review-queue";
 
-type ReviewRequest = {
-  id: string;
-  requestedBy: string;
-  requesterName: string;
-  requesterEmail: string;
-  outletId: string;
-  outletName: string;
-  timezone: string;
-  workSessionId: string | null;
-  workBreakId: string | null;
-  event: CorrectionEvent;
-  requestedAt: string;
-  breakStartedAt: string | null;
-  breakEndedAt: string | null;
-  reason: string;
-  status: "reconciliation";
-  appliedAt: string | null;
-  createdAt: string;
-};
-
-type DeviceRequest = {
-  id: string;
-  userId: string;
-  employeeName: string;
-  employeeEmail: string;
-  createdAt: string;
-  outletNames: string[];
-};
-
-type ManualShiftReviewRequest = {
-  id: string;
-  outletId: string;
-  outletName: string;
-  requestedBy: string;
-  requesterName: string;
-  requesterUsername: string;
-  timezone: string;
-  clockInAt: string;
-  clockOutAt: string;
-  reason: string;
-  status: "pending";
-  createdAt: string;
-};
-
-type ReviewData = {
-  corrections: ReviewList<ReviewRequest>;
-  devices: ReviewList<DeviceRequest>;
-  manualShifts: ReviewList<ManualShiftReviewRequest>;
-};
-
-type ReviewList<T> = {
-  items: T[] | null;
-  error: string | null;
-};
-
-type OutletOption = {
-  id: string;
-  name: string;
-};
-
+type ReviewKind = "correction" | "pastShift" | "device";
+type Selection = { kind: ReviewKind; id: string } | null;
 type CorrectionDecision = "confirm" | "adjust" | "reject" | "save_note";
+type PendingDecision = { key: string; label: string };
+type ScheduledCommit = { timer: number; run: () => Promise<void> };
+
+/** Window in which a decision can be undone before it is sent. */
+const UNDO_MS = 5_000;
+/** Success messages clear on their own; errors stay until the next action. */
+const SUCCESS_MS = 4_000;
+
+const TABS: readonly { kind: ReviewKind; label: string }[] = [
+  { kind: "correction", label: "Clock corrections" },
+  { kind: "pastShift", label: "Past shifts" },
+  { kind: "device", label: "Device enrollments" },
+];
+
+const EMPTY_LISTS: ReviewLists = {
+  correction: { items: null, error: "" },
+  pastShift: { items: null, error: "" },
+  device: { items: null, error: "" },
+};
 
 const CORRECTION_DECISIONS: readonly string[] = [
   "confirm",
@@ -83,28 +66,9 @@ const CORRECTION_DECISIONS: readonly string[] = [
   "save_note",
 ];
 
-const DECISION_CONFIRM = {
-  confirm: {
-    title: "Confirm this punch?",
-    description: "The punch will be reconciled as recorded.",
-    confirmLabel: "Confirm punch",
-  },
-  adjust: {
-    title: "Save adjusted punch?",
-    description: "The punch time will be changed and the request reconciled.",
-    confirmLabel: "Save adjustment",
-  },
-  reject: {
-    title: "Reject this correction?",
-    description:
-      "The punch or break will return to its previous time and the request will be marked rejected.",
-    confirmLabel: "Reject correction",
-  },
-} as const;
-
-const DECISION_SUCCESS: Record<CorrectionDecision, string> = {
-  confirm: "Punch reconciled.",
-  adjust: "Punch adjusted and reconciled.",
+const CORRECTION_SUCCESS: Record<CorrectionDecision, string> = {
+  confirm: "Punch marked reconciled.",
+  adjust: "Punch adjusted and marked reconciled.",
   reject: "Correction rejected and the previous time restored.",
   save_note: "Note saved. This correction stays in the list.",
 };
@@ -113,129 +77,85 @@ function isCorrectionDecision(value: string): value is CorrectionDecision {
   return CORRECTION_DECISIONS.includes(value);
 }
 
-async function loadReviewList<T>(
-  url: string,
-  fallbackError: string,
-): Promise<ReviewList<T>> {
-  try {
-    const response = await fetch(url, { cache: "no-store" });
-    const body = (await response.json()) as {
-      requests?: T[];
-      error?: string;
-    };
-    if (!response.ok) {
-      throw new Error(body.error ?? fallbackError);
-    }
-    return { items: body.requests ?? [], error: null };
-  } catch (error) {
-    return {
-      items: null,
-      error: error instanceof Error ? error.message : fallbackError,
-    };
-  }
+/** The decision is the submit button's value, which lets one form hold several actions. */
+function submittedValue(event: FormEvent<HTMLFormElement>): string {
+  const submitter = (event.nativeEvent as SubmitEvent).submitter;
+  return submitter instanceof HTMLButtonElement ? submitter.value : "";
 }
 
-async function loadReviewRequests(outletId?: string): Promise<ReviewData> {
-  const query = new URLSearchParams({ view: "review" });
-  if (outletId) query.set("outletId", outletId);
-  const [corrections, devices, manualShifts] = await Promise.all([
-    loadReviewList<ReviewRequest>(
-      `/api/corrections?${query}`,
-      "Could not load correction requests.",
-    ),
-    loadReviewList<DeviceRequest>(
-      `/api/staff-devices?${query}`,
-      "Could not load device requests.",
-    ),
-    loadReviewList<ManualShiftReviewRequest>(
-      "/api/manual-shifts?view=review",
-      "Could not load past shift requests.",
-    ),
-  ]);
-  return { corrections, devices, manualShifts };
+function noteFieldOf(form: HTMLFormElement) {
+  return form.querySelector<HTMLTextAreaElement>('textarea[name="reason"]');
 }
 
-function formatRequestedTime(value: string, timezone: string) {
-  return new Intl.DateTimeFormat("en-SG", {
-    timeZone: timezone,
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
+function pendingKey(kind: ReviewKind, id: string) {
+  return `${kind}:${id}`;
+}
+
+function formatClock(value: number) {
+  return new Date(value).toLocaleTimeString("en-SG", {
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(value));
+  });
 }
 
-function formatDeviceRequestTime(value: string) {
-  return new Intl.DateTimeFormat("en-SG", {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
+function withoutItem<T extends { id: string }>(
+  list: ReviewList<T>,
+  id: string,
+): ReviewList<T> {
+  return {
+    ...list,
+    items: list.items?.filter((item) => item.id !== id) ?? null,
+  };
+}
+
+/** A selection is only dropped when its queue loaded successfully and no longer lists it. */
+function isListed(loaded: ReviewLists, selection: NonNullable<Selection>) {
+  const list =
+    selection.kind === "correction"
+      ? loaded.correction.items
+      : selection.kind === "pastShift"
+        ? loaded.pastShift.items
+        : loaded.device.items;
+  return list === null || list.some((item) => item.id === selection.id);
 }
 
 export default function CorrectionReviewPage() {
-  const [selectedOutletId, setSelectedOutletId] = useState("");
+  const [outletId, setOutletId] = useState("");
   const [outlets, setOutlets] = useState<OutletOption[]>([]);
-  const outletId = selectedOutletId || undefined;
-  const [requests, setRequests] = useState<ReviewRequest[] | null>(null);
-  const [deviceRequests, setDeviceRequests] = useState<DeviceRequest[] | null>(
-    null,
-  );
-  const [correctionError, setCorrectionError] = useState("");
-  const [deviceError, setDeviceError] = useState("");
+  const [lists, setLists] = useState<ReviewLists>(EMPTY_LISTS);
   const [isLoading, setIsLoading] = useState(true);
-  const [busyId, setBusyId] = useState("");
-  const [message, setMessage] = useState("");
-  const [selectedCorrectionId, setSelectedCorrectionId] = useState("");
-  const [selectedDeviceId, setSelectedDeviceId] = useState("");
-  const [manualRequests, setManualRequests] = useState<
-    ManualShiftReviewRequest[] | null
-  >(null);
-  const [manualError, setManualError] = useState("");
-  const [selectedManualId, setSelectedManualId] = useState("");
-  const requestList = requests ?? [];
-  const deviceRequestList = deviceRequests ?? [];
-  const reconciliationRequests = requestList.filter(
-    (request) => request.status === "reconciliation",
-  );
-  const selectedCorrection =
-    reconciliationRequests.find(
-      (request) => request.id === selectedCorrectionId,
-    ) ?? null;
-  const selectedDevice =
-    deviceRequestList.find((request) => request.id === selectedDeviceId) ??
-    null;
-  const manualRequestList = (manualRequests ?? []).filter(
-    (request) => !selectedOutletId || request.outletId === selectedOutletId,
-  );
-  const selectedManual =
-    manualRequestList.find((request) => request.id === selectedManualId) ??
-    null;
-  const messageNode = message ? (
-    <p className="team-message" role="status">
-      {message}
-    </p>
-  ) : null;
+  const [now, setNow] = useState<number | null>(null);
+  const [updatedAt, setUpdatedAt] = useState<number | null>(null);
+  const [tab, setTab] = useState<ReviewKind>("correction");
+  const [selection, setSelection] = useState<Selection>(null);
+  const [adjusting, setAdjusting] = useState(false);
+  const [busy, setBusy] = useState("");
+  const [notice, setNotice] = useState<ReviewNoticeState | null>(null);
+  const [pending, setPending] = useState<PendingDecision[]>([]);
+  const loadSeq = useRef(0);
+  const commits = useRef(new Map<string, ScheduledCommit>());
 
-  async function refresh() {
-    setIsLoading(true);
-    try {
-      const loaded = await loadReviewRequests(outletId);
-      if (loaded.corrections.items) setRequests(loaded.corrections.items);
-      if (loaded.devices.items) setDeviceRequests(loaded.devices.items);
-      if (loaded.manualShifts.items)
-        setManualRequests(loaded.manualShifts.items);
-      setManualError(loaded.manualShifts.error ?? "");
-      setCorrectionError(loaded.corrections.error ?? "");
-      setDeviceError(loaded.devices.error ?? "");
-      setMessage("");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Refresh failed.");
-    } finally {
-      setIsLoading(false);
-    }
-  }
+  const load = useCallback(async (nextOutletId: string) => {
+    const seq = ++loadSeq.current;
+    const loaded = await loadReviewLists(nextOutletId || undefined);
+    if (seq !== loadSeq.current) return;
+    setLists((current) => ({
+      correction: mergeReviewList(current.correction, loaded.correction),
+      pastShift: mergeReviewList(current.pastShift, loaded.pastShift),
+      device: mergeReviewList(current.device, loaded.device),
+    }));
+    setSelection((current) =>
+      current && !isListed(loaded, current) ? null : current,
+    );
+    const stamp = Date.now();
+    setNow(stamp);
+    setUpdatedAt(stamp);
+    setIsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    void load(outletId);
+  }, [load, outletId]);
 
   useEffect(() => {
     let active = true;
@@ -253,249 +173,379 @@ export default function CorrectionReviewPage() {
   }, []);
 
   useEffect(() => {
-    let active = true;
-    loadReviewRequests(outletId)
-      .then((loaded) => {
-        if (!active) return;
-        setRequests(loaded.corrections.items);
-        setDeviceRequests(loaded.devices.items);
-        setManualRequests(loaded.manualShifts.items);
-        setManualError(loaded.manualShifts.error ?? "");
-        setCorrectionError(loaded.corrections.error ?? "");
-        setDeviceError(loaded.devices.error ?? "");
-      })
-      .catch((error: unknown) => {
-        if (active)
-          setMessage(
-            error instanceof Error
-              ? error.message
-              : "Could not load correction requests.",
-          );
-      })
-      .finally(() => {
-        if (active) setIsLoading(false);
-      });
+    const id = window.setInterval(() => setNow(Date.now()), 60_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  // Decisions in the undo window are still on the server queue. Send them on unmount.
+  useEffect(() => {
+    const scheduled = commits.current;
     return () => {
-      active = false;
+      for (const entry of Array.from(scheduled.values())) {
+        window.clearTimeout(entry.timer);
+        void entry.run();
+      }
     };
-  }, [outletId]);
+  }, []);
 
-  const { confirm, confirmDialog } = useConfirmDialog();
+  useEffect(() => {
+    if (pending.length === 0) return;
+    const warn = (event: BeforeUnloadEvent) => event.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [pending.length]);
 
-  async function decide(event: FormEvent<HTMLFormElement>, requestId: string) {
+  useEffect(() => {
+    if (notice?.tone !== "success") return;
+    const id = window.setTimeout(
+      () => setNotice((current) => (current === notice ? null : current)),
+      SUCCESS_MS,
+    );
+    return () => window.clearTimeout(id);
+  }, [notice]);
+
+  const pendingKeys = new Set(pending.map((item) => item.key));
+  const isVisible = (kind: ReviewKind, id: string) =>
+    !pendingKeys.has(pendingKey(kind, id));
+
+  const correctionQueue: ReviewList<CorrectionReviewRequest> = {
+    items:
+      lists.correction.items === null
+        ? null
+        : sortOldestFirst(
+            lists.correction.items.filter(
+              (request) =>
+                request.status === "reconciliation" &&
+                isVisible("correction", request.id),
+            ),
+          ),
+    error: lists.correction.error,
+  };
+  const pastShiftQueue: ReviewList<PastShiftReviewRequest> = {
+    items:
+      lists.pastShift.items === null
+        ? null
+        : sortOldestFirst(
+            lists.pastShift.items.filter((request) =>
+              isVisible("pastShift", request.id),
+            ),
+          ),
+    error: lists.pastShift.error,
+  };
+  const deviceQueue: ReviewList<DeviceReviewRequest> = {
+    items:
+      lists.device.items === null
+        ? null
+        : sortOldestFirst(
+            lists.device.items.filter((request) =>
+              isVisible("device", request.id),
+            ),
+          ),
+    error: lists.device.error,
+  };
+
+  const selectedCorrection =
+    selection?.kind === "correction"
+      ? (correctionQueue.items?.find((item) => item.id === selection.id) ??
+        null)
+      : null;
+  const selectedPastShift =
+    selection?.kind === "pastShift"
+      ? (pastShiftQueue.items?.find((item) => item.id === selection.id) ?? null)
+      : null;
+  const selectedDevice =
+    selection?.kind === "device"
+      ? (deviceQueue.items?.find((item) => item.id === selection.id) ?? null)
+      : null;
+  const dialogOpen =
+    selectedCorrection !== null ||
+    selectedPastShift !== null ||
+    selectedDevice !== null;
+
+  const queueCounts: Record<ReviewKind, number | null> = {
+    correction: correctionQueue.items?.length ?? null,
+    pastShift: pastShiftQueue.items?.length ?? null,
+    device: deviceQueue.items?.length ?? null,
+  };
+  const allLoaded = TABS.every(
+    ({ kind }) => queueCounts[kind] !== null && !lists[kind].error,
+  );
+  const openTotal = TABS.reduce(
+    (sum, { kind }) => sum + (queueCounts[kind] ?? 0),
+    0,
+  );
+  const allCaughtUp = allLoaded && openTotal === 0 && pending.length === 0;
+
+  const dialogNotice = notice ? <ReviewNotice notice={notice} /> : null;
+
+  function handleOutletChange(nextOutletId: string) {
+    setOutletId(nextOutletId);
+    setLists(EMPTY_LISTS);
+    setSelection(null);
+    setAdjusting(false);
+    setNotice(null);
+    setIsLoading(true);
+  }
+
+  function openItem(kind: ReviewKind, id: string) {
+    setNotice(null);
+    setAdjusting(false);
+    setSelection({ kind, id });
+  }
+
+  function closeDialog() {
+    setSelection(null);
+    setAdjusting(false);
+    setNotice(null);
+  }
+
+  function removeRequest(kind: ReviewKind, id: string) {
+    setLists((current) => {
+      switch (kind) {
+        case "correction":
+          return {
+            ...current,
+            correction: withoutItem(current.correction, id),
+          };
+        case "pastShift":
+          return { ...current, pastShift: withoutItem(current.pastShift, id) };
+        case "device":
+          return { ...current, device: withoutItem(current.device, id) };
+      }
+    });
+    setSelection(null);
+    window.dispatchEvent(new Event(REVIEW_REQUESTS_CHANGED_EVENT));
+  }
+
+  async function sendPatch(
+    action: string,
+    url: string,
+    payload: Record<string, unknown>,
+    fallbackError: string,
+  ): Promise<boolean> {
+    setBusy(action);
+    setNotice(null);
+    try {
+      const response = await fetch(url, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      if (!response.ok) throw new Error(body.error ?? fallbackError);
+      return true;
+    } catch (error) {
+      setNotice({
+        tone: "error",
+        text: error instanceof Error ? error.message : fallbackError,
+      });
+      return false;
+    } finally {
+      setBusy("");
+    }
+  }
+
+  /**
+   * Hides the request and sends the decision after UNDO_MS unless undone.
+   * The request leaves the list only after the server accepts it.
+   */
+  function scheduleDecision(
+    kind: ReviewKind,
+    id: string,
+    label: string,
+    send: () => Promise<boolean>,
+    successText: string,
+  ) {
+    const key = pendingKey(kind, id);
+    if (commits.current.has(key)) return;
+
+    const run = async () => {
+      commits.current.delete(key);
+      setPending((current) => current.filter((item) => item.key !== key));
+      if (await send()) {
+        removeRequest(kind, id);
+        setNotice({ tone: "success", text: successText });
+      }
+    };
+    const timer = window.setTimeout(() => void run(), UNDO_MS);
+    commits.current.set(key, { timer, run });
+    setPending((current) => [...current, { key, label }]);
+    setSelection(null);
+    setAdjusting(false);
+    setNotice(null);
+  }
+
+  function undoDecision(key: string) {
+    const entry = commits.current.get(key);
+    if (!entry) return;
+    window.clearTimeout(entry.timer);
+    commits.current.delete(key);
+    setPending((current) => current.filter((item) => item.key !== key));
+  }
+
+  async function decideCorrection(
+    event: FormEvent<HTMLFormElement>,
+    request: CorrectionReviewRequest,
+  ) {
     event.preventDefault();
-    if (busyId) return;
-    const formData = new FormData(event.currentTarget);
-    const reason = String(formData.get("reason") ?? "");
-    const submitter = (event.nativeEvent as SubmitEvent).submitter;
-    const decision =
-      submitter instanceof HTMLButtonElement ? submitter.value : "";
+    if (busy) return;
+    const decision = submittedValue(event);
     if (!isCorrectionDecision(decision)) return;
-    if ((decision === "reject" || decision === "save_note") && !reason.trim()) {
-      setMessage("Add a reviewer note to reject or save a note.");
+
+    const form = event.currentTarget;
+    const note = noteFieldOf(form);
+    const reason = String(new FormData(form).get("reason") ?? "").trim();
+    if ((decision === "reject" || decision === "save_note") && !reason) {
+      note?.setAttribute("aria-invalid", "true");
+      note?.focus();
+      setNotice({
+        tone: "error",
+        text: "Add a reviewer note to reject or save a note.",
+      });
       return;
     }
+    note?.removeAttribute("aria-invalid");
 
-    const target = requestList.find((request) => request.id === requestId);
-    const timezone = target?.timezone ?? "UTC";
-    const isBreak = target ? isBreakCorrectionEvent(target.event) : false;
+    const formData = new FormData(form);
     let requestedAt: string | undefined;
     let breakStartedAt: string | undefined;
     let breakEndedAt: string | null | undefined;
     if (decision === "adjust") {
       try {
-        if (isBreak) {
-          const localStart = String(formData.get("breakStartedAt") ?? "");
+        if (isBreakCorrectionEvent(request.event)) {
           const localEnd = String(formData.get("breakEndedAt") ?? "");
-          breakStartedAt = outletDateTimeToISOString(localStart, timezone);
+          breakStartedAt = outletDateTimeToISOString(
+            String(formData.get("breakStartedAt") ?? ""),
+            request.timezone,
+          );
           breakEndedAt = localEnd
-            ? outletDateTimeToISOString(localEnd, timezone)
+            ? outletDateTimeToISOString(localEnd, request.timezone)
             : null;
         } else {
-          const localTime = String(formData.get("requestedAt") ?? "");
-          requestedAt = outletDateTimeToISOString(localTime, timezone);
+          requestedAt = outletDateTimeToISOString(
+            String(formData.get("requestedAt") ?? ""),
+            request.timezone,
+          );
         }
       } catch (error) {
-        setMessage(
-          error instanceof Error ? error.message : "Enter a valid punch time.",
-        );
+        setNotice({
+          tone: "error",
+          text: error instanceof Error ? error.message : "Enter a valid time.",
+        });
         return;
       }
     }
 
-    if (
-      decision !== "save_note" &&
-      !(await confirm(DECISION_CONFIRM[decision]))
-    )
-      return;
-
-    const busyKey = `correction:${requestId}`;
-    setBusyId(busyKey);
-    setMessage("");
-    try {
-      const response = await fetch("/api/corrections", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          requestId,
-          outletId: requestList.find((request) => request.id === requestId)
-            ?.outletId,
+    const send = () =>
+      sendPatch(
+        decision,
+        "/api/corrections",
+        {
+          requestId: request.id,
+          outletId: request.outletId,
           decision,
           reason,
           requestedAt,
           breakStartedAt,
           breakEndedAt,
-        }),
-      });
-      const body = await response.json();
-      if (!response.ok)
-        throw new Error(body.error ?? "Could not record this decision.");
-      setMessage(DECISION_SUCCESS[decision]);
-      setSelectedCorrectionId("");
-      if (decision !== "save_note") {
-        window.dispatchEvent(new Event(REVIEW_REQUESTS_CHANGED_EVENT));
-        setRequests(
-          (current) =>
-            current?.filter((request) => request.id !== requestId) ?? null,
-        );
-      }
-    } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Could not record this decision.",
+        },
+        "Could not record this decision.",
       );
-    } finally {
-      setBusyId("");
-    }
-  }
 
-  async function decideDevice(requestId: string, action: "approve" | "reject") {
-    if (busyId) return;
-    if (
-      !(await confirm({
-        title:
-          action === "approve" ? "Approve this device?" : "Reject this device?",
-        description:
-          action === "approve"
-            ? "Any previous device for this staff member will be revoked."
-            : "The staff member will need to request enrollment again.",
-        confirmLabel: action === "approve" ? "Approve device" : "Reject device",
-        tone: action === "reject" ? "danger" : "default",
-      }))
-    )
+    if (decision === "save_note") {
+      if (!(await send())) return;
+      setSelection(null);
+      setNotice({ tone: "success", text: CORRECTION_SUCCESS.save_note });
       return;
-    const busyKey = `device:${requestId}`;
-    setBusyId(busyKey);
-    setMessage("");
-    try {
-      const response = await fetch(`/api/staff-devices/${requestId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
-      });
-      const body = await response.json();
-      if (!response.ok)
-        throw new Error(body.error ?? "Could not update trusted device.");
-      setDeviceRequests(
-        (current) =>
-          current?.filter((request) => request.id !== requestId) ?? null,
-      );
-      setSelectedDeviceId("");
-      window.dispatchEvent(new Event(REVIEW_REQUESTS_CHANGED_EVENT));
-      setMessage(
-        action === "approve"
-          ? "Device approved. Any previous device for this staff member is now revoked."
-          : "Device request rejected.",
-      );
-    } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Could not update trusted device.",
-      );
-    } finally {
-      setBusyId("");
     }
+
+    const label: Record<Exclude<CorrectionDecision, "save_note">, string> = {
+      confirm: `Confirming ${request.requesterName}'s correction.`,
+      adjust: `Saving the adjusted time for ${request.requesterName}.`,
+      reject: `Rejecting ${request.requesterName}'s correction.`,
+    };
+    scheduleDecision(
+      "correction",
+      request.id,
+      label[decision],
+      send,
+      CORRECTION_SUCCESS[decision],
+    );
   }
 
-  async function decideManual(
+  function decidePastShift(
     event: FormEvent<HTMLFormElement>,
-    requestId: string,
+    request: PastShiftReviewRequest,
   ) {
     event.preventDefault();
-    if (busyId) return;
-    const target = manualRequestList.find(
-      (request) => request.id === requestId,
-    );
-    if (!target) return;
-    const formData = new FormData(event.currentTarget);
-    const reason = String(formData.get("reason") ?? "").trim();
-    const submitter = (event.nativeEvent as SubmitEvent).submitter;
-    const decision =
-      submitter instanceof HTMLButtonElement ? submitter.value : "";
+    if (busy) return;
+    const decision = submittedValue(event);
     if (decision !== "approve" && decision !== "reject") return;
+
+    const form = event.currentTarget;
+    const note = noteFieldOf(form);
+    const reason = String(new FormData(form).get("reason") ?? "").trim();
     if (decision === "reject" && !reason) {
-      setMessage("Add a reviewer note to reject a past shift.");
-      return;
-    }
-
-    if (
-      !(await confirm(
-        decision === "approve"
-          ? {
-              title: "Approve this past shift?",
-              description:
-                "This creates a real shift in the staff member's history.",
-              confirmLabel: "Approve shift",
-            }
-          : {
-              title: "Reject this past shift?",
-              description:
-                "The staff member will see this request as rejected.",
-              confirmLabel: "Reject shift",
-              tone: "danger",
-            },
-      ))
-    )
-      return;
-
-    setBusyId(`manual:${requestId}`);
-    setMessage("");
-    try {
-      const response = await fetch("/api/manual-shifts", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          requestId,
-          outletId: target.outletId,
-          decision,
-          reason,
-        }),
+      note?.setAttribute("aria-invalid", "true");
+      note?.focus();
+      setNotice({
+        tone: "error",
+        text: "Add a reviewer note to reject a past shift.",
       });
-      const body = await response.json();
-      if (!response.ok)
-        throw new Error(body.error ?? "Could not record this decision.");
-      setManualRequests(
-        (current) =>
-          current?.filter((request) => request.id !== requestId) ?? null,
-      );
-      setSelectedManualId("");
-      window.dispatchEvent(new Event(REVIEW_REQUESTS_CHANGED_EVENT));
-      setMessage(
-        decision === "approve"
-          ? "Past shift approved and added to history."
-          : "Past shift rejected.",
-      );
-    } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "Could not record this decision.",
-      );
-    } finally {
-      setBusyId("");
+      return;
     }
+    note?.removeAttribute("aria-invalid");
+
+    const approved = decision === "approve";
+    scheduleDecision(
+      "pastShift",
+      request.id,
+      approved
+        ? `Approving ${request.requesterName}'s past shift.`
+        : `Rejecting ${request.requesterName}'s past shift.`,
+      () =>
+        sendPatch(
+          decision,
+          "/api/manual-shifts",
+          {
+            requestId: request.id,
+            outletId: request.outletId,
+            decision,
+            reason,
+          },
+          "Could not record this decision.",
+        ),
+      approved
+        ? "Past shift approved and added to history."
+        : "Past shift rejected.",
+    );
+  }
+
+  function decideDevice(
+    request: DeviceReviewRequest,
+    action: "approve" | "reject",
+  ) {
+    if (busy) return;
+    const approved = action === "approve";
+    scheduleDecision(
+      "device",
+      request.id,
+      approved
+        ? `Approving ${request.employeeName}'s device.`
+        : `Rejecting ${request.employeeName}'s device.`,
+      () =>
+        sendPatch(
+          action,
+          `/api/staff-devices/${request.id}`,
+          { action },
+          "Could not update trusted device.",
+        ),
+      approved
+        ? "Device approved. Any previous device for this staff member is now revoked."
+        : "Device request rejected.",
+    );
   }
 
   return (
@@ -505,14 +555,18 @@ export default function CorrectionReviewPage() {
           <p className="eyebrow">BACKOFFICE REVIEW</p>
           <h1>Review requests</h1>
           <p className="subheading">
-            Review clock corrections and staff device enrollments.
+            Review clock corrections, past shift requests, and staff device
+            enrollments.
           </p>
         </div>
+      </div>
+
+      <div className="review-toolbar">
         <label className="team-outlet-filter">
           <span>Outlet</span>
           <select
-            value={selectedOutletId}
-            onChange={(event) => setSelectedOutletId(event.target.value)}
+            value={outletId}
+            onChange={(event) => handleOutletChange(event.target.value)}
           >
             <option value="">All managed outlets</option>
             {outlets.map((outlet) => (
@@ -522,258 +576,178 @@ export default function CorrectionReviewPage() {
             ))}
           </select>
         </label>
-        <button
-          className="btn btn-secondary btn-icon"
-          type="button"
-          aria-label="Refresh requests"
-          title="Refresh requests"
-          disabled={isLoading}
-          onClick={() => void refresh()}
-        >
-          <RefreshIcon />
-        </button>
+        <div className="review-toolbar-actions">
+          {updatedAt !== null && (
+            <span className="review-updated">
+              Updated {formatClock(updatedAt)}
+            </span>
+          )}
+          <button
+            className="btn btn-secondary btn-icon"
+            type="button"
+            aria-label="Refresh requests"
+            title="Refresh requests"
+            disabled={isLoading}
+            onClick={() => {
+              setIsLoading(true);
+              void load(outletId);
+            }}
+          >
+            <RefreshIcon />
+          </button>
+        </div>
       </div>
 
-      {!selectedCorrection && !selectedDevice && !selectedManual && messageNode}
-      <section
-        className="correction-review-list"
-        aria-label="Applied punches awaiting reconciliation"
-      >
-        <header className="correction-review-section-heading">
-          <h2>Needs reconciliation</h2>
-          <span>{requests === null ? "—" : reconciliationRequests.length}</span>
-        </header>
-        {correctionError && (
-          <p className="team-message" role="alert">
-            {correctionError}
-            {requests !== null && " Showing previously loaded requests."}
-          </p>
-        )}
-        {isLoading && requests === null && (
-          <p className="correction-review-empty">Loading clock corrections…</p>
-        )}
-        {reconciliationRequests.length > 0 && (
-          <ul className="correction-review-rows">
-            {reconciliationRequests.map((request) => (
-              <li key={request.id}>
-                <button
-                  className="correction-review-row"
-                  type="button"
-                  onClick={() => {
-                    setMessage("");
-                    setSelectedCorrectionId(request.id);
-                  }}
-                >
-                  <span className="correction-review-row-main">
-                    <span className="eyebrow">
-                      {request.outletName} · {request.event.replace("_", " ")}
-                    </span>
-                    <strong>{request.requesterName}</strong>
-                    <small>
-                      {formatRequestedTime(
-                        request.requestedAt,
-                        request.timezone,
-                      )}
-                    </small>
-                  </span>
-                  <span className="correction-review-row-action">Review</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {requests !== null &&
-          !correctionError &&
-          reconciliationRequests.length === 0 && (
-            <p className="correction-review-empty">
-              No clock corrections need review.
-            </p>
-          )}
-      </section>
-      <section
-        className="correction-review-list"
-        aria-label="Past shift requests"
-      >
-        <header className="correction-review-section-heading">
-          <h2>Past shift requests</h2>
-          <span>
-            {manualRequests === null ? "—" : manualRequestList.length}
-          </span>
-        </header>
-        {manualError && (
-          <p className="team-message" role="alert">
-            {manualError}
-          </p>
-        )}
-        {manualRequests === null && !manualError && (
-          <p className="correction-review-empty">
-            Loading past shift requests…
-          </p>
-        )}
-        {manualRequestList.length > 0 && (
-          <ul className="correction-review-rows">
-            {manualRequestList.map((request) => (
-              <li key={request.id}>
-                <button
-                  className="correction-review-row"
-                  type="button"
-                  onClick={() => {
-                    setMessage("");
-                    setSelectedManualId(request.id);
-                  }}
-                >
-                  <span className="correction-review-row-main">
-                    <span className="eyebrow">
-                      {request.outletName} · PAST SHIFT
-                    </span>
-                    <strong>{request.requesterName}</strong>
-                    <small>
-                      {formatRequestedTime(request.clockInAt, request.timezone)}{" "}
-                      –{" "}
-                      {formatRequestedTime(
-                        request.clockOutAt,
-                        request.timezone,
-                      )}
-                    </small>
-                  </span>
-                  <span className="correction-review-row-action">Review</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {manualRequests !== null &&
-          !manualError &&
-          manualRequestList.length === 0 && (
-            <p className="correction-review-empty">
-              No past shift requests need review.
-            </p>
-          )}
-      </section>
-      <section
-        className="correction-review-list"
-        aria-label="Device enrollments"
-      >
-        <header className="correction-review-section-heading">
-          <h2>Device enrollments</h2>
-          <span>
-            {deviceRequests === null ? "—" : deviceRequestList.length}
-          </span>
-        </header>
-        {deviceError && (
-          <p className="team-message" role="alert">
-            {deviceError}
-            {deviceRequests !== null && " Showing previously loaded requests."}
-          </p>
-        )}
-        {isLoading && deviceRequests === null && (
-          <p className="correction-review-empty">Loading device enrollments…</p>
-        )}
-        {deviceRequestList.length > 0 && (
-          <ul className="correction-review-rows">
-            {deviceRequestList.map((request) => (
-              <li key={request.id}>
-                <button
-                  className="correction-review-row"
-                  type="button"
-                  onClick={() => {
-                    setMessage("");
-                    setSelectedDeviceId(request.id);
-                  }}
-                >
-                  <span className="correction-review-row-main">
-                    <span className="eyebrow">
-                      TRUSTED DEVICE · {request.outletNames.join(", ")}
-                    </span>
-                    <strong>{request.employeeName}</strong>
-                    <small>
-                      Requested {formatDeviceRequestTime(request.createdAt)}
-                    </small>
-                  </span>
-                  <span className="correction-review-row-action">Review</span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {deviceRequests !== null &&
-          !deviceError &&
-          deviceRequestList.length === 0 && (
-            <p className="correction-review-empty">
-              No pending device enrollments.
-            </p>
-          )}
-      </section>
+      {pending.map((item) => (
+        <div key={item.key} className="correction-review-undo" role="status">
+          <span>{item.label}</span>
+          <button
+            className="btn btn-ghost btn-sm"
+            type="button"
+            onClick={() => undoDecision(item.key)}
+          >
+            Undo
+          </button>
+        </div>
+      ))}
 
-      <ModalDialog
-        open={Boolean(selectedCorrection)}
-        onOpenChange={(open) => {
-          if (!open) setSelectedCorrectionId("");
-        }}
-        labelledBy="correction-review-title"
+      {!dialogOpen && notice && <ReviewNotice notice={notice} />}
+
+      {allCaughtUp ? (
+        <p className="correction-review-caught-up" role="status">
+          <strong>All caught up</strong>
+          No clock corrections, past shifts, or device enrollments need review.
+        </p>
+      ) : (
+        <>
+          <div className="correction-review-tabs">
+            {TABS.map(({ kind, label }) => (
+              <button
+                key={kind}
+                className="correction-review-tab"
+                type="button"
+                aria-pressed={tab === kind}
+                onClick={() => setTab(kind)}
+              >
+                <span>{label}</span>
+                <span className="correction-review-tab-count">
+                  {queueCounts[kind] ?? "—"}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {tab === "correction" && (
+            <ReviewQueue
+              label="Clock corrections"
+              queue={correctionQueue}
+              now={now}
+              loadingText="Loading clock corrections…"
+              emptyText="No clock corrections need review."
+              onSelect={(id) => openItem("correction", id)}
+              describe={(request) => ({
+                eyebrow: `${request.outletName} · ${CORRECTION_EVENT_LABELS[request.event]}`,
+                title: request.requesterName,
+                detail: formatReviewDateTime(
+                  request.requestedAt,
+                  request.timezone,
+                ),
+                createdAt: request.createdAt,
+              })}
+            />
+          )}
+
+          {tab === "pastShift" && (
+            <ReviewQueue
+              label="Past shifts"
+              queue={pastShiftQueue}
+              now={now}
+              loadingText="Loading past shift requests…"
+              emptyText="No past shift requests need review."
+              onSelect={(id) => openItem("pastShift", id)}
+              describe={(request) => ({
+                eyebrow: `${request.outletName} · Past shift`,
+                title: request.requesterName,
+                detail: `${formatReviewDateTime(request.clockInAt, request.timezone)} – ${formatReviewDateTime(request.clockOutAt, request.timezone)}`,
+                createdAt: request.createdAt,
+              })}
+            />
+          )}
+
+          {tab === "device" && (
+            <ReviewQueue
+              label="Device enrollments"
+              queue={deviceQueue}
+              now={now}
+              loadingText="Loading device enrollments…"
+              emptyText="No pending device enrollments."
+              onSelect={(id) => openItem("device", id)}
+              describe={(request) => ({
+                eyebrow: `Trusted device · ${request.outletNames.join(", ") || "No outlet"}`,
+                title: request.employeeName,
+                detail: `Requested ${formatReviewDateTime(request.createdAt)}`,
+                createdAt: request.createdAt,
+              })}
+            />
+          )}
+        </>
+      )}
+
+      <ReviewDialog
+        titleId="correction-review-title"
+        onClose={closeDialog}
+        notice={dialogNotice}
+        header={
+          selectedCorrection
+            ? {
+                eyebrow: `${selectedCorrection.outletName} · ${CORRECTION_EVENT_LABELS[selectedCorrection.event]}`,
+                title: selectedCorrection.requesterName,
+                subtitle: selectedCorrection.requesterEmail,
+              }
+            : null
+        }
+        summary={
+          selectedCorrection && (
+            <>
+              <strong className="correction-requested-time">
+                {formatReviewDateTime(
+                  selectedCorrection.requestedAt,
+                  selectedCorrection.timezone,
+                )}
+              </strong>
+              <p className="correction-request-reason">
+                {selectedCorrection.reason}
+              </p>
+              <small>
+                {selectedCorrection.appliedAt
+                  ? `Took effect ${formatReviewDateTime(selectedCorrection.appliedAt, selectedCorrection.timezone)}`
+                  : "Takes effect immediately"}
+              </small>
+            </>
+          )
+        }
       >
         {selectedCorrection && (
-          <div className="dialog-panel">
-            <header className="dialog-header">
-              <div>
-                <p className="eyebrow">
-                  {selectedCorrection.outletName} ·{" "}
-                  {selectedCorrection.event.replace("_", " ")}
-                </p>
-                <h2 id="correction-review-title">
-                  {selectedCorrection.requesterName}
-                </h2>
-                <p className="correction-review-email">
-                  {selectedCorrection.requesterEmail}
-                </p>
-              </div>
-              <button
-                className="btn btn-ghost btn-icon btn-sm"
-                type="button"
-                aria-label="Close dialog"
-                title="Close dialog"
-                onClick={() => setSelectedCorrectionId("")}
-              >
-                <CloseIcon />
-              </button>
-            </header>
-            <strong className="correction-requested-time">
-              {formatRequestedTime(
-                selectedCorrection.requestedAt,
-                selectedCorrection.timezone,
-              )}
-            </strong>
-            <p className="correction-request-reason">
-              {selectedCorrection.reason}
+          <DecisionForm
+            onSubmit={(event) =>
+              void decideCorrection(event, selectedCorrection)
+            }
+          >
+            <label>
+              <span>Reviewer note</span>
+              <textarea
+                name="reason"
+                maxLength={500}
+                rows={2}
+                aria-describedby="correction-note-hint"
+                placeholder="Context for the record."
+              />
+            </label>
+            <p id="correction-note-hint" className="correction-field-hint">
+              Required to reject or save a note.
             </p>
-            <small>
-              Applied
-              {selectedCorrection.appliedAt
-                ? ` ${formatRequestedTime(selectedCorrection.appliedAt, selectedCorrection.timezone)}`
-                : " immediately"}
-            </small>
-            {messageNode}
-            <form
-              className="correction-decision-form"
-              onSubmit={(event) => void decide(event, selectedCorrection.id)}
-              onKeyDown={(event) => {
-                if (
-                  event.key === "Enter" &&
-                  event.target instanceof HTMLInputElement
-                )
-                  event.preventDefault();
-              }}
-            >
-              <label>
-                Reviewer note
-                <textarea
-                  name="reason"
-                  maxLength={500}
-                  rows={2}
-                  placeholder="Add a reconciliation note."
-                />
-              </label>
-              {isBreakCorrectionEvent(selectedCorrection.event) ? (
+            {adjusting &&
+              (isBreakCorrectionEvent(selectedCorrection.event) ? (
                 selectedCorrection.event !== "break_delete" && (
                   <>
                     <label>
@@ -818,203 +792,179 @@ export default function CorrectionReviewPage() {
                     )}
                   />
                 </label>
-              )}
-              <div className="dialog-actions correction-decision-actions">
-                <button
-                  className="btn btn-danger"
-                  type="submit"
-                  name="decision"
-                  value="reject"
-                  formNoValidate
-                  disabled={Boolean(busyId)}
-                >
-                  Reject
-                </button>
-                <button
-                  className="btn btn-ghost"
-                  type="submit"
-                  name="decision"
-                  value="save_note"
-                  formNoValidate
-                  disabled={Boolean(busyId)}
-                >
-                  Save note
-                </button>
-                {selectedCorrection.event !== "break_delete" && (
+              ))}
+            <div className="dialog-actions correction-decision-actions">
+              {adjusting ? (
+                <>
                   <button
-                    className="btn btn-secondary"
-                    type="submit"
-                    name="decision"
-                    value="adjust"
-                    disabled={Boolean(busyId)}
+                    className="btn btn-ghost"
+                    type="button"
+                    onClick={() => setAdjusting(false)}
                   >
-                    {busyId === `correction:${selectedCorrection.id}`
-                      ? "Saving…"
-                      : "Adjust"}
+                    Cancel adjust
                   </button>
-                )}
-                <button
-                  className="btn btn-primary"
-                  type="submit"
-                  name="decision"
-                  value="confirm"
-                  disabled={Boolean(busyId)}
-                >
-                  {busyId === `correction:${selectedCorrection.id}`
-                    ? "Saving…"
-                    : "Confirm"}
-                </button>
-              </div>
-            </form>
-          </div>
-        )}
-      </ModalDialog>
-
-      <ModalDialog
-        open={Boolean(selectedManual)}
-        onOpenChange={(open) => {
-          if (!open) setSelectedManualId("");
-        }}
-        labelledBy="manual-review-title"
-      >
-        {selectedManual && (
-          <div className="dialog-panel">
-            <header className="dialog-header">
-              <div>
-                <p className="eyebrow">
-                  {selectedManual.outletName} · PAST SHIFT
-                </p>
-                <h2 id="manual-review-title">{selectedManual.requesterName}</h2>
-                <p className="correction-review-email">
-                  {selectedManual.requesterUsername}
-                </p>
-              </div>
-              <button
-                className="btn btn-ghost btn-icon btn-sm"
-                type="button"
-                aria-label="Close dialog"
-                title="Close dialog"
-                onClick={() => setSelectedManualId("")}
-              >
-                <CloseIcon />
-              </button>
-            </header>
-            <strong className="correction-requested-time">
-              {formatRequestedTime(
-                selectedManual.clockInAt,
-                selectedManual.timezone,
-              )}{" "}
-              –{" "}
-              {formatRequestedTime(
-                selectedManual.clockOutAt,
-                selectedManual.timezone,
+                  <DecisionButton variant="approve" action="adjust" busy={busy}>
+                    Save adjustment
+                  </DecisionButton>
+                </>
+              ) : (
+                <>
+                  <DecisionButton
+                    variant="reject"
+                    action="reject"
+                    busy={busy}
+                    formNoValidate
+                  >
+                    Reject
+                  </DecisionButton>
+                  <DecisionButton
+                    variant="note"
+                    action="save_note"
+                    busy={busy}
+                    formNoValidate
+                  >
+                    Save note
+                  </DecisionButton>
+                  {selectedCorrection.event !== "break_delete" && (
+                    <button
+                      className="btn btn-secondary"
+                      type="button"
+                      disabled={busy !== ""}
+                      onClick={() => setAdjusting(true)}
+                    >
+                      Adjust time
+                    </button>
+                  )}
+                  <DecisionButton
+                    variant="approve"
+                    action="confirm"
+                    busy={busy}
+                  >
+                    Confirm
+                  </DecisionButton>
+                </>
               )}
-            </strong>
-            <p className="correction-request-reason">{selectedManual.reason}</p>
-            {messageNode}
-            <form
-              className="correction-decision-form"
-              onSubmit={(event) => void decideManual(event, selectedManual.id)}
-            >
-              <label>
-                Reviewer note
-                <textarea
-                  name="reason"
-                  maxLength={500}
-                  rows={2}
-                  placeholder="Required to reject. Optional when approving."
-                />
-              </label>
-              <div className="dialog-actions correction-decision-actions">
-                <button
-                  className="btn btn-danger"
-                  type="submit"
-                  name="decision"
-                  value="reject"
-                  formNoValidate
-                  disabled={Boolean(busyId)}
-                >
-                  Reject
-                </button>
-                <button
-                  className="btn btn-primary"
-                  type="submit"
-                  name="decision"
-                  value="approve"
-                  disabled={Boolean(busyId)}
-                >
-                  {busyId === `manual:${selectedManual.id}`
-                    ? "Saving…"
-                    : "Approve"}
-                </button>
-              </div>
-            </form>
-          </div>
+            </div>
+          </DecisionForm>
         )}
-      </ModalDialog>
-      <ModalDialog
-        open={Boolean(selectedDevice)}
-        onOpenChange={(open) => {
-          if (!open) setSelectedDeviceId("");
-        }}
-        labelledBy="device-review-title"
+      </ReviewDialog>
+
+      <ReviewDialog
+        titleId="past-shift-review-title"
+        onClose={closeDialog}
+        notice={dialogNotice}
+        header={
+          selectedPastShift
+            ? {
+                eyebrow: `${selectedPastShift.outletName} · Past shift`,
+                title: selectedPastShift.requesterName,
+                subtitle: selectedPastShift.requesterUsername,
+              }
+            : null
+        }
+        summary={
+          selectedPastShift && (
+            <>
+              <strong className="correction-requested-time">
+                {formatReviewDateTime(
+                  selectedPastShift.clockInAt,
+                  selectedPastShift.timezone,
+                )}{" "}
+                –{" "}
+                {formatReviewDateTime(
+                  selectedPastShift.clockOutAt,
+                  selectedPastShift.timezone,
+                )}
+              </strong>
+              <p className="correction-request-reason">
+                {selectedPastShift.reason}
+              </p>
+            </>
+          )
+        }
+      >
+        {selectedPastShift && (
+          <DecisionForm
+            onSubmit={(event) => decidePastShift(event, selectedPastShift)}
+          >
+            <label>
+              <span>Reviewer note</span>
+              <textarea
+                name="reason"
+                maxLength={500}
+                rows={2}
+                aria-describedby="past-shift-note-hint"
+                placeholder="Explain the decision."
+              />
+            </label>
+            <p id="past-shift-note-hint" className="correction-field-hint">
+              Required to reject. Optional when approving.
+            </p>
+            <div className="dialog-actions correction-decision-actions">
+              <DecisionButton
+                variant="reject"
+                action="reject"
+                busy={busy}
+                formNoValidate
+              >
+                Reject
+              </DecisionButton>
+              <DecisionButton variant="approve" action="approve" busy={busy}>
+                Approve
+              </DecisionButton>
+            </div>
+          </DecisionForm>
+        )}
+      </ReviewDialog>
+
+      <ReviewDialog
+        titleId="device-review-title"
+        onClose={closeDialog}
+        notice={dialogNotice}
+        header={
+          selectedDevice
+            ? {
+                eyebrow: `Trusted device · ${selectedDevice.outletNames.join(", ") || "No outlet"}`,
+                title: selectedDevice.employeeName,
+                subtitle: selectedDevice.employeeEmail,
+              }
+            : null
+        }
+        summary={
+          selectedDevice && (
+            <>
+              <strong className="correction-requested-time">
+                Requested {formatReviewDateTime(selectedDevice.createdAt)}
+              </strong>
+              <p className="dialog-description">
+                Approving this device revokes any device this staff member
+                already uses.
+              </p>
+            </>
+          )
+        }
       >
         {selectedDevice && (
-          <div className="dialog-panel">
-            <header className="dialog-header">
-              <div>
-                <p className="eyebrow">
-                  TRUSTED DEVICE · {selectedDevice.outletNames.join(", ")}
-                </p>
-                <h2 id="device-review-title">{selectedDevice.employeeName}</h2>
-                <p className="correction-review-email">
-                  {selectedDevice.employeeEmail}
-                </p>
-              </div>
-              <button
-                className="btn btn-ghost btn-icon btn-sm"
-                type="button"
-                aria-label="Close dialog"
-                title="Close dialog"
-                onClick={() => setSelectedDeviceId("")}
-              >
-                <CloseIcon />
-              </button>
-            </header>
-            <strong className="correction-requested-time">
-              Requested {formatDeviceRequestTime(selectedDevice.createdAt)}
-            </strong>
-            <p className="dialog-description">
-              Approving replaces any previous device for this staff member.
-              Rejecting requires them to request enrollment again.
-            </p>
-            {messageNode}
-            <div className="dialog-actions correction-decision-actions">
-              <button
-                className="btn btn-danger"
-                type="button"
-                disabled={Boolean(busyId)}
-                onClick={() => void decideDevice(selectedDevice.id, "reject")}
-              >
-                {busyId === `device:${selectedDevice.id}`
-                  ? "Saving…"
-                  : "Reject"}
-              </button>
-              <button
-                className="btn btn-primary"
-                type="button"
-                disabled={Boolean(busyId)}
-                onClick={() => void decideDevice(selectedDevice.id, "approve")}
-              >
-                {busyId === `device:${selectedDevice.id}`
-                  ? "Saving…"
-                  : "Approve"}
-              </button>
-            </div>
+          <div className="dialog-actions correction-decision-actions">
+            <button
+              className="btn btn-danger"
+              type="button"
+              disabled={busy !== ""}
+              onClick={() => decideDevice(selectedDevice, "reject")}
+            >
+              Reject
+            </button>
+            <button
+              className="btn btn-primary"
+              type="button"
+              disabled={busy !== ""}
+              onClick={() => decideDevice(selectedDevice, "approve")}
+            >
+              Approve
+            </button>
           </div>
         )}
-      </ModalDialog>
-      {confirmDialog}
+      </ReviewDialog>
     </div>
   );
 }

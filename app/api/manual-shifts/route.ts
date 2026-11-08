@@ -51,6 +51,18 @@ export async function GET(request: Request) {
           { status: 403 },
         );
       }
+      const requestedOutletId = new URL(request.url).searchParams.get(
+        "outletId",
+      );
+      if (requestedOutletId && !reviewOutletIds.includes(requestedOutletId)) {
+        return Response.json(
+          { error: "Outlet is not available.", code: "outlet_not_available" },
+          { status: 403 },
+        );
+      }
+      const visibleOutletIds = requestedOutletId
+        ? [requestedOutletId]
+        : reviewOutletIds;
       const rows = await db
         .select({
           id: manualShiftRequests.id,
@@ -74,7 +86,7 @@ export async function GET(request: Request) {
         .where(
           and(
             eq(manualShiftRequests.status, "pending"),
-            inArray(manualShiftRequests.outletId, reviewOutletIds),
+            inArray(manualShiftRequests.outletId, visibleOutletIds),
           ),
         )
         .orderBy(desc(manualShiftRequests.createdAt))
