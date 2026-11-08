@@ -1,11 +1,13 @@
 import {
   addCalendarDays,
+  dashboardRowFlags,
   getDashboardShiftMetrics,
   getDashboardShiftStatus,
   getScheduleWindow,
   getTimelineSpan,
   orderDashboardShifts,
   outletScheduleDate,
+  scheduledRowStatus,
 } from "@/lib/dashboard-data";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -113,6 +115,41 @@ test("dashboard shifts are ordered by status and then staff name", () => {
       "finished:Zara",
     ],
   );
+});
+
+test("absent and not clocked in rows lead, upcoming rows sit before finished", () => {
+  const shifts = orderDashboardShifts([
+    { status: "finished" as const, employeeName: "Dan" },
+    { status: "upcoming" as const, employeeName: "Eli" },
+    { status: "on_shift" as const, employeeName: "Cara" },
+    { status: "not_clocked_in" as const, employeeName: "Ben" },
+    { status: "absent" as const, employeeName: "Amy" },
+  ]);
+
+  assert.deepEqual(
+    shifts.map(({ status, employeeName }) => `${status}:${employeeName}`),
+    [
+      "absent:Amy",
+      "not_clocked_in:Ben",
+      "on_shift:Cara",
+      "upcoming:Eli",
+      "finished:Dan",
+    ],
+  );
+});
+
+test("scheduled shifts without a clock-in map to upcoming, not clocked in, or absent", () => {
+  assert.equal(scheduledRowStatus("upcoming"), "upcoming");
+  assert.equal(scheduledRowStatus("not_clocked_in"), "not_clocked_in");
+  assert.equal(scheduledRowStatus("absent"), "absent");
+});
+
+test("row flags are ordered by importance and drop the absent flag on absent rows", () => {
+  assert.deepEqual(
+    dashboardRowFlags(["overtime", "late", "missed_break"], "on_shift"),
+    ["late", "missed_break", "overtime"],
+  );
+  assert.deepEqual(dashboardRowFlags(["absent"], "absent"), []);
 });
 
 test("timeline span maps a shift to percentages of the 06:00-06:00 window", () => {

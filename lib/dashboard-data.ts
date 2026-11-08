@@ -1,19 +1,29 @@
 import { outletDateTimeToISOString } from "@/lib/outlet-time";
+import type { AttendanceFlag, AttendanceStatus } from "@/lib/schedule-rules";
 
 export type DashboardBreak = {
   startedAt: Date | string;
   endedAt: Date | string | null;
 };
 
-export type DashboardShiftStatus = "on_shift" | "on_break" | "finished";
+export type DashboardShiftStatus =
+  | "absent"
+  | "not_clocked_in"
+  | "on_shift"
+  | "on_break"
+  | "upcoming"
+  | "finished";
 
 export function orderDashboardShifts<
   T extends { status: DashboardShiftStatus; employeeName: string },
 >(shifts: T[]) {
   const statusOrder: Record<DashboardShiftStatus, number> = {
-    on_shift: 0,
-    on_break: 1,
-    finished: 2,
+    absent: 0,
+    not_clocked_in: 1,
+    on_shift: 2,
+    on_break: 3,
+    upcoming: 4,
+    finished: 5,
   };
   return [...shifts].sort(
     (first, second) =>
@@ -21,6 +31,36 @@ export function orderDashboardShifts<
       first.employeeName.localeCompare(second.employeeName, "en", {
         sensitivity: "base",
       }),
+  );
+}
+
+/** Maps a scheduled shift with no clock-in to its row status. */
+export function scheduledRowStatus(
+  status: AttendanceStatus,
+): DashboardShiftStatus {
+  if (status === "absent") return "absent";
+  if (status === "not_clocked_in") return "not_clocked_in";
+  return "upcoming";
+}
+
+const flagPriority: AttendanceFlag[] = [
+  "absent",
+  "late",
+  "left_early",
+  "missed_break",
+  "short_break",
+  "long_break",
+  "overtime",
+];
+
+/** Schedule flags for a row, most important first. The status pill already says absent. */
+export function dashboardRowFlags(
+  flags: AttendanceFlag[],
+  status: DashboardShiftStatus,
+) {
+  return flagPriority.filter(
+    (flag) =>
+      flags.includes(flag) && !(flag === "absent" && status === "absent"),
   );
 }
 

@@ -5268,6 +5268,66 @@ small,
   background: #f1f2f8;
   color: var(--muted);
 }
+.dashboard-status.is-absent {
+  background: #fef3f2;
+  color: #b42318;
+}
+.dashboard-status.is-not_clocked_in {
+  background: var(--break-soft);
+  color: var(--amber);
+}
+.dashboard-status.is-upcoming {
+  background: #eef2ff;
+  color: #4338ca;
+}
+.dashboard-roster-row.is-absent::before {
+  background: #dc2626;
+}
+.dashboard-roster-row.is-upcoming::before {
+  display: none;
+}
+.dashboard-roster-scheduled {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border: 1.5px dashed #a5adc8;
+  border-radius: 999px;
+  background: rgba(165, 173, 200, 0.14);
+}
+.dashboard-flags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.dashboard-flag {
+  border-radius: 999px;
+  background: #f1f2f8;
+  padding: 1px 7px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.dashboard-flag.is-alert {
+  background: #fef3f2;
+  color: #b42318;
+}
+.dashboard-flag.is-note {
+  background: var(--break-soft);
+  color: var(--amber);
+}
+.dashboard-roster-upcoming > summary {
+  cursor: pointer;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+  list-style: none;
+}
+.dashboard-roster-upcoming > summary::-webkit-details-marker {
+  display: none;
+}
 .dashboard-empty {
   margin: 0;
   color: var(--muted);

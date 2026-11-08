@@ -4,29 +4,42 @@ import { OutletAlertBell } from "@/app/(management)/manage/_components/outlet-al
 import { RefreshIcon } from "@/app/_components/icons";
 import { OutletAvatar } from "@/app/_components/outlet-avatar";
 import { OutletHero } from "@/app/_components/outlet-hero";
-import { getTimelineSpan } from "@/lib/dashboard-data";
+import {
+  dashboardRowFlags,
+  getTimelineSpan,
+  outletCalendarDate,
+  type DashboardShiftStatus,
+} from "@/lib/dashboard-data";
+import type { AttendanceFlag } from "@/lib/schedule-rules";
 import { animate, motion, MotionConfig, useReducedMotion } from "motion/react";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 
 type DashboardView = "today" | "yesterday" | "custom";
-type ShiftStatus = "on_shift" | "on_break" | "finished";
+
+type DashboardSchedule = {
+  startAt: string;
+  endAt: string;
+  flags: AttendanceFlag[];
+};
 
 type DashboardShift = {
   id: string;
-  source: "onsite" | "storehub";
+  source: "onsite" | "storehub" | "scheduled";
   userId: string | null;
   employeeName: string;
   profilePhotoUrl: string | null;
-  clockInAt: string;
+  clockInAt: string | null;
   clockOutAt: string | null;
-  clockInLocal: string;
+  clockInLocal: string | null;
   clockOutLocal: string | null;
-  status: ShiftStatus;
+  status: DashboardShiftStatus;
   workedMinutes: number | null;
   breakMinutes: number | null;
   breaks: { startedAt: string; endedAt: string | null }[];
+  schedule: DashboardSchedule | null;
+  unscheduled: boolean;
 };
 
 type DashboardOutlet = {
@@ -154,6 +167,207 @@ function breakRange(
   return `Break ${start} – ${end}`;
 }
 
+function scheduleTimeLabel(
+  schedule: DashboardSchedule,
+  outlet: DashboardOutlet,
+) {
+  const start = formatClock(schedule.startAt, outlet.timezone);
+  const end = formatClock(schedule.endAt, outlet.timezone);
+  const endsNextDay =
+    outletCalendarDate(schedule.endAt, outlet.timezone) !== outlet.date;
+  return `${start} – ${end}${endsNextDay ? " (+1 day)" : ""}`;
+}
+
+function RosterRow({
+  shift,
+  index,
+  outlet,
+  nowPercent,
+  showNow,
+}: {
+  shift: DashboardShift;
+  index: number;
+  outlet: DashboardOutlet;
+  nowPercent: number;
+  showNow: boolean;
+}) {
+  const isLive = shift.status === "on_shift" || shift.status === "on_break";
+  const span =
+    shift.clockInAt === null
+      ? null
+      : getTimelineSpan(
+          shift.clockInAt,
+          shift.clockOutAt,
+          outlet.windowStartAt,
+          outlet.windowEndAt,
+          outlet.evaluatedAt,
+        );
+  const scheduleSpan = shift.schedule
+    ? getTimelineSpan(
+        shift.schedule.startAt,
+        shift.schedule.endAt,
+        outlet.windowStartAt,
+        outlet.windowEndAt,
+        outlet.windowEndAt,
+      )
+    : null;
+  const anchor = span ?? scheduleSpan;
+  const scheduleLabel = shift.schedule
+    ? scheduleTimeLabel(shift.schedule, outlet)
+    : null;
+  const timeRange = shift.clockInLocal
+    ? `${formatShiftTime(shift.clockInLocal, outlet.date)} – ${
+        shift.clockOutLocal
+          ? formatShiftTime(shift.clockOutLocal, outlet.date)
+          : "In progress"
+      }`
+    : `Scheduled ${scheduleLabel}`;
+  const flags = shift.schedule
+    ? dashboardRowFlags(shift.schedule.flags, shift.status)
+    : [];
+  const chips = [
+    ...(shift.unscheduled
+      ? [{ key: "unscheduled", label: "Not scheduled", tone: "is-alert" }]
+      : []),
+    ...flags.map((flag) => ({
+      key: flag,
+      label: flagLabels[flag],
+      tone: alertFlags.has(flag) ? "is-alert" : "is-note",
+    })),
+  ];
+  const visibleChips = chips.slice(0, MAX_FLAG_CHIPS);
+  const hiddenChipCount = chips.length - visibleChips.length;
+
+  return (
+    <motion.div
+      layout
+      className={`dashboard-roster-row is-${shift.status}`}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, delay: index * 0.03 }}
+    >
+      <div className="dashboard-roster-person">
+        {shift.profilePhotoUrl ? (
+          <Image
+            className="dashboard-roster-avatar"
+            src={shift.profilePhotoUrl}
+            alt=""
+            width={64}
+            height={64}
+            unoptimized
+          />
+        ) : (
+          <span
+            className="dashboard-roster-avatar dashboard-roster-initials"
+            aria-hidden="true"
+          >
+            {initialsOf(shift.employeeName)}
+          </span>
+        )}
+        <div className="dashboard-roster-id">
+          <strong title={shift.employeeName}>{shift.employeeName}</strong>
+          <span className={`dashboard-status is-${shift.status}`}>
+            {isLive && (
+              <span className="dashboard-live-dot" aria-hidden="true" />
+            )}
+            {statusLabels[shift.status]}
+          </span>
+          {visibleChips.length > 0 && (
+            <span className="dashboard-flags">
+              {visibleChips.map((chip) => (
+                <span key={chip.key} className={`dashboard-flag ${chip.tone}`}>
+                  {chip.label}
+                </span>
+              ))}
+              {hiddenChipCount > 0 && (
+                <span className="dashboard-flag is-note">
+                  +{hiddenChipCount}
+                </span>
+              )}
+            </span>
+          )}
+          {shift.source === "storehub" && (
+            <span className="storehub-source-label">StoreHub · read-only</span>
+          )}
+        </div>
+      </div>
+      <div className="dashboard-roster-track-cell">
+        <div className="dashboard-roster-track">
+          {scheduleSpan && (
+            <span
+              className="dashboard-roster-scheduled"
+              title={`Scheduled ${scheduleLabel}`}
+              style={{
+                left: `${scheduleSpan.left}%`,
+                width: `${scheduleSpan.width}%`,
+              }}
+            />
+          )}
+          {span && (
+            <motion.div
+              className={`dashboard-roster-bar is-${shift.status}`}
+              style={{ left: `${span.left}%`, width: `${span.width}%` }}
+              initial={{ scaleX: 0 }}
+              animate={{ scaleX: 1 }}
+              transition={{
+                duration: 0.5,
+                delay: index * 0.03,
+                ease: "easeOut",
+              }}
+            />
+          )}
+          {shift.breaks.map((interval, breakIndex) => {
+            const breakSpan = getTimelineSpan(
+              interval.startedAt,
+              interval.endedAt,
+              outlet.windowStartAt,
+              outlet.windowEndAt,
+              outlet.evaluatedAt,
+            );
+            if (!breakSpan) return null;
+            return (
+              <span
+                key={breakIndex}
+                className="dashboard-roster-break"
+                title={breakRange(interval, outlet.timezone)}
+                style={{
+                  left: `${breakSpan.left}%`,
+                  width: `${breakSpan.width}%`,
+                }}
+              />
+            );
+          })}
+          {showNow && isLive && (
+            <span
+              className="dashboard-roster-now"
+              style={{ left: `${nowPercent}%` }}
+            />
+          )}
+        </div>
+        <div
+          className="dashboard-roster-meta"
+          style={{ marginLeft: anchor ? `${anchor.left}%` : undefined }}
+        >
+          <span className="dashboard-roster-time">{timeRange}</span>
+          {shift.breaks.map((interval, breakIndex) => (
+            <span key={breakIndex} className="dashboard-roster-break-chip">
+              {breakRange(interval, outlet.timezone)}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="dashboard-roster-metric">
+        <small>Worked</small>
+        <strong>{formatDuration(shift.workedMinutes)}</strong>
+      </div>
+      <div className="dashboard-roster-metric">
+        <small>Break</small>
+        <strong>{formatDuration(shift.breakMinutes)}</strong>
+      </div>
+    </motion.div>
+  );
+}
+
 function ShiftRoster({ outlet }: { outlet: DashboardOutlet }) {
   const windowStart = timestampMs(outlet.windowStartAt);
   const windowEnd = timestampMs(outlet.windowEndAt);
@@ -162,10 +376,8 @@ function ShiftRoster({ outlet }: { outlet: DashboardOutlet }) {
       (windowEnd - windowStart)) *
     100;
   const showNow = nowPercent > 0 && nowPercent < 100;
-  const rows = [
-    ...outlet.shifts.filter((shift) => shift.status !== "finished"),
-    ...outlet.shifts.filter((shift) => shift.status === "finished"),
-  ];
+  const upcoming = outlet.shifts.filter((shift) => shift.status === "upcoming");
+  const current = outlet.shifts.filter((shift) => shift.status !== "upcoming");
 
   return (
     <div
@@ -184,139 +396,62 @@ function ShiftRoster({ outlet }: { outlet: DashboardOutlet }) {
         <span>Worked</span>
         <span>Break</span>
       </div>
-      {rows.map((shift, index) => {
-        const span = getTimelineSpan(
-          shift.clockInAt,
-          shift.clockOutAt,
-          outlet.windowStartAt,
-          outlet.windowEndAt,
-          outlet.evaluatedAt,
-        );
-        const timeRange = `${formatShiftTime(shift.clockInLocal, outlet.date)} – ${
-          shift.clockOutLocal
-            ? formatShiftTime(shift.clockOutLocal, outlet.date)
-            : "In progress"
-        }`;
-        return (
-          <motion.div
-            layout
-            key={shift.id}
-            className={`dashboard-roster-row is-${shift.status}`}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25, delay: index * 0.03 }}
-          >
-            <div className="dashboard-roster-person">
-              {shift.profilePhotoUrl ? (
-                <Image
-                  className="dashboard-roster-avatar"
-                  src={shift.profilePhotoUrl}
-                  alt=""
-                  width={64}
-                  height={64}
-                  unoptimized
-                />
-              ) : (
-                <span
-                  className="dashboard-roster-avatar dashboard-roster-initials"
-                  aria-hidden="true"
-                >
-                  {initialsOf(shift.employeeName)}
-                </span>
-              )}
-              <div className="dashboard-roster-id">
-                <strong title={shift.employeeName}>{shift.employeeName}</strong>
-                <span className={`dashboard-status is-${shift.status}`}>
-                  {shift.status !== "finished" && (
-                    <span className="dashboard-live-dot" aria-hidden="true" />
-                  )}
-                  {statusLabels[shift.status]}
-                </span>
-                {shift.source === "storehub" && (
-                  <span className="storehub-source-label">
-                    StoreHub · read-only
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="dashboard-roster-track-cell">
-              <div className="dashboard-roster-track">
-                {span && (
-                  <motion.div
-                    className={`dashboard-roster-bar is-${shift.status}`}
-                    style={{ left: `${span.left}%`, width: `${span.width}%` }}
-                    initial={{ scaleX: 0 }}
-                    animate={{ scaleX: 1 }}
-                    transition={{
-                      duration: 0.5,
-                      delay: index * 0.03,
-                      ease: "easeOut",
-                    }}
-                  />
-                )}
-                {shift.breaks.map((interval, breakIndex) => {
-                  const breakSpan = getTimelineSpan(
-                    interval.startedAt,
-                    interval.endedAt,
-                    outlet.windowStartAt,
-                    outlet.windowEndAt,
-                    outlet.evaluatedAt,
-                  );
-                  if (!breakSpan) return null;
-                  return (
-                    <span
-                      key={breakIndex}
-                      className="dashboard-roster-break"
-                      title={breakRange(interval, outlet.timezone)}
-                      style={{
-                        left: `${breakSpan.left}%`,
-                        width: `${breakSpan.width}%`,
-                      }}
-                    />
-                  );
-                })}
-                {showNow && shift.status !== "finished" && (
-                  <span
-                    className="dashboard-roster-now"
-                    style={{ left: `${nowPercent}%` }}
-                  />
-                )}
-              </div>
-              <div
-                className="dashboard-roster-meta"
-                style={{ marginLeft: span ? `${span.left}%` : undefined }}
-              >
-                <span className="dashboard-roster-time">{timeRange}</span>
-                {shift.breaks.map((interval, breakIndex) => (
-                  <span
-                    key={breakIndex}
-                    className="dashboard-roster-break-chip"
-                  >
-                    {breakRange(interval, outlet.timezone)}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <div className="dashboard-roster-metric">
-              <small>Worked</small>
-              <strong>{formatDuration(shift.workedMinutes)}</strong>
-            </div>
-            <div className="dashboard-roster-metric">
-              <small>Break</small>
-              <strong>{formatDuration(shift.breakMinutes)}</strong>
-            </div>
-          </motion.div>
-        );
-      })}
+      {current.map((shift, index) => (
+        <RosterRow
+          key={shift.id}
+          shift={shift}
+          index={index}
+          outlet={outlet}
+          nowPercent={nowPercent}
+          showNow={showNow}
+        />
+      ))}
+      {upcoming.length > 0 && (
+        <details className="dashboard-roster-upcoming">
+          <summary>Upcoming ({upcoming.length})</summary>
+          {upcoming.map((shift, index) => (
+            <RosterRow
+              key={shift.id}
+              shift={shift}
+              index={index}
+              outlet={outlet}
+              nowPercent={nowPercent}
+              showNow={showNow}
+            />
+          ))}
+        </details>
+      )}
     </div>
   );
 }
 
-const statusLabels: Record<ShiftStatus, string> = {
+const statusLabels: Record<DashboardShiftStatus, string> = {
+  absent: "Absent",
+  not_clocked_in: "Not clocked in",
   on_shift: "On shift",
   on_break: "On break",
+  upcoming: "Upcoming",
   finished: "Finished",
 };
+
+const flagLabels: Record<AttendanceFlag, string> = {
+  absent: "Absent",
+  late: "Late",
+  left_early: "Left early",
+  overtime: "Overtime",
+  short_break: "Short break",
+  long_break: "Long break",
+  missed_break: "No break",
+};
+
+const alertFlags = new Set<AttendanceFlag>([
+  "absent",
+  "late",
+  "left_early",
+  "missed_break",
+]);
+
+const MAX_FLAG_CHIPS = 2;
 
 export default function ManagePage() {
   const [view, setView] = useState<DashboardView>("today");

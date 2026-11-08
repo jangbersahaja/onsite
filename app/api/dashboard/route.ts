@@ -1,4 +1,4 @@
-import { user, workBreaks, workSessions } from "@/db/schema";
+import { scheduledShifts, user, workBreaks, workSessions } from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
 import {
@@ -8,12 +8,16 @@ import {
   getScheduleWindow,
   orderDashboardShifts,
   outletScheduleDate,
+  scheduledRowStatus,
 } from "@/lib/dashboard-data";
 import { getDb } from "@/lib/db";
 import { formatOutletTimestamp, isDateOnly } from "@/lib/outlet-time";
+import type { AttendanceFlag } from "@/lib/schedule-rules";
+import { evaluateAttendance } from "@/lib/schedule-rules";
 import { getStoreHubAttendance } from "@/lib/storehub-attendance";
 import { storeHubShiftOverlapsWindow } from "@/lib/storehub-attendance-data";
 import { getTeamAccess } from "@/lib/team-access";
+import { getCompletedBreakMinutes } from "@/lib/work-breaks";
 import { and, asc, eq, gt, inArray, isNull, lt, or } from "drizzle-orm";
 
 type DashboardView = "today" | "yesterday" | "custom";
@@ -83,7 +87,7 @@ export async function GET(request: Request) {
           date < localToday
             ? endAt
             : new Date(Math.min(now.getTime(), endAt.getTime()));
-        const [shifts, storeHubAttendance] = await Promise.all([
+        const [shifts, storeHubAttendance, scheduleRows] = await Promise.all([
           evaluatedAt.getTime() > startAt.getTime()
             ? await db
                 .select({
@@ -113,6 +117,26 @@ export async function GET(request: Request) {
             from: new Date(startAt.getTime() - 24 * 60 * 60 * 1000),
             to: endAt,
           }),
+          db
+            .select({
+              id: scheduledShifts.id,
+              userId: user.id,
+              employeeName: user.name,
+              profilePhotoPath: user.profilePhotoPath,
+              startAt: scheduledShifts.startAt,
+              endAt: scheduledShifts.endAt,
+              breakMinutes: scheduledShifts.breakMinutes,
+            })
+            .from(scheduledShifts)
+            .innerJoin(user, eq(scheduledShifts.userId, user.id))
+            .where(
+              and(
+                eq(scheduledShifts.outletId, outlet.id),
+                eq(scheduledShifts.shiftDate, date),
+                eq(scheduledShifts.status, "published"),
+              ),
+            )
+            .orderBy(asc(scheduledShifts.startAt)),
         ]);
         const breaks = shifts.length
           ? await db
@@ -131,6 +155,75 @@ export async function GET(request: Request) {
               )
               .orderBy(asc(workBreaks.startedAt))
           : [];
+        const attendance = evaluateAttendance(
+          scheduleRows.map((row) => ({
+            id: row.id,
+            userId: row.userId,
+            startAt: row.startAt,
+            endAt: row.endAt,
+            breakMinutes: row.breakMinutes,
+          })),
+          shifts.map((shift) => ({
+            id: shift.id,
+            userId: shift.userId,
+            clockInAt: shift.clockInAt,
+            clockOutAt: shift.clockOutAt,
+            workedMinutes: null,
+            completedBreakMinutes: getCompletedBreakMinutes(
+              breaks.filter((item) => item.workSessionId === shift.id),
+            ),
+          })),
+          evaluatedAt,
+        );
+        const hasSchedule = scheduleRows.length > 0;
+        const unscheduledIds = new Set(
+          attendance.unscheduled.map((session) => session.id),
+        );
+        const scheduleSessionLinks = new Map<
+          string,
+          { startAt: Date; endAt: Date; flags: AttendanceFlag[] }
+        >();
+        for (const row of scheduleRows) {
+          const result = attendance.results.get(row.id);
+          const firstSessionId = result?.sessionIds[0];
+          if (result && firstSessionId) {
+            scheduleSessionLinks.set(firstSessionId, {
+              startAt: row.startAt,
+              endAt: row.endAt,
+              flags: result.flags,
+            });
+          }
+        }
+        const scheduledOnlyRows = scheduleRows
+          .filter(
+            (row) => attendance.results.get(row.id)?.sessionIds.length === 0,
+          )
+          .map((row) => {
+            const result = attendance.results.get(row.id)!;
+            return {
+              id: `scheduled-${row.id}`,
+              source: "scheduled" as const,
+              userId: row.userId,
+              employeeName: row.employeeName,
+              profilePhotoUrl: row.profilePhotoPath
+                ? `/api/profile-photos/${encodeURIComponent(row.userId)}`
+                : null,
+              clockInAt: null,
+              clockOutAt: null,
+              clockInLocal: null,
+              clockOutLocal: null,
+              status: scheduledRowStatus(result.status),
+              workedMinutes: 0,
+              breakMinutes: 0,
+              breaks: [],
+              schedule: {
+                startAt: row.startAt,
+                endAt: row.endAt,
+                flags: result.flags,
+              },
+              unscheduled: false,
+            };
+          });
         const onsiteShiftRows = shifts.map((shift) => {
           const shiftBreaks = breaks.filter(
             (breakInterval) => breakInterval.workSessionId === shift.id,
@@ -172,6 +265,8 @@ export async function GET(request: Request) {
               startedAt: breakInterval.startedAt,
               endedAt: breakInterval.endedAt,
             })),
+            schedule: scheduleSessionLinks.get(shift.id) ?? null,
+            unscheduled: hasSchedule && unscheduledIds.has(shift.id),
           };
         });
         const storeHubShiftRows =
@@ -219,10 +314,16 @@ export async function GET(request: Request) {
                     breakMinutes:
                       shift.breakMinutes === null ? null : metrics.breakMinutes,
                     breaks: shift.breaks,
+                    schedule: null,
+                    unscheduled: false,
                   };
                 })
             : [];
-        const shiftRows = [...onsiteShiftRows, ...storeHubShiftRows];
+        const shiftRows = [
+          ...onsiteShiftRows,
+          ...storeHubShiftRows,
+          ...scheduledOnlyRows,
+        ];
         const hasUnknownMetrics = storeHubShiftRows.some(
           (shift) => shift.breakMinutes === null,
         );
