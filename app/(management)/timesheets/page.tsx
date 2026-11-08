@@ -11,7 +11,12 @@ import {
 } from "@/app/(management)/timesheets/_components/timesheet-edit-dialog";
 import { TimesheetImportDialog } from "@/app/(management)/timesheets/_components/timesheet-import-dialog";
 import { useConfirmDialog } from "@/app/_components/confirm-dialog";
-import { EditIcon, PlusIcon, TrashIcon } from "@/app/_components/icons";
+import {
+  ChevronDownIcon,
+  EditIcon,
+  PlusIcon,
+  TrashIcon,
+} from "@/app/_components/icons";
 import { OutletAvatar } from "@/app/_components/outlet-avatar";
 import {
   formatOutletDateTime,
@@ -838,6 +843,7 @@ export default function TimesheetsPage() {
         sensitivity: "base",
       }) ||
       left.outletId.localeCompare(right.outletId) ||
+      Number(left.rows.length === 0) - Number(right.rows.length === 0) ||
       left.employeeName.localeCompare(right.employeeName, "en", {
         numeric: true,
         sensitivity: "base",
@@ -1199,14 +1205,27 @@ export default function TimesheetsPage() {
                 </small>
               </div>
               <div className="timesheet-staff-actions">
+                {group.userId && canChangeShifts(group.userId) && (
+                  <button
+                    className="btn btn-secondary btn-icon btn-sm"
+                    type="button"
+                    aria-label={`Add shift for ${group.employeeName}`}
+                    title="Add shift"
+                    onClick={() => openCreate(group)}
+                  >
+                    <PlusIcon />
+                  </button>
+                )}
                 <button
-                  className="btn btn-secondary btn-sm timesheet-collapse-toggle"
+                  className="btn btn-secondary btn-icon btn-sm timesheet-collapse-toggle"
                   type="button"
                   aria-expanded={!collapsedGroupKeys.has(group.key)}
                   aria-controls={`timesheet-table-${groupIndex}`}
+                  aria-label={`Toggle ${group.employeeName} shifts`}
+                  title={collapsedGroupKeys.has(group.key) ? "Show" : "Hide"}
                   onClick={() => toggleGroupCollapsed(group.key)}
                 >
-                  {collapsedGroupKeys.has(group.key) ? "Show" : "Hide"}
+                  <ChevronDownIcon />
                 </button>
                 <span className="outlet-inline">
                   <OutletAvatar
@@ -1222,264 +1241,237 @@ export default function TimesheetsPage() {
                 </span>
               </div>
             </header>
-            <div
-              className="team-table-wrap"
-              id={`timesheet-table-${groupIndex}`}
-            >
-              <table className="team-table timesheet-table">
-                <thead>
-                  <tr>
-                    <th>SHIFT DATE</th>
-                    <th>CLOCK IN</th>
-                    <th>CLOCK OUT</th>
-                    <th>WORKED</th>
-                    <th>RECORD</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {group.timeline.map((item) => {
-                    if (item.kind === "off-days") {
-                      return (
-                        <tr
-                          className="timesheet-off-day-row"
-                          key={`off-days-${item.from}`}
-                        >
-                          <td colSpan={5}>
-                            <time dateTime={item.from}>
-                              {formatShiftDate(item.from)}
-                            </time>
-                            {item.count > 1 && (
-                              <>
-                                <span aria-hidden="true"> – </span>
-                                <time dateTime={item.to}>
-                                  {formatShiftDate(item.to)}
+            <div className="timesheet-collapsible">
+              <div className="timesheet-collapsible-inner">
+                <div
+                  className="team-table-wrap"
+                  id={`timesheet-table-${groupIndex}`}
+                >
+                  <table className="team-table timesheet-table">
+                    <thead>
+                      <tr>
+                        <th>SHIFT DATE</th>
+                        <th>CLOCK IN</th>
+                        <th>CLOCK OUT</th>
+                        <th>WORKED</th>
+                        <th>RECORD</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {group.timeline.map((item) => {
+                        if (item.kind === "off-days") {
+                          return (
+                            <tr
+                              className="timesheet-off-day-row"
+                              key={`off-days-${item.from}`}
+                            >
+                              <td colSpan={5}>
+                                <time dateTime={item.from}>
+                                  {formatShiftDate(item.from)}
                                 </time>
-                              </>
-                            )}
-                            <span aria-hidden="true"> · </span>
-                            {item.count === 1
-                              ? "Off day"
-                              : `${item.count} off days`}
-                          </td>
-                        </tr>
-                      );
-                    }
-                    const row = item.row;
-                    const clockIn = splitLocalTimestamp(row.clockInLocal);
-                    const clockOut = splitLocalTimestamp(row.clockOutLocal);
-                    const isExpanded = expandedShiftIds.has(row.id);
-                    const isLongTipOpen = openLongTipId === row.id;
-                    const isLongShift =
-                      row.durationMinutes !== null &&
-                      row.durationMinutes > LONG_SHIFT_MINUTES;
-                    return (
-                      <tr
-                        key={row.id}
-                        data-expanded={isExpanded}
-                        data-long={isLongShift}
-                      >
-                        <td>
-                          <div className="timesheet-shift-date">
-                            <time dateTime={row.clockInAt}>
-                              {clockIn && formatShiftDate(clockIn.date)}
-                            </time>
-                            {clockOut &&
-                              clockIn &&
-                              clockOut.date !== clockIn.date && (
-                                <small>
-                                  Ends {formatShiftDate(clockOut.date)}
-                                </small>
-                              )}
-                          </div>
-                        </td>
-                        <td
-                          className="timesheet-clock-time"
-                          data-label="Clock in"
-                        >
-                          {clockIn?.time.slice(0, 5)}
-                        </td>
-                        <td
-                          className={
-                            clockOut
-                              ? "timesheet-clock-time"
-                              : "timesheet-clock-time timesheet-open-shift"
-                          }
-                          data-label="Clock out"
-                        >
-                          {clockOut ? clockOut.time.slice(0, 5) : "Open shift"}
-                        </td>
-                        <td data-label="Worked">
-                          <div className="timesheet-worked-row">
-                            <strong
-                              className={
-                                isLongShift
-                                  ? "timesheet-worked timesheet-worked-long"
-                                  : "timesheet-worked"
-                              }
-                            >
-                              {formatDuration(row.durationMinutes)}
-                            </strong>
-                            {isLongShift && (
-                              <button
-                                className="timesheet-long-shift"
-                                type="button"
-                                aria-expanded={isLongTipOpen}
-                                aria-label="Over 10 hours. Check this shift for a missed clock-out or a long break."
-                                data-long-tip
-                                data-tip="Over 10 hours. Check this shift for a missed clock-out or a long break."
-                                onClick={() =>
-                                  setOpenLongTipId(
-                                    isLongTipOpen ? null : row.id,
-                                  )
-                                }
-                              >
-                                !
-                              </button>
-                            )}
-                            <button
-                              className="timesheet-details-toggle timesheet-icon-button"
-                              type="button"
-                              aria-expanded={isExpanded}
-                              aria-label={
-                                isExpanded
-                                  ? "Hide shift details"
-                                  : "Show shift details"
-                              }
-                              onClick={() => toggleShiftDetails(row.id)}
-                            >
-                              <svg
-                                aria-hidden="true"
-                                viewBox="0 0 24 24"
-                                width="18"
-                                height="18"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="2"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                              >
-                                <path d="m6 9 6 6 6-6" />
-                              </svg>
-                            </button>
-                          </div>
-                          {isExpanded && row.breakMinutes !== 0 && (
-                            <small className="timesheet-duration-detail">
-                              Gross {formatDuration(row.grossDurationMinutes)}
-                              <span aria-hidden="true"> · </span>
-                              Break{" "}
-                              {row.breakMinutes === null
-                                ? "Not provided"
-                                : formatDuration(row.breakMinutes)}
-                              {row.breaks.map((breakInterval) => (
-                                <span
-                                  className="timesheet-break-item"
-                                  key={breakInterval.id}
-                                >
-                                  Break start{" "}
-                                  {formatBreakTime(
-                                    breakInterval.startedAt,
-                                    row.timezone,
-                                  )}
-                                  <span aria-hidden="true"> · </span>
-                                  end{" "}
-                                  {breakInterval.endedAt
-                                    ? formatBreakTime(
-                                        breakInterval.endedAt,
-                                        row.timezone,
-                                      )
-                                    : "Not ended"}
-                                </span>
-                              ))}
-                            </small>
-                          )}
-                        </td>
-                        <td data-label="Record">
-                          <div className="timesheet-record-cell">
-                            {row.source === "storehub" ? (
-                              <span className="storehub-source-label">
-                                StoreHub · read-only
-                              </span>
-                            ) : row.clockInSource === "manual" ||
-                              row.clockOutSource === "manual" ? (
-                              <span className="manual-adjustment-label">
-                                Manually adjusted
-                              </span>
-                            ) : (
-                              <span className="gps-source-label">
-                                GPS verified
-                              </span>
-                            )}
-                            {row.source === "onsite" && (
-                              <div className="timesheet-record-actions">
-                                <button
-                                  className="btn btn-ghost btn-icon btn-sm timesheet-icon-button"
-                                  type="button"
-                                  aria-label="Edit shift"
-                                  title="Edit shift"
-                                  onClick={() => startEdit(row)}
-                                >
-                                  <EditIcon />
-                                </button>
-                                {row.clockOutAt &&
-                                  canChangeShifts(row.userId) && (
-                                    <button
-                                      className="btn btn-danger btn-icon btn-sm timesheet-icon-button"
-                                      type="button"
-                                      aria-label="Delete shift"
-                                      title="Delete shift"
-                                      onClick={() => setDeleting(row)}
-                                    >
-                                      <TrashIcon />
-                                    </button>
+                                {item.count > 1 && (
+                                  <>
+                                    <span aria-hidden="true"> – </span>
+                                    <time dateTime={item.to}>
+                                      {formatShiftDate(item.to)}
+                                    </time>
+                                  </>
+                                )}
+                                <span aria-hidden="true"> · </span>
+                                {item.count === 1
+                                  ? "Off day"
+                                  : `${item.count} off days`}
+                              </td>
+                            </tr>
+                          );
+                        }
+                        const row = item.row;
+                        const clockIn = splitLocalTimestamp(row.clockInLocal);
+                        const clockOut = splitLocalTimestamp(row.clockOutLocal);
+                        const isExpanded = expandedShiftIds.has(row.id);
+                        const isLongTipOpen = openLongTipId === row.id;
+                        const isLongShift =
+                          row.durationMinutes !== null &&
+                          row.durationMinutes > LONG_SHIFT_MINUTES;
+                        return (
+                          <tr
+                            key={row.id}
+                            data-expanded={isExpanded}
+                            data-long={isLongShift}
+                          >
+                            <td>
+                              <div className="timesheet-shift-date">
+                                <time dateTime={row.clockInAt}>
+                                  {clockIn && formatShiftDate(clockIn.date)}
+                                </time>
+                                {clockOut &&
+                                  clockIn &&
+                                  clockOut.date !== clockIn.date && (
+                                    <small>
+                                      Ends {formatShiftDate(clockOut.date)}
+                                    </small>
                                   )}
                               </div>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {group.timeline.length === 0 && (
-                    <tr className="timesheet-empty-row">
-                      <td colSpan={5}>No shifts in this range.</td>
-                    </tr>
-                  )}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <td colSpan={3}>
-                      {group.rows.length} shift{" "}
-                      {group.rows.length === 1 ? "record" : "records"}
-                    </td>
-                    <td className="timesheet-table-total-hours">
-                      <span>Total work hours</span>
-                      <strong>
-                        {formatDuration(
-                          group.rows.reduce(
-                            (total, row) => total + (row.durationMinutes ?? 0),
-                            0,
-                          ),
-                        )}
-                      </strong>
-                    </td>
-                    <td className="timesheet-add-shift-cell">
-                      <div className="timesheet-add-shift-action">
-                        {group.userId && canChangeShifts(group.userId) && (
-                          <button
-                            className="btn btn-secondary btn-icon btn-sm timesheet-icon-button"
-                            type="button"
-                            aria-label={`Add shift for ${group.employeeName}`}
-                            title="Add shift"
-                            onClick={() => openCreate(group)}
-                          >
-                            <PlusIcon />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+                            </td>
+                            <td
+                              className="timesheet-clock-time"
+                              data-label="Clock in"
+                            >
+                              {clockIn?.time.slice(0, 5)}
+                            </td>
+                            <td
+                              className={
+                                clockOut
+                                  ? "timesheet-clock-time"
+                                  : "timesheet-clock-time timesheet-open-shift"
+                              }
+                              data-label="Clock out"
+                            >
+                              {clockOut
+                                ? clockOut.time.slice(0, 5)
+                                : "Open shift"}
+                            </td>
+                            <td data-label="Worked">
+                              <div className="timesheet-worked-row">
+                                <strong
+                                  className={
+                                    isLongShift
+                                      ? "timesheet-worked timesheet-worked-long"
+                                      : "timesheet-worked"
+                                  }
+                                >
+                                  {formatDuration(row.durationMinutes)}
+                                </strong>
+                                {isLongShift && (
+                                  <button
+                                    className="timesheet-long-shift"
+                                    type="button"
+                                    aria-expanded={isLongTipOpen}
+                                    aria-label="Over 10 hours. Check this shift for a missed clock-out or a long break."
+                                    data-long-tip
+                                    data-tip="Over 10 hours. Check this shift for a missed clock-out or a long break."
+                                    onClick={() =>
+                                      setOpenLongTipId(
+                                        isLongTipOpen ? null : row.id,
+                                      )
+                                    }
+                                  >
+                                    !
+                                  </button>
+                                )}
+                                <button
+                                  className="timesheet-details-toggle timesheet-icon-button"
+                                  type="button"
+                                  aria-expanded={isExpanded}
+                                  aria-label={
+                                    isExpanded
+                                      ? "Hide shift details"
+                                      : "Show shift details"
+                                  }
+                                  onClick={() => toggleShiftDetails(row.id)}
+                                >
+                                  <svg
+                                    aria-hidden="true"
+                                    viewBox="0 0 24 24"
+                                    width="18"
+                                    height="18"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  >
+                                    <path d="m6 9 6 6 6-6" />
+                                  </svg>
+                                </button>
+                              </div>
+                              {row.breakMinutes !== 0 && (
+                                <small className="timesheet-duration-detail">
+                                  Gross{" "}
+                                  {formatDuration(row.grossDurationMinutes)}
+                                  <span aria-hidden="true"> · </span>
+                                  Break{" "}
+                                  {row.breakMinutes === null
+                                    ? "Not provided"
+                                    : formatDuration(row.breakMinutes)}
+                                  {row.breaks.map((breakInterval) => (
+                                    <span
+                                      className="timesheet-break-item"
+                                      key={breakInterval.id}
+                                    >
+                                      Break start{" "}
+                                      {formatBreakTime(
+                                        breakInterval.startedAt,
+                                        row.timezone,
+                                      )}
+                                      <span aria-hidden="true"> · </span>
+                                      end{" "}
+                                      {breakInterval.endedAt
+                                        ? formatBreakTime(
+                                            breakInterval.endedAt,
+                                            row.timezone,
+                                          )
+                                        : "Not ended"}
+                                    </span>
+                                  ))}
+                                </small>
+                              )}
+                            </td>
+                            <td data-label="Record">
+                              <div className="timesheet-record-cell">
+                                {row.source === "storehub" ? (
+                                  <span className="storehub-source-label">
+                                    StoreHub · read-only
+                                  </span>
+                                ) : row.clockInSource === "manual" ||
+                                  row.clockOutSource === "manual" ? (
+                                  <span className="manual-adjustment-label">
+                                    Manually adjusted
+                                  </span>
+                                ) : (
+                                  <span className="gps-source-label">
+                                    GPS verified
+                                  </span>
+                                )}
+                                {row.source === "onsite" && (
+                                  <div className="timesheet-record-actions">
+                                    <button
+                                      className="btn btn-ghost btn-icon btn-sm timesheet-icon-button"
+                                      type="button"
+                                      aria-label="Edit shift"
+                                      title="Edit shift"
+                                      onClick={() => startEdit(row)}
+                                    >
+                                      <EditIcon />
+                                    </button>
+                                    {row.clockOutAt &&
+                                      canChangeShifts(row.userId) && (
+                                        <button
+                                          className="btn btn-danger btn-icon btn-sm timesheet-icon-button"
+                                          type="button"
+                                          aria-label="Delete shift"
+                                          title="Delete shift"
+                                          onClick={() => setDeleting(row)}
+                                        >
+                                          <TrashIcon />
+                                        </button>
+                                      )}
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {group.timeline.length === 0 && (
+                        <tr className="timesheet-empty-row">
+                          <td colSpan={5}>No shifts in this range.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </section>
         ))}

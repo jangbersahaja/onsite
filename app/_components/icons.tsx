@@ -59,6 +59,14 @@ export function PlusIcon(props: IconProps) {
   );
 }
 
+export function ChevronDownIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="m6 9 6 6 6-6" />
+    </IconBase>
+  );
+}
+
 export function RefreshIcon(props: IconProps) {
   return (
     <IconBase {...props}>
