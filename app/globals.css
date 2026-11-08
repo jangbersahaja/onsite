@@ -2934,11 +2934,37 @@ h2 {
   font-weight: 600;
 }
 .timesheet-collapse-toggle {
+  width: 28px;
+  min-width: 28px;
   min-height: 28px;
-  padding-inline: 10px;
+  padding: 0;
 }
-.timesheet-staff-group[data-collapsed="true"] .team-table-wrap {
-  display: none;
+.timesheet-collapse-toggle svg {
+  transition: transform 200ms ease;
+}
+.timesheet-collapse-toggle[aria-expanded="false"] svg {
+  transform: rotate(-90deg);
+}
+.timesheet-collapsible {
+  display: grid;
+  grid-template-rows: 1fr;
+  transition:
+    grid-template-rows 200ms ease,
+    visibility 200ms;
+}
+.timesheet-collapsible-inner {
+  min-height: 0;
+  overflow: hidden;
+}
+.timesheet-staff-group[data-collapsed="true"] .timesheet-collapsible {
+  grid-template-rows: 0fr;
+  visibility: hidden;
+}
+@media (prefers-reduced-motion: reduce) {
+  .timesheet-collapsible,
+  .timesheet-collapse-toggle svg {
+    transition: none;
+  }
 }
 .timesheet-staff-group {
   scroll-margin-top: 16px;
@@ -7122,10 +7148,6 @@ small,
   .reset-link-button,
   .deactivate-outlet-button,
   .correction-reject-button,
-  .timesheet-export,
-  .timesheet-edit-button,
-  .timesheet-record-cell .timesheet-edit-button,
-  .timesheet-cancel,
   .team-primary-action,
   .team-secondary-action,
   .team-view-tab {
@@ -7201,8 +7223,7 @@ small,
   .team-table .device-revoke-button {
     display: none;
   }
-  .workspace-shell .team-table td,
-  .workspace-shell .timesheet-table td {
+  .workspace-shell .team-table td {
     font-size: 14px;
   }
   .timesheet-table tfoot tr {
@@ -7331,7 +7352,6 @@ small,
     align-self: center;
   }
   .timesheet-table tbody .timesheet-shift-date {
-    min-height: 44px;
     align-content: center;
   }
   .timesheet-table tbody tr[data-expanded="false"] td:nth-child(2),
@@ -7368,11 +7388,11 @@ small,
     padding: 4px 0;
   }
   .timesheet-table .timesheet-icon-button {
-    flex: 0 0 44px;
-    width: 44px;
-    min-width: 44px;
-    height: 44px;
-    min-height: 44px;
+    flex: 0 0 32px;
+    width: 32px;
+    min-width: 32px;
+    height: 32px;
+    min-height: 32px;
     padding: 0;
     box-sizing: border-box;
     place-items: center;
@@ -7388,19 +7408,12 @@ small,
     color: var(--muted);
   }
   .timesheet-table tbody .timesheet-shift-date time {
-    font-size: 14px;
     font-weight: 650;
   }
-  .timesheet-table tbody .timesheet-shift-date small,
-  .timesheet-table tbody .timesheet-duration-detail {
-    font-size: 12px;
-  }
   .timesheet-table tbody .timesheet-clock-time {
-    font-size: 14px;
     font-weight: 600;
   }
   .timesheet-table tbody .timesheet-worked {
-    font-size: 18px;
     font-weight: 700;
     font-variant-numeric: normal;
   }
@@ -7443,9 +7456,6 @@ small,
 @media (max-width: 380px) {
   .timesheet-table tbody .timesheet-shift-date {
     white-space: normal;
-  }
-  .timesheet-table tbody .timesheet-worked {
-    font-size: 20px;
   }
   .timesheet-table .timesheet-worked-row {
     gap: 4px;
