@@ -82,6 +82,21 @@ function csvDownloadHeaders(filename: string) {
   };
 }
 
+const timesheetRowLimit = 500;
+
+function storeHubGrossMinutes(
+  clockInAt: Date | string,
+  clockOutAt: Date | string | null,
+) {
+  if (!clockOutAt) return null;
+  return Math.max(
+    0,
+    Math.floor(
+      (new Date(clockOutAt).getTime() - new Date(clockInAt).getTime()) / 60_000,
+    ),
+  );
+}
+
 function formatCsvOutletTimestamp(value: Date | string, timezone: string) {
   const [date, time] = formatOutletTimestamp(value, timezone).split(" ");
   const [year, month, day] = date.split("-");
@@ -169,36 +184,35 @@ export async function GET(request: Request) {
               clockOutLocal: row.clockOutAt
                 ? formatOutletTimestamp(row.clockOutAt, row.timezone)
                 : null,
-              grossDurationMinutes: row.clockOutAt
-                ? Math.max(
-                    0,
-                    Math.floor(
-                      (new Date(row.clockOutAt).getTime() -
-                        new Date(row.clockInAt).getTime()) /
-                        60_000,
-                    ),
-                  )
-                : null,
-              durationMinutes: null,
+              grossDurationMinutes: storeHubGrossMinutes(
+                row.clockInAt,
+                row.clockOutAt,
+              ),
+              durationMinutes: storeHubGrossMinutes(
+                row.clockInAt,
+                row.clockOutAt,
+              ),
               clockInSource: "storehub" as const,
               clockOutSource: row.clockOutAt ? ("storehub" as const) : null,
             }),
           )
         : [];
-    const rows = [
+    const matchedRows = [
       ...onsiteRows.map((row) => ({
         ...row,
         source: "onsite" as const,
         employeeFilterId: row.userId,
       })),
       ...storeHubRows,
-    ]
-      .sort(
-        (first, second) =>
-          new Date(second.clockInAt).getTime() -
-          new Date(first.clockInAt).getTime(),
-      )
-      .slice(0, 500);
+    ].sort(
+      (first, second) =>
+        new Date(second.clockInAt).getTime() -
+        new Date(first.clockInAt).getTime(),
+    );
+    const truncated =
+      matchedRows.length > timesheetRowLimit ||
+      onsiteRows.length >= timesheetRowLimit;
+    const rows = matchedRows.slice(0, timesheetRowLimit);
     if (params.get("format") === "import-csv") {
       if (!parsed.data.outletId) {
         return Response.json(
@@ -403,64 +417,71 @@ export async function GET(request: Request) {
       );
     }
 
-    const staffRows = isStoreHubEmployee
-      ? []
-      : await getDb()
-          .select({
-            userId: user.id,
-            name: user.name,
-            username: user.username,
-            email: user.email,
-            outletId: outlets.id,
-            outletName: outlets.name,
-            timezone: outlets.timezone,
-          })
-          .from(outletMemberships)
-          .innerJoin(user, eq(outletMemberships.userId, user.id))
-          .innerJoin(outlets, eq(outletMemberships.outletId, outlets.id))
-          .where(
-            and(
-              inArray(outletMemberships.outletId, actor.outletIds),
-              eq(outletMemberships.isActive, true),
-              eq(outlets.isActive, true),
-              eq(user.canAccessClock, true),
-              eq(user.approvalStatus, "approved"),
-              parsed.data.outletId
-                ? eq(outletMemberships.outletId, parsed.data.outletId)
-                : undefined,
-              parsed.data.employeeId
-                ? eq(user.id, parsed.data.employeeId)
-                : undefined,
-            ),
-          )
-          .orderBy(user.name);
+    const staffRows = await getDb()
+      .select({
+        userId: user.id,
+        name: user.name,
+        username: user.username,
+        email: user.email,
+        outletId: outlets.id,
+        outletName: outlets.name,
+        timezone: outlets.timezone,
+      })
+      .from(outletMemberships)
+      .innerJoin(user, eq(outletMemberships.userId, user.id))
+      .innerJoin(outlets, eq(outletMemberships.outletId, outlets.id))
+      .where(
+        and(
+          inArray(outletMemberships.outletId, actor.outletIds),
+          eq(outletMemberships.isActive, true),
+          eq(outlets.isActive, true),
+          eq(user.canAccessClock, true),
+          eq(user.approvalStatus, "approved"),
+        ),
+      )
+      .orderBy(user.name);
     const actorChangeScope = {
       userId: actor.userId,
       isSuperAdmin: actor.access.isSuperAdmin,
     };
-    const staff = staffRows.filter((member) =>
-      canChangeShiftFor(actorChangeScope, member.userId),
+    const staff = staffRows.filter(
+      (member) =>
+        (!parsed.data.outletId || member.outletId === parsed.data.outletId) &&
+        (!parsed.data.employeeId || member.userId === parsed.data.employeeId) &&
+        canChangeShiftFor(actorChangeScope, member.userId),
     );
 
+    // Unfiltered option list so the employee picker does not shrink as filters apply.
     const employeeMap = new Map<
       string,
-      { id: string; name: string; email: string }
+      { id: string; name: string; email: string; outletIds: string[] }
     >();
+    for (const member of staffRows) {
+      const existing = employeeMap.get(member.userId);
+      if (existing) {
+        existing.outletIds.push(member.outletId);
+        continue;
+      }
+      employeeMap.set(member.userId, {
+        id: member.userId,
+        name: member.name,
+        email: member.email,
+        outletIds: [member.outletId],
+      });
+    }
     for (const row of rows) {
+      const existing = employeeMap.get(row.employeeFilterId);
+      if (existing) {
+        if (!existing.outletIds.includes(row.outletId))
+          existing.outletIds.push(row.outletId);
+        continue;
+      }
       employeeMap.set(row.employeeFilterId, {
         id: row.employeeFilterId,
         name: row.employeeName,
         email: row.employeeEmail ?? "",
+        outletIds: [row.outletId],
       });
-    }
-    for (const member of staffRows) {
-      if (!employeeMap.has(member.userId)) {
-        employeeMap.set(member.userId, {
-          id: member.userId,
-          name: member.name,
-          email: member.email,
-        });
-      }
     }
     return Response.json({
       outlets: actor.outlets,
@@ -470,6 +491,7 @@ export async function GET(request: Request) {
       isSuperAdmin: actor.access.isSuperAdmin,
       storeHubStatus: storeHubAttendance.status,
       storeHubFetchedAt: storeHubAttendance.fetchedAt,
+      truncated,
       rows: rows.map((row) => ({
         ...row,
         clockInLocal: formatOutletTimestamp(row.clockInAt, row.timezone),
@@ -525,7 +547,7 @@ const editSchema = z
       )
       .max(30)
       .optional(),
-    reason: z.string().trim().max(500),
+    reason: z.string().trim().min(3).max(500),
   })
   .strict();
 
@@ -1057,6 +1079,19 @@ export async function DELETE(request: Request) {
       );
     }
 
+    const reasonParam = z
+      .string()
+      .trim()
+      .min(3)
+      .max(500)
+      .safeParse(new URL(request.url).searchParams.get("reason"));
+    if (!reasonParam.success) {
+      return Response.json(
+        { error: "A reason of at least 3 characters is required." },
+        { status: 400 },
+      );
+    }
+
     const db = getDb();
     const [session] = await db
       .select({
@@ -1130,6 +1165,7 @@ export async function DELETE(request: Request) {
       await recordAudit(tx, {
         actorId: actor.userId,
         action: "timesheet_delete",
+        reason: reasonParam.data,
         entityType: "work_session",
         entityId: current.id,
         outletId: current.outletId,

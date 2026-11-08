@@ -130,8 +130,10 @@ export function TimesheetEditDialog({
             onChange={setEditingBreaks}
           />
           <label className="timesheet-reason">
-            Reason for change
+            Reason for change (required)
             <input
+              required
+              minLength={3}
               maxLength={500}
               value={reason}
               onChange={(event) => setReason(event.target.value)}
