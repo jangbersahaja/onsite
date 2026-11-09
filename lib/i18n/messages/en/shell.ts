@@ -9,6 +9,8 @@ export const enShell = {
   staffNavigation: "Staff navigation",
   closeNavigation: "Close navigation",
   openNavigation: "Open navigation",
+  collapseSidebar: "Collapse sidebar",
+  expandSidebar: "Expand sidebar",
   selectOutlet: "Select outlet",
   connectedWorkspace: "Connected workspace",
   installApp: "Install app",

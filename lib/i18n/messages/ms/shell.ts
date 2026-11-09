@@ -11,6 +11,8 @@ export const msShell: typeof enShell = {
   staffNavigation: "Navigasi kakitangan",
   closeNavigation: "Tutup navigasi",
   openNavigation: "Buka navigasi",
+  collapseSidebar: "Kecilkan bar sisi",
+  expandSidebar: "Besarkan bar sisi",
   selectOutlet: "Pilih outlet",
   connectedWorkspace: "Ruang kerja bersambung",
   installApp: "Pasang aplikasi",
