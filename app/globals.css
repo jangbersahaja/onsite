@@ -1396,6 +1396,9 @@ h2 {
     gap: 11px;
     padding: 0 14px;
   }
+  .top-bar-start {
+    flex: 1;
+  }
   .top-bar .mobile-nav-toggle {
     display: grid;
     flex: none;
