@@ -83,6 +83,7 @@ a {
 }
 
 .workspace-shell {
+  --side-rail-width: 256px;
   display: flex;
   min-height: 100vh;
 }
@@ -91,7 +92,7 @@ a {
   inset: 0 auto 0 0;
   z-index: 2;
   display: flex;
-  width: 256px;
+  width: var(--side-rail-width);
   flex-direction: column;
   border-right: 1px solid rgba(255, 255, 255, 0.06);
   background: var(--gradient-side);
@@ -503,7 +504,7 @@ a {
 .main-panel {
   min-width: 0;
   flex: 1;
-  margin-left: 256px;
+  margin-left: var(--side-rail-width);
 }
 .top-bar {
   display: flex;
@@ -1202,12 +1203,18 @@ h2 {
     serif;
 }
 
+.top-bar-start {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 11px;
+}
+.sidebar-collapse-toggle {
+  display: none;
+}
 @media (max-width: 1040px) {
-  .side-rail {
-    width: 220px;
-  }
-  .main-panel {
-    margin-left: 220px;
+  .workspace-shell {
+    --side-rail-width: 220px;
   }
   .top-bar {
     padding: 0 28px;
@@ -1222,6 +1229,101 @@ h2 {
   .clock-panel {
     padding-right: 19px;
     padding-left: 19px;
+  }
+}
+
+/* Desktop and tablet: collapsible sidebar that shrinks to an icon rail. */
+@media (min-width: 761px) {
+  .sidebar-collapse-toggle {
+    display: grid;
+    flex: none;
+  }
+  .side-rail,
+  .main-panel {
+    transition:
+      width 200ms ease,
+      margin-left 200ms ease;
+  }
+  .workspace-shell.is-sidebar-collapsed {
+    --side-rail-width: 76px;
+  }
+  .workspace-shell.is-sidebar-collapsed .side-rail {
+    padding: 24px 12px 18px;
+  }
+  .workspace-shell.is-sidebar-collapsed .brand-lockup {
+    justify-content: center;
+    padding: 0;
+  }
+  .workspace-shell.is-sidebar-collapsed .brand-mark {
+    width: 36px;
+    height: 36px;
+  }
+  .workspace-shell.is-sidebar-collapsed .outlet-switcher {
+    justify-content: center;
+    padding: 8px 4px;
+  }
+  .workspace-shell.is-sidebar-collapsed .outlet-switcher::after {
+    content: none;
+  }
+  .workspace-shell.is-sidebar-collapsed .nav-group-toggle {
+    justify-content: center;
+    padding: 0;
+  }
+  .workspace-shell.is-sidebar-collapsed .nav-item {
+    justify-content: center;
+    gap: 0;
+    padding: 0;
+  }
+  .workspace-shell.is-sidebar-collapsed .nav-item .nav-glyph {
+    flex: none;
+  }
+  .workspace-shell.is-sidebar-collapsed .nav-count {
+    position: absolute;
+    top: 3px;
+    right: 3px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    font-size: 9px;
+  }
+  .workspace-shell.is-sidebar-collapsed .nav-item {
+    position: relative;
+  }
+  .workspace-shell.is-sidebar-collapsed .demo-status {
+    justify-content: center;
+    padding: 16px 0 3px;
+  }
+  .workspace-shell.is-sidebar-collapsed .profile-button {
+    justify-content: center;
+    padding: 8px 0;
+  }
+  .workspace-shell.is-sidebar-collapsed .profile-menu {
+    right: auto;
+    bottom: 0;
+    left: calc(100% + 10px);
+    width: 200px;
+  }
+  /* Labels stay in the accessibility tree but are visually hidden. */
+  .workspace-shell.is-sidebar-collapsed
+    :is(
+      .rail-label,
+      .nav-group-label,
+      .outlet-copy,
+      .profile-copy,
+      .switcher-chevron
+    ) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+@media (min-width: 761px) and (prefers-reduced-motion: reduce) {
+  .side-rail,
+  .main-panel {
+    transition: none;
   }
 }
 

@@ -11,6 +11,8 @@ export const idShell: typeof enShell = {
   staffNavigation: "Navigasi staf",
   closeNavigation: "Tutup navigasi",
   openNavigation: "Buka navigasi",
+  collapseSidebar: "Ciutkan bilah sisi",
+  expandSidebar: "Perluas bilah sisi",
   selectOutlet: "Pilih outlet",
   connectedWorkspace: "Ruang kerja terhubung",
   installApp: "Pasang aplikasi",

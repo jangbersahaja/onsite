@@ -32,6 +32,38 @@ export type WorkspaceNavigationGroup = {
 
 export const REVIEW_REQUESTS_CHANGED_EVENT = "review-requests-changed";
 
+const SIDEBAR_COLLAPSED_STORAGE_KEY = "onsite.sidebarCollapsed";
+const TABLET_MEDIA_QUERY = "(min-width: 761px) and (max-width: 1040px)";
+const sidebarStateListeners = new Set<() => void>();
+
+function subscribeToSidebarState(listener: () => void) {
+  sidebarStateListeners.add(listener);
+  return () => sidebarStateListeners.delete(listener);
+}
+
+// Uses the saved choice when present; otherwise starts collapsed on tablet widths.
+function readSidebarCollapsed() {
+  try {
+    const stored = window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY);
+    if (stored !== null) return stored === "1";
+  } catch {
+    // Storage may be unavailable (e.g. private mode); fall back to the default.
+  }
+  return window.matchMedia(TABLET_MEDIA_QUERY).matches;
+}
+
+function writeSidebarCollapsed(collapsed: boolean) {
+  try {
+    window.localStorage.setItem(
+      SIDEBAR_COLLAPSED_STORAGE_KEY,
+      collapsed ? "1" : "0",
+    );
+  } catch {
+    // The toggle still works for this page view without storage.
+  }
+  sidebarStateListeners.forEach((listener) => listener());
+}
+
 function subscribeToNothing() {
   return () => {};
 }
@@ -177,6 +209,11 @@ export function WorkspaceShell({
   const session = authClient.useSession();
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
+  const isSidebarCollapsed = useSyncExternalStore(
+    subscribeToSidebarState,
+    readSidebarCollapsed,
+    () => false,
+  );
   const [expandedNavigationGroups, setExpandedNavigationGroups] = useState<
     Set<string>
   >(() => new Set());
@@ -227,6 +264,10 @@ export function WorkspaceShell({
   const mobileStaffNavigation = visibleNavigation
     .flatMap((group) => group.items)
     .filter((item) => item.requiredAccess === "clock");
+
+  function toggleSidebar() {
+    writeSidebarCollapsed(!isSidebarCollapsed);
+  }
 
   useEffect(() => {
     if (!isMobileNavOpen) return;
@@ -336,7 +377,9 @@ export function WorkspaceShell({
   }
 
   return (
-    <div className="workspace-shell">
+    <div
+      className={`workspace-shell${isSidebarCollapsed ? " is-sidebar-collapsed" : ""}`}
+    >
       {isMobileNavOpen && (
         <button
           className="mobile-nav-backdrop"
@@ -362,10 +405,12 @@ export function WorkspaceShell({
             height={128}
             priority
           />
-          <span>OnSITE</span>
+          <span className="rail-label">OnSITE</span>
         </Link>
 
-        <p className="workspace-label">{messages.shell.workspaceLabel}</p>
+        <p className="workspace-label rail-label">
+          {messages.shell.workspaceLabel}
+        </p>
         {outlets.length > 0 && selectedOutletId && onOutletChange ? (
           <label className="outlet-switcher" htmlFor="workspace-outlet-select">
             <OutletAvatar
@@ -451,11 +496,12 @@ export function WorkspaceShell({
                         item.href === activeHref ? "page" : undefined
                       }
                       onClick={() => setIsMobileNavOpen(false)}
+                      title={isSidebarCollapsed ? item.label : undefined}
                     >
                       <span className="nav-glyph" aria-hidden="true">
                         {item.glyph}
                       </span>
-                      {item.label}
+                      <span className="rail-label">{item.label}</span>
                       {Boolean(item.count) && (
                         <span className="nav-count">{item.count}</span>
                       )}
@@ -468,9 +514,16 @@ export function WorkspaceShell({
         </nav>
 
         <div className="rail-bottom">
-          <div className="demo-status">
+          <div
+            className="demo-status"
+            title={
+              isSidebarCollapsed ? messages.shell.connectedWorkspace : undefined
+            }
+          >
             <span className="status-dot" />
-            {messages.shell.connectedWorkspace}
+            <span className="rail-label">
+              {messages.shell.connectedWorkspace}
+            </span>
           </div>
           <div className="profile-account" ref={accountMenuRef}>
             <button
@@ -524,24 +577,40 @@ export function WorkspaceShell({
 
       <section className="main-panel">
         <header className="top-bar">
-          <button
-            className="btn btn-ghost btn-icon mobile-nav-toggle"
-            type="button"
-            aria-label={
-              isMobileNavOpen
-                ? messages.shell.closeNavigation
-                : messages.shell.openNavigation
-            }
-            aria-expanded={isMobileNavOpen}
-            aria-controls="workspace-navigation"
-            onClick={() => setIsMobileNavOpen((isOpen) => !isOpen)}
-          >
-            <span aria-hidden="true">{isMobileNavOpen ? "×" : "☰"}</span>
-          </button>
-          <div className="breadcrumbs">
-            <span>{selectedOutlet?.name ?? workspaceName}</span>
-            <span className="breadcrumb-slash">/</span>
-            <strong>{pageTitle}</strong>
+          <div className="top-bar-start">
+            <button
+              className="btn btn-ghost btn-icon mobile-nav-toggle"
+              type="button"
+              aria-label={
+                isMobileNavOpen
+                  ? messages.shell.closeNavigation
+                  : messages.shell.openNavigation
+              }
+              aria-expanded={isMobileNavOpen}
+              aria-controls="workspace-navigation"
+              onClick={() => setIsMobileNavOpen((isOpen) => !isOpen)}
+            >
+              <span aria-hidden="true">{isMobileNavOpen ? "×" : "☰"}</span>
+            </button>
+            <button
+              className="btn btn-ghost btn-icon sidebar-collapse-toggle"
+              type="button"
+              aria-label={
+                isSidebarCollapsed
+                  ? messages.shell.expandSidebar
+                  : messages.shell.collapseSidebar
+              }
+              aria-expanded={!isSidebarCollapsed}
+              aria-controls="workspace-navigation"
+              onClick={toggleSidebar}
+            >
+              <span aria-hidden="true">{isSidebarCollapsed ? "»" : "«"}</span>
+            </button>
+            <div className="breadcrumbs">
+              <span>{selectedOutlet?.name ?? workspaceName}</span>
+              <span className="breadcrumb-slash">/</span>
+              <strong>{pageTitle}</strong>
+            </div>
           </div>
           <div className="top-actions">
             {dateLabel && <span className="today-label">{dateLabel}</span>}
