@@ -1209,7 +1209,8 @@ h2 {
   align-items: center;
   gap: 11px;
 }
-.sidebar-collapse-toggle {
+/* Scoped under .top-bar so this beats the later `.btn { display: inline-flex }`. */
+.top-bar .sidebar-collapse-toggle {
   display: none;
 }
 @media (max-width: 1040px) {
@@ -1234,7 +1235,7 @@ h2 {
 
 /* Desktop and tablet: collapsible sidebar that shrinks to an icon rail. */
 @media (min-width: 761px) {
-  .sidebar-collapse-toggle {
+  .top-bar .sidebar-collapse-toggle {
     display: grid;
     flex: none;
   }
@@ -1394,6 +1395,9 @@ h2 {
     justify-content: flex-start;
     gap: 11px;
     padding: 0 14px;
+  }
+  .top-bar-start {
+    flex: 1;
   }
   .top-bar .mobile-nav-toggle {
     display: grid;
