@@ -129,6 +129,18 @@ export const msClock: typeof enClock = {
     notApprovedDetail:
       "Mohon kelulusan untuk peranti ini sebelum mendaftar masuk.",
   },
+  clockOutSummary: {
+    title: "Shif disimpan",
+    subtitle: "Anda telah keluar kerja. Selamat berehat.",
+    outlet: "Outlet",
+    clockedIn: "Masuk kerja",
+    clockedOut: "Keluar kerja",
+    worked: "Jumlah kerja",
+    breaksHeading: "Rehat",
+    breakTotal: "Jumlah rehat",
+    noBreaks: "Tiada rehat diambil",
+    done: "Selesai",
+  },
   notices: {
     clockedIn: "Clock masuk berjaya. Selamat bekerja.",
     clockedOut: "Clock keluar berjaya. Shif disimpan.",
@@ -140,6 +152,7 @@ export const msClock: typeof enClock = {
       "Lokasi tidak tersedia. Minta ketua outlet anda menyemak masa anda.",
     checkingLocation: "Menyemak lokasi anda…",
     recordingAction: "Merekodkan tindakan kehadiran anda…",
+    keepPageOpen: "Biarkan halaman ini terbuka sehingga selesai.",
     refreshingShift: "Memuat semula shif anda…",
     refreshFailed:
       "Tindakan kehadiran direkodkan, tetapi shif anda tidak dapat dimuat semula. Muat semula halaman untuk melihat status semasa anda.",

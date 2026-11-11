@@ -127,6 +127,18 @@ export const enClock = {
     notApprovedTitle: "Browser not approved",
     notApprovedDetail: "Request approval for this browser before clocking.",
   },
+  clockOutSummary: {
+    title: "Shift saved",
+    subtitle: "You're clocked out. Have a good rest.",
+    outlet: "Outlet",
+    clockedIn: "Clocked in",
+    clockedOut: "Clocked out",
+    worked: "Worked",
+    breaksHeading: "Breaks",
+    breakTotal: "Total break",
+    noBreaks: "No breaks taken",
+    done: "Done",
+  },
   notices: {
     clockedIn: "Clocked in. Have a good shift.",
     clockedOut: "Clocked out. Shift saved.",
@@ -138,6 +150,7 @@ export const enClock = {
       "Location is unavailable. Ask your outlet lead to review your time.",
     checkingLocation: "Checking your location…",
     recordingAction: "Recording your clock action…",
+    keepPageOpen: "Keep this page open until it finishes.",
     refreshingShift: "Refreshing your shift…",
     refreshFailed:
       "Clock action recorded, but your shift could not be refreshed. Reload the page to see your current status.",

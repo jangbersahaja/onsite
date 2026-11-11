@@ -128,6 +128,18 @@ export const idClock: typeof enClock = {
     notApprovedTitle: "Browser belum disetujui",
     notApprovedDetail: "Ajukan persetujuan untuk browser ini sebelum absen.",
   },
+  clockOutSummary: {
+    title: "Shift tersimpan",
+    subtitle: "Anda sudah absen pulang. Selamat beristirahat.",
+    outlet: "Outlet",
+    clockedIn: "Absen masuk",
+    clockedOut: "Absen pulang",
+    worked: "Total kerja",
+    breaksHeading: "Istirahat",
+    breakTotal: "Total istirahat",
+    noBreaks: "Tidak ada istirahat",
+    done: "Selesai",
+  },
   notices: {
     clockedIn: "Berhasil absen masuk. Selamat bekerja.",
     clockedOut: "Berhasil absen keluar. Shift tersimpan.",
@@ -139,6 +151,7 @@ export const idClock: typeof enClock = {
       "Lokasi tidak tersedia. Minta kepala outlet Anda untuk meninjau waktu Anda.",
     checkingLocation: "Memeriksa lokasi Anda…",
     recordingAction: "Mencatat tindakan absensi Anda…",
+    keepPageOpen: "Biarkan halaman ini terbuka sampai selesai.",
     refreshingShift: "Memuat ulang shift Anda…",
     refreshFailed:
       "Tindakan absensi tercatat, tetapi shift Anda tidak dapat dimuat ulang. Muat ulang halaman untuk melihat status terkini Anda.",
