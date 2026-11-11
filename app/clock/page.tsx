@@ -4,6 +4,10 @@ import { useConfirmDialog } from "@/app/_components/confirm-dialog";
 import { useLocale } from "@/app/_components/locale-provider";
 import { useReportClockWorkspace } from "@/app/clock/_components/clock-workspace";
 import { CorrectionDialog } from "@/app/clock/_components/correction-dialog";
+import {
+  ClockOutSummaryDialog,
+  type ClockOutSummaryData,
+} from "@/app/clock/_components/clock-out-summary-dialog";
 import { PinSettingsPanel } from "@/app/clock/_components/pin-settings-panel";
 import { SetupScreen } from "@/app/clock/_components/setup-screen";
 import { SignInForm } from "@/app/clock/_components/sign-in-form";
@@ -238,6 +242,41 @@ function formatDuration(
   return formatMinutes(messages, minutes);
 }
 
+function buildClockOutSummary(
+  data: ClockPageData,
+  sessionId: string | null,
+  locale: Locale,
+  messages: Messages,
+): ClockOutSummaryData | null {
+  const record = data.recentSessions.find((item) => item.id === sessionId);
+  if (!record?.clockOutAt) return null;
+  const timeOptions: Intl.DateTimeFormatOptions = {
+    hour: "2-digit",
+    minute: "2-digit",
+  };
+  return {
+    outletName: record.outletName,
+    clockedInLabel: formatDate(
+      locale,
+      record.clockInAt,
+      record.timezone,
+      timeOptions,
+    ),
+    clockedOutLabel: formatDate(
+      locale,
+      record.clockOutAt,
+      record.timezone,
+      timeOptions,
+    ),
+    workedLabel: formatDuration(
+      messages,
+      record.clockInAt,
+      record.clockOutAt,
+      record.breaks,
+    ),
+  };
+}
+
 function formatDate(
   locale: Locale,
   value: Date | string,
@@ -320,6 +359,8 @@ export default function Home() {
     useState<LocationSettingsPlatform | null>(null);
   const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
   const [actionStage, setActionStage] = useState<ProgressStage | null>(null);
+  const [clockOutSummary, setClockOutSummary] =
+    useState<ClockOutSummaryData | null>(null);
   const [isCorrectionDialogOpen, setIsCorrectionDialogOpen] = useState(false);
   const { confirm, confirmDialog } = useConfirmDialog();
   const [clockBlockInfo, setClockBlockInfo] = useState<{
@@ -671,6 +712,16 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, [actionNotice]);
 
+  useEffect(() => {
+    if (!isCheckingLocation) return;
+    const warnBeforeLeaving = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeLeaving);
+    return () => window.removeEventListener("beforeunload", warnBeforeLeaving);
+  }, [isCheckingLocation]);
+
   useReportClockWorkspace({
     pageTitle: messages.clock.pageTitle,
     workspaceName: messages.clock.workspaceFallback,
@@ -771,6 +822,7 @@ export default function Home() {
     )
       return;
     const wasClockedIn = isClockedIn;
+    const openSessionId = activeSession?.id ?? null;
     setIsCheckingLocation(true);
     setClockBlockInfo(null);
     setActionStage("location");
@@ -786,6 +838,7 @@ export default function Home() {
       const response = await fetch("/api/clock", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        keepalive: true,
         signal: AbortSignal.timeout(15_000),
         body: JSON.stringify({
           action: isClockedIn ? "clock_out" : "clock_in",
@@ -814,7 +867,13 @@ export default function Home() {
       stage = "refreshing";
       setActionStage("refreshing");
       setActionNotice({ tone: "status", key: "refreshingShift" });
-      setClockData(await loadClockData());
+      const latest = await loadClockData();
+      setClockData(latest);
+      if (wasClockedIn) {
+        setClockOutSummary(
+          buildClockOutSummary(latest, openSessionId, locale, messages),
+        );
+      }
       setActionNotice({
         tone: "status",
         key: wasClockedIn ? "clockedOut" : "clockedIn",
@@ -829,12 +888,34 @@ export default function Home() {
               : "unavailable",
         });
       }
+      let recordedDespiteError = false;
+      if (stage === "recording") {
+        // The request may have reached the server before the response was
+        // lost (timeout, network drop). Check the real shift state.
+        try {
+          const latest = await loadClockData();
+          setClockData(latest);
+          recordedDespiteError = Boolean(latest.activeSession) !== wasClockedIn;
+          if (recordedDespiteError && wasClockedIn) {
+            setClockOutSummary(
+              buildClockOutSummary(latest, openSessionId, locale, messages),
+            );
+          }
+        } catch {
+          recordedDespiteError = false;
+        }
+      }
       setActionNotice(
         stage === "location"
           ? locationFailureNotice(error)
           : stage === "refreshing"
             ? { tone: "blocked", key: "refreshFailed" }
-            : { tone: "blocked", key: "recordUnconfirmed" },
+            : recordedDespiteError
+              ? {
+                  tone: "status",
+                  key: wasClockedIn ? "clockedOut" : "clockedIn",
+                }
+              : { tone: "blocked", key: "recordUnconfirmed" },
       );
     } finally {
       setIsCheckingLocation(false);
@@ -866,6 +947,7 @@ export default function Home() {
       const response = await fetch("/api/clock", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        keepalive: true,
         signal: AbortSignal.timeout(15_000),
         body: JSON.stringify({ action, outletId: selectedOutlet.id }),
       });
@@ -1076,6 +1158,11 @@ export default function Home() {
                   })}
                 </ol>
               )}
+              {isCheckingLocation && (
+                <p className="clock-action-feedback" role="status">
+                  {messages.clock.notices.keepPageOpen}
+                </p>
+              )}
               {actionNotice && (
                 <p
                   className={`clock-action-feedback${isCheckingLocation || actionNotice.tone === "status" ? "" : " is-blocked"}`}
@@ -1276,6 +1363,10 @@ export default function Home() {
           )}
         </section>
       </main>
+      <ClockOutSummaryDialog
+        summary={clockOutSummary}
+        onClose={() => setClockOutSummary(null)}
+      />
       {confirmDialog}
     </>
   );
