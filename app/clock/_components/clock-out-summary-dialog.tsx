@@ -78,7 +78,7 @@ export function ClockOutSummaryDialog({
             {summary.breaks.length === 0 ? (
               <p className="clock-out-breaks-empty">{copy.noBreaks}</p>
             ) : (
-              <>
+              <div className="clock-out-breaks-card">
                 <ul>
                   {summary.breaks.map((item, index) => (
                     <li key={`${item.timeLabel}-${index}`}>
@@ -91,7 +91,7 @@ export function ClockOutSummaryDialog({
                   <span>{copy.breakTotal}</span>
                   <strong>{summary.breakTotalLabel}</strong>
                 </p>
-              </>
+              </div>
             )}
           </div>
           <button

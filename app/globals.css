@@ -9318,12 +9318,14 @@ body .schedule-brush-custom input {
   font-size: 13px;
   font-weight: 650;
 }
-.clock-out-breaks ul {
-  margin: 0;
-  padding: 0;
+.clock-out-breaks-card {
   border: 1px solid var(--line);
   border-radius: 12px;
   overflow: hidden;
+}
+.clock-out-breaks ul {
+  margin: 0;
+  padding: 0;
   list-style: none;
 }
 .clock-out-breaks li,
@@ -9333,17 +9335,14 @@ body .schedule-brush-custom input {
   justify-content: space-between;
   gap: 16px;
   margin: 0;
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--line);
+  padding: 12px 16px;
 }
-.clock-out-breaks li:last-child {
-  border-bottom: 0;
+.clock-out-breaks li + li {
+  border-top: 1px solid var(--line);
 }
 .clock-out-breaks-total {
-  border: 1px solid var(--line);
-  border-top: 0;
-  border-radius: 0 0 12px 12px;
-  border-bottom: 0;
+  border-top: 1px solid var(--line);
+  background: var(--paper);
   font-size: 14px;
 }
 .clock-out-breaks-total span,
