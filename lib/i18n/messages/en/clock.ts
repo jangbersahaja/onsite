@@ -134,6 +134,9 @@ export const enClock = {
     clockedIn: "Clocked in",
     clockedOut: "Clocked out",
     worked: "Worked",
+    breaksHeading: "Breaks",
+    breakTotal: "Total break",
+    noBreaks: "No breaks taken",
     done: "Done",
   },
   notices: {

@@ -8,6 +8,8 @@ export type ClockOutSummaryData = {
   clockedInLabel: string;
   clockedOutLabel: string;
   workedLabel: string;
+  breaks: { timeLabel: string; durationLabel: string }[];
+  breakTotalLabel: string;
 };
 
 /**
@@ -71,6 +73,27 @@ export function ClockOutSummaryDialog({
               <dd>{summary.workedLabel}</dd>
             </div>
           </dl>
+          <div className="clock-out-breaks">
+            <h3>{copy.breaksHeading}</h3>
+            {summary.breaks.length === 0 ? (
+              <p className="clock-out-breaks-empty">{copy.noBreaks}</p>
+            ) : (
+              <>
+                <ul>
+                  {summary.breaks.map((item, index) => (
+                    <li key={`${item.timeLabel}-${index}`}>
+                      <span>{item.timeLabel}</span>
+                      <strong>{item.durationLabel}</strong>
+                    </li>
+                  ))}
+                </ul>
+                <p className="clock-out-breaks-total">
+                  <span>{copy.breakTotal}</span>
+                  <strong>{summary.breakTotalLabel}</strong>
+                </p>
+              </>
+            )}
+          </div>
           <button
             className="btn btn-primary btn-lg clock-out-summary-done"
             type="button"

@@ -136,6 +136,9 @@ export const msClock: typeof enClock = {
     clockedIn: "Masuk kerja",
     clockedOut: "Keluar kerja",
     worked: "Jumlah kerja",
+    breaksHeading: "Rehat",
+    breakTotal: "Jumlah rehat",
+    noBreaks: "Tiada rehat diambil",
     done: "Selesai",
   },
   notices: {

@@ -254,7 +254,26 @@ function buildClockOutSummary(
     hour: "2-digit",
     minute: "2-digit",
   };
+  const clockOutAt = new Date(record.clockOutAt);
+  const breaks = record.breaks.map((breakInterval) => {
+    const start = new Date(breakInterval.startedAt);
+    const end = breakInterval.endedAt
+      ? new Date(breakInterval.endedAt)
+      : clockOutAt;
+    return {
+      timeLabel: `${formatDate(locale, start, record.timezone, timeOptions)} – ${formatDate(locale, end, record.timezone, timeOptions)}`,
+      durationLabel: formatMinutes(
+        messages,
+        Math.max(0, Math.floor((end.getTime() - start.getTime()) / 60_000)),
+      ),
+    };
+  });
   return {
+    breaks,
+    breakTotalLabel: formatMinutes(
+      messages,
+      getCompletedBreakMinutes(record.breaks),
+    ),
     outletName: record.outletName,
     clockedInLabel: formatDate(
       locale,

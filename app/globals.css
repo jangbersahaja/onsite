@@ -9307,6 +9307,58 @@ body .schedule-brush-custom input {
   font-weight: 650;
   text-align: right;
 }
+.clock-out-breaks {
+  margin: 0 0 22px;
+  text-align: left;
+  animation: clock-out-rise 420ms ease-out 900ms both;
+}
+.clock-out-breaks h3 {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+}
+.clock-out-breaks ul {
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  list-style: none;
+}
+.clock-out-breaks li,
+.clock-out-breaks-total {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.clock-out-breaks li:last-child {
+  border-bottom: 0;
+}
+.clock-out-breaks-total {
+  border: 1px solid var(--line);
+  border-top: 0;
+  border-radius: 0 0 12px 12px;
+  border-bottom: 0;
+  font-size: 14px;
+}
+.clock-out-breaks-total span,
+.clock-out-breaks li span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.clock-out-breaks strong {
+  font-weight: 650;
+}
+.clock-out-breaks-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
 .clock-out-summary-done {
   width: 100%;
   animation: clock-out-rise 420ms ease-out 960ms both;

@@ -135,6 +135,9 @@ export const idClock: typeof enClock = {
     clockedIn: "Absen masuk",
     clockedOut: "Absen pulang",
     worked: "Total kerja",
+    breaksHeading: "Istirahat",
+    breakTotal: "Total istirahat",
+    noBreaks: "Tidak ada istirahat",
     done: "Selesai",
   },
   notices: {
