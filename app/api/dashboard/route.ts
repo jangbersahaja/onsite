@@ -6,6 +6,7 @@ import {
   getDashboardShiftMetrics,
   getDashboardShiftStatus,
   getScheduleWindow,
+  groupDashboardSessions,
   orderDashboardShifts,
   outletScheduleDate,
   scheduledRowStatus,
@@ -216,15 +217,18 @@ export async function GET(request: Request) {
               workedMinutes: 0,
               breakMinutes: 0,
               breaks: [],
-              schedule: {
-                startAt: row.startAt,
-                endAt: row.endAt,
-                flags: result.flags,
-              },
+              schedules: [
+                {
+                  startAt: row.startAt,
+                  endAt: row.endAt,
+                  flags: result.flags,
+                },
+              ],
+              sessions: [],
               unscheduled: false,
             };
           });
-        const onsiteShiftRows = shifts.map((shift) => {
+        const sessionRows = shifts.map((shift) => {
           const shiftBreaks = breaks.filter(
             (breakInterval) => breakInterval.workSessionId === shift.id,
           );
@@ -238,7 +242,6 @@ export async function GET(request: Request) {
           );
           return {
             id: shift.id,
-            source: "onsite" as const,
             userId: shift.userId,
             employeeName: shift.employeeName,
             profilePhotoUrl: shift.profilePhotoPath
@@ -269,6 +272,9 @@ export async function GET(request: Request) {
             unscheduled: hasSchedule && unscheduledIds.has(shift.id),
           };
         });
+        const onsiteShiftRows = groupDashboardSessions(sessionRows).map(
+          (row) => ({ ...row, source: "onsite" as const }),
+        );
         const storeHubShiftRows =
           storeHubAttendance.status === "available"
             ? storeHubAttendance.rows
@@ -314,7 +320,31 @@ export async function GET(request: Request) {
                     breakMinutes:
                       shift.breakMinutes === null ? null : metrics.breakMinutes,
                     breaks: shift.breaks,
-                    schedule: null,
+                    schedules: [],
+                    sessions: [
+                      {
+                        id: shift.id,
+                        clockInAt: shift.clockInAt,
+                        clockOutAt: shift.clockOutAt,
+                        clockInLocal: formatOutletTimestamp(
+                          shift.clockInAt,
+                          outlet.timezone,
+                        ),
+                        clockOutLocal: shift.clockOutAt
+                          ? formatOutletTimestamp(
+                              shift.clockOutAt,
+                              outlet.timezone,
+                            )
+                          : null,
+                        status: getDashboardShiftStatus(
+                          shift.clockInAt,
+                          shift.clockOutAt,
+                          shift.breaks,
+                          evaluatedAt,
+                        ),
+                        unscheduled: false,
+                      },
+                    ],
                     unscheduled: false,
                   };
                 })

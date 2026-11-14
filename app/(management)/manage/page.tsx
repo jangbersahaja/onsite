@@ -24,6 +24,16 @@ type DashboardSchedule = {
   flags: AttendanceFlag[];
 };
 
+type DashboardSession = {
+  id: string;
+  clockInAt: string;
+  clockOutAt: string | null;
+  clockInLocal: string;
+  clockOutLocal: string | null;
+  status: DashboardShiftStatus;
+  unscheduled: boolean;
+};
+
 type DashboardShift = {
   id: string;
   source: "onsite" | "storehub" | "scheduled";
@@ -38,7 +48,8 @@ type DashboardShift = {
   workedMinutes: number | null;
   breakMinutes: number | null;
   breaks: { startedAt: string; endedAt: string | null }[];
-  schedule: DashboardSchedule | null;
+  schedules: DashboardSchedule[];
+  sessions: DashboardSession[];
   unscheduled: boolean;
 };
 
@@ -178,6 +189,14 @@ function scheduleTimeLabel(
   return `${start} – ${end}${endsNextDay ? " (+1 day)" : ""}`;
 }
 
+function sessionTimeLabel(session: DashboardSession, date: string) {
+  const start = formatShiftTime(session.clockInLocal, date);
+  const end = session.clockOutLocal
+    ? formatShiftTime(session.clockOutLocal, date)
+    : "In progress";
+  return `${start} – ${end}`;
+}
+
 function RosterRow({
   shift,
   index,
@@ -192,39 +211,46 @@ function RosterRow({
   showNow: boolean;
 }) {
   const isLive = shift.status === "on_shift" || shift.status === "on_break";
-  const span =
-    shift.clockInAt === null
-      ? null
-      : getTimelineSpan(
-          shift.clockInAt,
-          shift.clockOutAt,
-          outlet.windowStartAt,
-          outlet.windowEndAt,
-          outlet.evaluatedAt,
-        );
-  const scheduleSpan = shift.schedule
-    ? getTimelineSpan(
-        shift.schedule.startAt,
-        shift.schedule.endAt,
-        outlet.windowStartAt,
-        outlet.windowEndAt,
-        outlet.windowEndAt,
-      )
-    : null;
-  const anchor = span ?? scheduleSpan;
-  const scheduleLabel = shift.schedule
-    ? scheduleTimeLabel(shift.schedule, outlet)
-    : null;
-  const timeRange = shift.clockInLocal
-    ? `${formatShiftTime(shift.clockInLocal, outlet.date)} – ${
-        shift.clockOutLocal
-          ? formatShiftTime(shift.clockOutLocal, outlet.date)
-          : "In progress"
-      }`
-    : `Scheduled ${scheduleLabel}`;
-  const flags = shift.schedule
-    ? dashboardRowFlags(shift.schedule.flags, shift.status)
-    : [];
+  const sessionSpans = shift.sessions.map((session) => ({
+    session,
+    span: getTimelineSpan(
+      session.clockInAt,
+      session.clockOutAt,
+      outlet.windowStartAt,
+      outlet.windowEndAt,
+      outlet.evaluatedAt,
+    ),
+  }));
+  const scheduleSpans = shift.schedules.map((schedule) => ({
+    label: scheduleTimeLabel(schedule, outlet),
+    span: getTimelineSpan(
+      schedule.startAt,
+      schedule.endAt,
+      outlet.windowStartAt,
+      outlet.windowEndAt,
+      outlet.windowEndAt,
+    ),
+  }));
+  const anchor =
+    sessionSpans.find((item) => item.span)?.span ??
+    scheduleSpans.find((item) => item.span)?.span ??
+    null;
+  const timeRange =
+    shift.sessions.length > 0
+      ? shift.sessions
+          .map((session) => {
+            const extra =
+              session.unscheduled && !shift.unscheduled
+                ? " (not scheduled)"
+                : "";
+            return `${sessionTimeLabel(session, outlet.date)}${extra}`;
+          })
+          .join(" · ")
+      : `Scheduled ${scheduleSpans.map((item) => item.label).join(" · ")}`;
+  const flags = dashboardRowFlags(
+    [...new Set(shift.schedules.flatMap((schedule) => schedule.flags))],
+    shift.status,
+  );
   const chips = [
     ...(shift.unscheduled
       ? [{ key: "unscheduled", label: "Not scheduled", tone: "is-alert" }]
@@ -293,28 +319,39 @@ function RosterRow({
       </div>
       <div className="dashboard-roster-track-cell">
         <div className="dashboard-roster-track">
-          {scheduleSpan && (
-            <span
-              className="dashboard-roster-scheduled"
-              title={`Scheduled ${scheduleLabel}`}
-              style={{
-                left: `${scheduleSpan.left}%`,
-                width: `${scheduleSpan.width}%`,
-              }}
-            />
+          {scheduleSpans.map(
+            (item, scheduleIndex) =>
+              item.span && (
+                <span
+                  key={scheduleIndex}
+                  className="dashboard-roster-scheduled"
+                  title={`Scheduled ${item.label}`}
+                  style={{
+                    left: `${item.span.left}%`,
+                    width: `${item.span.width}%`,
+                  }}
+                />
+              ),
           )}
-          {span && (
-            <motion.div
-              className={`dashboard-roster-bar is-${shift.status}`}
-              style={{ left: `${span.left}%`, width: `${span.width}%` }}
-              initial={{ scaleX: 0 }}
-              animate={{ scaleX: 1 }}
-              transition={{
-                duration: 0.5,
-                delay: index * 0.03,
-                ease: "easeOut",
-              }}
-            />
+          {sessionSpans.map(
+            (item, sessionIndex) =>
+              item.span && (
+                <motion.div
+                  key={item.session.id}
+                  className={`dashboard-roster-bar is-${shift.status}`}
+                  style={{
+                    left: `${item.span.left}%`,
+                    width: `${item.span.width}%`,
+                  }}
+                  initial={{ scaleX: 0 }}
+                  animate={{ scaleX: 1 }}
+                  transition={{
+                    duration: 0.5,
+                    delay: index * 0.03 + sessionIndex * 0.05,
+                    ease: "easeOut",
+                  }}
+                />
+              ),
           )}
           {shift.breaks.map((interval, breakIndex) => {
             const breakSpan = getTimelineSpan(

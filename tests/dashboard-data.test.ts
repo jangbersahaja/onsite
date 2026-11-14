@@ -5,6 +5,7 @@ import {
   getDashboardShiftStatus,
   getScheduleWindow,
   getTimelineSpan,
+  groupDashboardSessions,
   orderDashboardShifts,
   outletScheduleDate,
   scheduledRowStatus,
@@ -190,4 +191,97 @@ test("timeline span ends an open interval at the evaluation time", () => {
     "2026-10-04T04:00:00.000Z",
   );
   assert.deepEqual(span, { left: 0, width: 25 });
+});
+
+function session(
+  id: string,
+  clockInAt: string,
+  clockOutAt: string | null,
+  overrides: Partial<Parameters<typeof groupDashboardSessions>[0][number]> = {},
+) {
+  return {
+    id,
+    userId: "user-1",
+    employeeName: "Maryfat",
+    profilePhotoUrl: null,
+    clockInAt,
+    clockOutAt,
+    clockInLocal: clockInAt.slice(11, 16),
+    clockOutLocal: clockOutAt ? clockOutAt.slice(11, 16) : null,
+    status: "finished" as const,
+    workedMinutes: 60,
+    breakMinutes: 0,
+    breaks: [],
+    schedule: null,
+    unscheduled: false,
+    ...overrides,
+  };
+}
+
+test("one person's sessions in a day form a single row with combined totals", () => {
+  const schedule = {
+    startAt: "2026-10-04T01:00:00Z",
+    endAt: "2026-10-04T08:00:00Z",
+    flags: ["late" as const],
+  };
+  const [row] = groupDashboardSessions([
+    session("second", "2026-10-04T08:14:00Z", "2026-10-04T08:51:00Z", {
+      workedMinutes: 37,
+      unscheduled: true,
+    }),
+    session("first", "2026-10-04T01:16:00Z", "2026-10-04T08:03:00Z", {
+      workedMinutes: 406,
+      schedule,
+    }),
+  ]);
+
+  assert.equal(row.id, "first");
+  assert.deepEqual(
+    row.sessions.map((item) => item.id),
+    ["first", "second"],
+  );
+  assert.equal(row.workedMinutes, 443);
+  assert.equal(row.clockOutLocal, "08:51");
+  assert.deepEqual(row.schedules, [schedule]);
+  assert.equal(row.unscheduled, false);
+});
+
+test("a person is only unscheduled when none of their sessions match a shift", () => {
+  const [row] = groupDashboardSessions([
+    session("only", "2026-10-04T10:00:00Z", "2026-10-04T11:00:00Z", {
+      unscheduled: true,
+    }),
+  ]);
+  assert.equal(row.unscheduled, true);
+  assert.deepEqual(row.schedules, []);
+});
+
+test("a live session keeps the combined row on shift or on break", () => {
+  const [onShift] = groupDashboardSessions([
+    session("done", "2026-10-04T01:00:00Z", "2026-10-04T03:00:00Z"),
+    session("live", "2026-10-04T04:00:00Z", null, { status: "on_shift" }),
+  ]);
+  assert.equal(onShift.status, "on_shift");
+  assert.equal(onShift.clockOutAt, null);
+  assert.equal(onShift.clockOutLocal, null);
+
+  const [onBreak] = groupDashboardSessions([
+    session("live", "2026-10-04T04:00:00Z", null, { status: "on_shift" }),
+    session("break", "2026-10-04T05:00:00Z", null, { status: "on_break" }),
+  ]);
+  assert.equal(onBreak.status, "on_break");
+});
+
+test("sessions for different people stay in separate rows", () => {
+  const rows = groupDashboardSessions([
+    session("a", "2026-10-04T01:00:00Z", "2026-10-04T02:00:00Z"),
+    session("b", "2026-10-04T01:00:00Z", "2026-10-04T02:00:00Z", {
+      userId: "user-2",
+      employeeName: "Hazriq",
+    }),
+  ]);
+  assert.deepEqual(
+    rows.map((row) => row.employeeName),
+    ["Maryfat", "Hazriq"],
+  );
 });
