@@ -34,6 +34,124 @@ export function orderDashboardShifts<
   );
 }
 
+export type DashboardSchedule = {
+  startAt: Date | string;
+  endAt: Date | string;
+  flags: AttendanceFlag[];
+};
+
+export type DashboardSession = {
+  id: string;
+  clockInAt: Date | string;
+  clockOutAt: Date | string | null;
+  clockInLocal: string;
+  clockOutLocal: string | null;
+  status: DashboardShiftStatus;
+  workedMinutes: number;
+  breakMinutes: number;
+  breaks: DashboardBreak[];
+  schedule: DashboardSchedule | null;
+  unscheduled: boolean;
+};
+
+export type DashboardSessionSummary = Pick<
+  DashboardSession,
+  | "id"
+  | "clockInAt"
+  | "clockOutAt"
+  | "clockInLocal"
+  | "clockOutLocal"
+  | "status"
+  | "unscheduled"
+>;
+
+/** Groups one person's clock sessions for the day into a single roster row. */
+export function groupDashboardSessions(
+  sessions: (DashboardSession & {
+    userId: string;
+    employeeName: string;
+    profilePhotoUrl: string | null;
+  })[],
+) {
+  const byUser = new Map<string, typeof sessions>();
+  for (const session of sessions) {
+    const group = byUser.get(session.userId);
+    if (group) group.push(session);
+    else byUser.set(session.userId, [session]);
+  }
+
+  return [...byUser.values()].map((group) => {
+    const ordered = [...group].sort(
+      (first, second) =>
+        timestamp(first.clockInAt) - timestamp(second.clockInAt),
+    );
+    const first = ordered[0];
+    const last = ordered[ordered.length - 1];
+    const isOpen = ordered.some((session) => session.clockOutAt === null);
+    const schedules = new Map<string, DashboardSchedule>();
+    for (const session of ordered) {
+      if (!session.schedule) continue;
+      const key = `${timestamp(session.schedule.startAt)}|${timestamp(session.schedule.endAt)}`;
+      schedules.set(key, session.schedule);
+    }
+
+    return {
+      id: first.id,
+      userId: first.userId,
+      employeeName: first.employeeName,
+      profilePhotoUrl: first.profilePhotoUrl,
+      clockInAt: first.clockInAt,
+      clockOutAt: isOpen ? null : last.clockOutAt,
+      clockInLocal: first.clockInLocal,
+      clockOutLocal: isOpen ? null : last.clockOutLocal,
+      status: combinedSessionStatus(ordered.map((session) => session.status)),
+      workedMinutes: ordered.reduce(
+        (total, session) => total + session.workedMinutes,
+        0,
+      ),
+      breakMinutes: ordered.reduce(
+        (total, session) => total + session.breakMinutes,
+        0,
+      ),
+      breaks: ordered
+        .flatMap((session) => session.breaks)
+        .sort((first, second) => timestamp(first.startedAt) - timestamp(second.startedAt)),
+      schedules: [...schedules.values()],
+      unscheduled: ordered.every((session) => session.unscheduled),
+      sessions: ordered.map(
+        ({
+          id,
+          clockInAt,
+          clockOutAt,
+          clockInLocal,
+          clockOutLocal,
+          status,
+          unscheduled,
+        }): DashboardSessionSummary => ({
+          id,
+          clockInAt,
+          clockOutAt,
+          clockInLocal,
+          clockOutLocal,
+          status,
+          unscheduled,
+        }),
+      ),
+    };
+  });
+}
+
+/** A person is live while any session is on shift or on break; on break wins. */
+function combinedSessionStatus(
+  statuses: DashboardShiftStatus[],
+): DashboardShiftStatus {
+  return (
+    (["on_break", "on_shift"] as const).find((status) =>
+      statuses.includes(status),
+    ) ?? statuses[0]
+  );
+}
+
 /** Maps a scheduled shift with no clock-in to its row status. */
 export function scheduledRowStatus(
   status: AttendanceStatus,
