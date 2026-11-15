@@ -120,7 +120,8 @@ export const msClock: typeof enClock = {
     browserCheckingDetail:
       "Tindakan kehadiran kekal dikunci sehingga kelulusan peranti ini disahkan.",
     browserApprovedTitle: "Peranti diluluskan",
-    replacementReview: "Permohonan untuk peranti lain sedang disemak oleh pengurus.",
+    replacementReview:
+      "Permohonan untuk peranti lain sedang disemak oleh pengurus.",
     awaitingTitle: "Menunggu kelulusan pengurus",
     awaitingThisBrowser: "Peranti ini sedang menunggu kelulusan pengurus.",
     awaitingOther:

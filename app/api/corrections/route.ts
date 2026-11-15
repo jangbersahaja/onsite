@@ -25,8 +25,8 @@ import { getCorrectionTimeError } from "@/lib/correction-time";
 import { getDb } from "@/lib/db";
 import { notifyOutletManagers } from "@/lib/push-notifications";
 import {
-  getStaffDeviceCookieName,
   findApprovedStaffDevice,
+  getStaffDeviceCookieName,
   isStaffDeviceRequired,
   staffDeviceCookieOptions,
 } from "@/lib/staff-device";

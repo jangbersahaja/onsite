@@ -60,13 +60,31 @@ test("finds the matching active device when a staff member has several", () => {
   const second = createOneTimeToken();
   const pending = createOneTimeToken();
   const devices = [
-    { id: "pending-device", status: "pending" as const, tokenHash: pending.tokenHash },
-    { id: "first-device", status: "active" as const, tokenHash: first.tokenHash },
-    { id: "second-device", status: "active" as const, tokenHash: second.tokenHash },
+    {
+      id: "pending-device",
+      status: "pending" as const,
+      tokenHash: pending.tokenHash,
+    },
+    {
+      id: "first-device",
+      status: "active" as const,
+      tokenHash: first.tokenHash,
+    },
+    {
+      id: "second-device",
+      status: "active" as const,
+      tokenHash: second.tokenHash,
+    },
   ];
 
-  assert.equal(findApprovedStaffDevice(first.token, devices)?.id, "first-device");
-  assert.equal(findApprovedStaffDevice(second.token, devices)?.id, "second-device");
+  assert.equal(
+    findApprovedStaffDevice(first.token, devices)?.id,
+    "first-device",
+  );
+  assert.equal(
+    findApprovedStaffDevice(second.token, devices)?.id,
+    "second-device",
+  );
   assert.equal(findApprovedStaffDevice(pending.token, devices), undefined);
   assert.equal(findApprovedStaffDevice(undefined, devices), undefined);
 });

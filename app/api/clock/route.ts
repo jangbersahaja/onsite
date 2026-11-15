@@ -14,8 +14,8 @@ import { outletPhotoUrl } from "@/lib/outlet-photo";
 import { parseDateRange } from "@/lib/outlet-time";
 import { notifyOutletManagers } from "@/lib/push-notifications";
 import {
-  getStaffDeviceCookieName,
   findApprovedStaffDevice,
+  getStaffDeviceCookieName,
   isStaffDeviceRequired,
   staffDeviceCookieOptions,
 } from "@/lib/staff-device";
