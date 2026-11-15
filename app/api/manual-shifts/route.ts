@@ -18,7 +18,7 @@ import {
 } from "@/lib/manual-shift-request";
 import { outletDateTimeToISOString } from "@/lib/outlet-time";
 import { notifyOutletManagers } from "@/lib/push-notifications";
-import { getActor } from "@/lib/timesheet-actor";
+import { getActor, getStaffActor } from "@/lib/timesheet-actor";
 import { hasOverlap, validateManualShift } from "@/lib/timesheet-create-rules";
 import { and, desc, eq, inArray } from "drizzle-orm";
 
@@ -33,14 +33,14 @@ function unavailable() {
 export async function GET(request: Request) {
   if (!hasServerConfiguration()) return unavailable();
   try {
-    const actor = await getActor(request);
-    if ("error" in actor) {
-      return Response.json({ error: actor.error }, { status: actor.status });
-    }
     const db = getDb();
     const view = new URL(request.url).searchParams.get("view");
 
     if (view === "review") {
+      const actor = await getActor(request);
+      if ("error" in actor) {
+        return Response.json({ error: actor.error }, { status: actor.status });
+      }
       const reviewOutletIds = actor.access.outletIds ?? [];
       if (!reviewOutletIds.length) {
         return Response.json(
@@ -94,6 +94,11 @@ export async function GET(request: Request) {
       return Response.json({ requests: rows });
     }
 
+    const staff = await getStaffActor(request);
+    if ("error" in staff) {
+      return Response.json({ error: staff.error }, { status: staff.status });
+    }
+
     const rows = await db
       .select({
         id: manualShiftRequests.id,
@@ -112,7 +117,7 @@ export async function GET(request: Request) {
       })
       .from(manualShiftRequests)
       .innerJoin(outlets, eq(manualShiftRequests.outletId, outlets.id))
-      .where(eq(manualShiftRequests.requestedBy, actor.userId))
+      .where(eq(manualShiftRequests.requestedBy, staff.userId))
       .orderBy(desc(manualShiftRequests.createdAt))
       .limit(100);
     return Response.json({ requests: rows });
@@ -129,7 +134,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   if (!hasServerConfiguration()) return unavailable();
   try {
-    const actor = await getActor(request);
+    const actor = await getStaffActor(request);
     if ("error" in actor) {
       return Response.json({ error: actor.error }, { status: actor.status });
     }
