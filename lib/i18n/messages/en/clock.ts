@@ -119,11 +119,11 @@ export const enClock = {
     browserCheckingDetail:
       "Clock actions stay locked until this browser's approval is verified.",
     browserApprovedTitle: "Browser approved",
-    replacementReview: "Replacement request is under manager review.",
+    replacementReview: "A request for another browser is under manager review.",
     awaitingTitle: "Awaiting manager approval",
     awaitingThisBrowser: "This browser is awaiting manager approval.",
     awaitingOther:
-      "A device request is already awaiting approval. Ask your manager if you need to replace it.",
+      "A device request is already awaiting approval. Ask your manager to review it before requesting this browser.",
     notApprovedTitle: "Browser not approved",
     notApprovedDetail: "Request approval for this browser before clocking.",
   },
@@ -175,7 +175,7 @@ export const enClock = {
     deviceRequestFailed: "Could not request this device.",
     deviceAlreadyApproved: "This browser is already approved for your account.",
     deviceReplacementAwaiting:
-      "Replacement request is awaiting manager approval.",
+      "Request for this browser is awaiting manager approval.",
     deviceEnrollmentAwaiting:
       "Device enrollment request is awaiting manager approval.",
   },

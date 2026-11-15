@@ -26,7 +26,7 @@ import { getDb } from "@/lib/db";
 import { notifyOutletManagers } from "@/lib/push-notifications";
 import {
   getStaffDeviceCookieName,
-  isApprovedStaffDevice,
+  findApprovedStaffDevice,
   isStaffDeviceRequired,
   staffDeviceCookieOptions,
 } from "@/lib/staff-device";
@@ -1445,7 +1445,7 @@ export async function POST(request: Request) {
       const deviceToken = cookieStore.get(
         getStaffDeviceCookieName(session.user.id),
       )?.value;
-      const [activeDevice] = await db
+      const activeDevices = await db
         .select({
           status: staffDeviceEnrollments.status,
           tokenHash: staffDeviceEnrollments.tokenHash,
@@ -1456,16 +1456,9 @@ export async function POST(request: Request) {
             eq(staffDeviceEnrollments.userId, session.user.id),
             eq(staffDeviceEnrollments.status, "active"),
           ),
-        )
-        .limit(1);
+        );
 
-      if (
-        !isApprovedStaffDevice(
-          deviceToken,
-          activeDevice?.status,
-          activeDevice?.tokenHash,
-        )
-      ) {
+      if (!findApprovedStaffDevice(deviceToken, activeDevices)) {
         return Response.json(
           {
             error: "This browser is not approved for staff clock actions.",

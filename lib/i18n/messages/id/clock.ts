@@ -120,11 +120,11 @@ export const idClock: typeof enClock = {
     browserCheckingDetail:
       "Tindakan absensi tetap terkunci sampai persetujuan browser ini terverifikasi.",
     browserApprovedTitle: "Browser disetujui",
-    replacementReview: "Pengajuan penggantian sedang ditinjau manajer.",
+    replacementReview: "Pengajuan untuk browser lain sedang ditinjau manajer.",
     awaitingTitle: "Menunggu persetujuan manajer",
     awaitingThisBrowser: "Browser ini sedang menunggu persetujuan manajer.",
     awaitingOther:
-      "Pengajuan perangkat sudah menunggu persetujuan. Tanyakan manajer Anda jika Anda perlu menggantinya.",
+      "Pengajuan perangkat sudah menunggu persetujuan. Minta manajer Anda meninjaunya sebelum mengajukan browser ini.",
     notApprovedTitle: "Browser belum disetujui",
     notApprovedDetail: "Ajukan persetujuan untuk browser ini sebelum absen.",
   },
@@ -176,7 +176,7 @@ export const idClock: typeof enClock = {
     deviceRequestFailed: "Perangkat ini tidak dapat diajukan.",
     deviceAlreadyApproved: "Browser ini sudah disetujui untuk akun Anda.",
     deviceReplacementAwaiting:
-      "Pengajuan penggantian sedang menunggu persetujuan manajer.",
+      "Pengajuan untuk browser ini sedang menunggu persetujuan manajer.",
     deviceEnrollmentAwaiting:
       "Pengajuan pendaftaran perangkat sedang menunggu persetujuan manajer.",
   },

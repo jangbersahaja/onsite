@@ -190,6 +190,13 @@
       "when": 1793862702299,
       "tag": "0026_staff_schedules",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1794756374456,
+      "tag": "0027_clear_mockingbird",
+      "breakpoints": true
     }
   ]
 }

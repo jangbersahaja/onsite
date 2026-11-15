@@ -11,8 +11,8 @@ import { getDb } from "@/lib/db";
 import { verifyPassword } from "@/lib/password";
 import { getPinPepper, hashPin, isValidPin } from "@/lib/pin";
 import {
+  findApprovedStaffDevice,
   getStaffDeviceCookieName,
-  matchesStaffDeviceToken,
 } from "@/lib/staff-device";
 import { and, eq } from "drizzle-orm";
 import { cookies } from "next/headers";
@@ -32,9 +32,10 @@ const removePinSchema = z
   .strict();
 
 async function getActiveEnrollment(userId: string) {
-  const [enrollment] = await getDb()
+  const activeDevices = await getDb()
     .select({
       id: staffDeviceEnrollments.id,
+      status: staffDeviceEnrollments.status,
       tokenHash: staffDeviceEnrollments.tokenHash,
     })
     .from(staffDeviceEnrollments)
@@ -52,14 +53,10 @@ async function getActiveEnrollment(userId: string) {
         eq(outletMemberships.isActive, true),
         eq(outlets.isActive, true),
       ),
-    )
-    .limit(1);
-  if (!enrollment) return null;
+    );
 
   const token = (await cookies()).get(getStaffDeviceCookieName(userId))?.value;
-  return matchesStaffDeviceToken(token, enrollment.tokenHash)
-    ? enrollment
-    : null;
+  return findApprovedStaffDevice(token, activeDevices) ?? null;
 }
 
 async function verifyCurrentPassword(userId: string, password: string) {

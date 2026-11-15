@@ -1,5 +1,6 @@
 import { createOneTimeToken } from "@/lib/one-time-token";
 import {
+  findApprovedStaffDevice,
   getStaffDeviceCookieName,
   isApprovedStaffDevice,
   isStaffDeviceRequired,
@@ -52,4 +53,20 @@ test("uses a stable account-scoped cookie name", () => {
 test("rejects malformed credentials and token hashes", () => {
   assert.equal(matchesStaffDeviceToken("short", "a".repeat(64)), false);
   assert.equal(matchesStaffDeviceToken("a".repeat(43), "not-a-hash"), false);
+});
+
+test("finds the matching active device when a staff member has several", () => {
+  const first = createOneTimeToken();
+  const second = createOneTimeToken();
+  const pending = createOneTimeToken();
+  const devices = [
+    { id: "pending-device", status: "pending" as const, tokenHash: pending.tokenHash },
+    { id: "first-device", status: "active" as const, tokenHash: first.tokenHash },
+    { id: "second-device", status: "active" as const, tokenHash: second.tokenHash },
+  ];
+
+  assert.equal(findApprovedStaffDevice(first.token, devices)?.id, "first-device");
+  assert.equal(findApprovedStaffDevice(second.token, devices)?.id, "second-device");
+  assert.equal(findApprovedStaffDevice(pending.token, devices), undefined);
+  assert.equal(findApprovedStaffDevice(undefined, devices), undefined);
 });

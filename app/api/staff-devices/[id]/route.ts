@@ -164,17 +164,6 @@ export async function PATCH(
     const now = new Date();
     const result = await db.transaction(async (tx) => {
       if (action === "approve") {
-        const revoked = await tx
-          .update(staffDeviceEnrollments)
-          .set({ status: "revoked", revokedAt: now, updatedAt: now })
-          .where(
-            and(
-              eq(staffDeviceEnrollments.userId, target.userId),
-              eq(staffDeviceEnrollments.status, "active"),
-            ),
-          )
-          .returning({ id: staffDeviceEnrollments.id });
-
         const [approved] = await tx
           .update(staffDeviceEnrollments)
           .set({
@@ -194,15 +183,6 @@ export async function PATCH(
 
         if (!approved) throw new Error("STAFF_DEVICE_STATE_CONFLICT");
 
-        for (const previousDevice of revoked) {
-          await recordAudit(tx, {
-            actorId: session.user.id,
-            action: "staff_device_revoked",
-            entityType: "staff_device_enrollment",
-            entityId: previousDevice.id,
-            newValues: { userId: target.userId, replacementId: target.id },
-          });
-        }
         await recordAudit(tx, {
           actorId: session.user.id,
           action: "staff_device_enrollment_approved",

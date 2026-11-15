@@ -36,7 +36,7 @@ type TeamPerson = {
   canManageAccess: boolean;
   canReset: boolean;
   pendingDevice: StaffDevice | undefined;
-  activeDevice: StaffDevice | undefined;
+  activeDevices: StaffDevice[];
 };
 
 type PendingRegistration = {
@@ -215,13 +215,13 @@ function TeamCardMenuButton({
 
 function deviceStatusLabel(person: TeamPerson) {
   if (!person.canAccessClock) return "Not required";
+  const activeCount = person.activeDevices.length;
   if (person.pendingDevice)
-    return person.activeDevice
-      ? "Replacement awaiting approval"
-      : "Awaiting approval";
-  return person.activeDevice
-    ? (person.activeDevice.deviceName ?? "Unknown device")
-    : "Not enrolled";
+    return activeCount ? "New device awaiting approval" : "Awaiting approval";
+  if (activeCount === 0) return "Not enrolled";
+  if (activeCount === 1)
+    return person.activeDevices[0].deviceName ?? "Unknown device";
+  return `${activeCount} trusted devices`;
 }
 
 type TeamView = "people" | "approvals" | "registration";
@@ -658,7 +658,7 @@ export default function TeamPage() {
         canManageAccess: member.canManageAccess,
         canReset: member.canReset,
         pendingDevice: devices.find((device) => device.status === "pending"),
-        activeDevice: devices.find((device) => device.status === "active"),
+        activeDevices: devices.filter((device) => device.status === "active"),
       });
     }
   }
@@ -677,7 +677,6 @@ export default function TeamPage() {
     (person) => person.userId === openActionMenu,
   );
   const actionPending = actionPerson?.pendingDevice;
-  const actionActive = actionPerson?.activeDevice;
   const visiblePendingRegistrations = pendingRegistrations.filter(
     (registration) => !outletId || registration.outletId === outletId,
   );
@@ -800,21 +799,22 @@ export default function TeamPage() {
                   Review request
                 </Link>
               )}
-              {actionActive && (
+              {actionPerson?.activeDevices.map((device) => (
                 <button
+                  key={device.id}
                   className="btn btn-danger btn-block"
                   type="button"
                   disabled={Boolean(deviceActionId)}
                   onClick={async () => {
-                    await handleStaffDeviceAction(actionActive.id, "revoke");
+                    await handleStaffDeviceAction(device.id, "revoke");
                     setOpenActionMenu(null);
                   }}
                 >
-                  {deviceActionId === actionActive.id
+                  {deviceActionId === device.id
                     ? "Saving…"
-                    : "Revoke device"}
+                    : `Revoke ${device.deviceName ?? "device"}`}
                 </button>
-              )}
+              ))}
             </div>
           </div>
         )}
@@ -991,7 +991,7 @@ export default function TeamPage() {
                       </div>
                       {(person.canReset ||
                         person.pendingDevice ||
-                        person.activeDevice) && (
+                        person.activeDevices.length > 0) && (
                         <TeamCardMenuButton
                           name={person.name}
                           onOpen={() => setOpenActionMenu(person.userId)}
@@ -1068,29 +1068,27 @@ export default function TeamPage() {
                               {" · "}
                               {formatExpiry(person.pendingDevice.createdAt)}
                             </small>
-                          ) : person.activeDevice?.approvedAt ? (
+                          ) : person.activeDevices[0]?.approvedAt ? (
                             <small>
-                              {formatExpiry(person.activeDevice.approvedAt)}
+                              {formatExpiry(person.activeDevices[0].approvedAt)}
                             </small>
                           ) : null}
                         </div>
-                        {person.activeDevice && (
+                        {person.activeDevices.map((device) => (
                           <button
+                            key={device.id}
                             className="btn btn-danger btn-icon btn-sm"
                             type="button"
-                            aria-label="Revoke device"
-                            title="Revoke device"
+                            aria-label={`Revoke ${device.deviceName ?? "device"}`}
+                            title={`Revoke ${device.deviceName ?? "device"}`}
                             disabled={Boolean(deviceActionId)}
                             onClick={() =>
-                              void handleStaffDeviceAction(
-                                person.activeDevice!.id,
-                                "revoke",
-                              )
+                              void handleStaffDeviceAction(device.id, "revoke")
                             }
                           >
                             <CloseIcon />
                           </button>
-                        )}
+                        ))}
                       </div>
                     </td>
                     <td data-label="Actions">
@@ -1133,13 +1131,6 @@ export default function TeamPage() {
               </tbody>
             </table>
           </div>
-          {visiblePeople.some(
-            (person) => person.pendingDevice && person.activeDevice,
-          ) && (
-            <p className="auth-description">
-              Approving a replacement immediately revokes the previous device.
-            </p>
-          )}
           {issuedResetLink && (
             <div className="issued-invite">
               <input

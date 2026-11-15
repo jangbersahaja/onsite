@@ -1,0 +1,1 @@
+DROP INDEX "staff_device_one_active_per_user_uq";

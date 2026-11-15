@@ -143,9 +143,6 @@ export const staffDeviceEnrollments = pgTable(
     uniqueIndex("staff_device_one_pending_per_user_uq")
       .on(table.userId)
       .where(sql`${table.status} = 'pending'`),
-    uniqueIndex("staff_device_one_active_per_user_uq")
-      .on(table.userId)
-      .where(sql`${table.status} = 'active'`),
     index("staff_device_user_idx").on(table.userId),
   ],
 );

@@ -12,8 +12,8 @@ import { describeDeviceFromUserAgent } from "@/lib/device-name";
 import { createOneTimeToken } from "@/lib/one-time-token";
 import { getPinPepper } from "@/lib/pin";
 import {
+  findApprovedStaffDevice,
   getStaffDeviceCookieName,
-  isApprovedStaffDevice,
   matchesStaffDeviceToken,
   staffDeviceCookieOptions,
 } from "@/lib/staff-device";
@@ -154,16 +154,16 @@ export async function GET(request: Request) {
       )
       .orderBy(desc(staffDeviceEnrollments.createdAt));
     const pending = enrollments.find((device) => device.status === "pending");
-    const active = enrollments.find((device) => device.status === "active");
+    const activeDevices = enrollments.filter(
+      (device) => device.status === "active",
+    );
+    const hasActive = activeDevices.length > 0;
     const cookieStore = await cookies();
     const currentToken = cookieStore.get(
       getStaffDeviceCookieName(session.user.id),
     )?.value;
-    if (
-      active &&
-      currentToken &&
-      isApprovedStaffDevice(currentToken, active.status, active.tokenHash)
-    ) {
+    const currentDevice = findApprovedStaffDevice(currentToken, activeDevices);
+    if (currentDevice && currentToken) {
       cookieStore.set(
         getStaffDeviceCookieName(session.user.id),
         currentToken,
@@ -174,27 +174,19 @@ export async function GET(request: Request) {
     return Response.json({
       required: true,
       status: pending
-        ? active
+        ? hasActive
           ? "replacement_pending"
           : "pending"
-        : active
+        : hasActive
           ? "active"
           : "not_enrolled",
-      hasActiveDevice: Boolean(active),
-      currentBrowserApproved: active
-        ? isApprovedStaffDevice(currentToken, active.status, active.tokenHash)
-        : false,
+      hasActiveDevice: hasActive,
+      currentBrowserApproved: Boolean(currentDevice),
       currentBrowserHasPendingRequest: pending
         ? matchesStaffDeviceToken(currentToken, pending.tokenHash)
         : false,
       pinConfigured: Boolean(getPinPepper()),
-      currentBrowserPinEnabled: active
-        ? isApprovedStaffDevice(
-            currentToken,
-            active.status,
-            active.tokenHash,
-          ) && Boolean(active.pinHash)
-        : false,
+      currentBrowserPinEnabled: Boolean(currentDevice?.pinHash),
       pendingRequestedAt: pending?.createdAt ?? null,
     });
   } catch {
@@ -257,13 +249,16 @@ export async function POST(request: Request) {
         ),
       );
     const pending = enrollments.find((device) => device.status === "pending");
-    const active = enrollments.find((device) => device.status === "active");
+    const activeDevices = enrollments.filter(
+      (device) => device.status === "active",
+    );
+    const hasActive = activeDevices.length > 0;
 
     if (pending) {
       if (matchesStaffDeviceToken(currentToken, pending.tokenHash)) {
         return Response.json({
           status: "pending",
-          replacement: Boolean(active),
+          replacement: hasActive,
         });
       }
       return Response.json(
@@ -275,10 +270,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (
-      active &&
-      isApprovedStaffDevice(currentToken, active.status, active.tokenHash)
-    ) {
+    if (findApprovedStaffDevice(currentToken, activeDevices)) {
       return Response.json({ status: "active", replacement: false });
     }
 
@@ -300,7 +292,7 @@ export async function POST(request: Request) {
         action: "staff_device_enrollment_requested",
         entityType: "staff_device_enrollment",
         entityId: enrollment.id,
-        newValues: { userId: session.user.id, replacement: Boolean(active) },
+        newValues: { userId: session.user.id, replacement: hasActive },
       });
       return enrollment;
     });
@@ -309,7 +301,7 @@ export async function POST(request: Request) {
 
     return Response.json({
       status: "pending",
-      replacement: Boolean(active),
+      replacement: hasActive,
       requestId: created.id,
     });
   } catch (error) {

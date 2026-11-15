@@ -120,11 +120,11 @@ export const msClock: typeof enClock = {
     browserCheckingDetail:
       "Tindakan kehadiran kekal dikunci sehingga kelulusan peranti ini disahkan.",
     browserApprovedTitle: "Peranti diluluskan",
-    replacementReview: "Permohonan penggantian sedang disemak oleh pengurus.",
+    replacementReview: "Permohonan untuk peranti lain sedang disemak oleh pengurus.",
     awaitingTitle: "Menunggu kelulusan pengurus",
     awaitingThisBrowser: "Peranti ini sedang menunggu kelulusan pengurus.",
     awaitingOther:
-      "Permohonan peranti sudah menunggu kelulusan. Tanya pengurus anda jika anda perlu menggantikannya.",
+      "Permohonan peranti sudah menunggu kelulusan. Minta pengurus anda menyemaknya sebelum memohon peranti ini.",
     notApprovedTitle: "Peranti tidak diluluskan",
     notApprovedDetail:
       "Mohon kelulusan untuk peranti ini sebelum mendaftar masuk.",
@@ -177,7 +177,7 @@ export const msClock: typeof enClock = {
     deviceRequestFailed: "Peranti ini tidak dapat dimohon.",
     deviceAlreadyApproved: "Peranti ini sudah diluluskan untuk akaun anda.",
     deviceReplacementAwaiting:
-      "Permohonan penggantian sedang menunggu kelulusan pengurus.",
+      "Permohonan untuk peranti ini sedang menunggu kelulusan pengurus.",
     deviceEnrollmentAwaiting:
       "Permohonan pendaftaran peranti sedang menunggu kelulusan pengurus.",
   },

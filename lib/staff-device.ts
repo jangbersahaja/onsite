@@ -46,3 +46,11 @@ export function isApprovedStaffDevice(
 ) {
   return status === "active" && matchesStaffDeviceToken(token, storedTokenHash);
 }
+
+export function findApprovedStaffDevice<
+  T extends { status: StaffDeviceStatus; tokenHash: string },
+>(token: string | undefined, devices: readonly T[]) {
+  return devices.find((device) =>
+    isApprovedStaffDevice(token, device.status, device.tokenHash),
+  );
+}

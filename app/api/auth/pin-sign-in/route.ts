@@ -12,8 +12,8 @@ import { getDb } from "@/lib/db";
 import { localeCookie } from "@/lib/i18n/config";
 import { getPinPepper, verifyPin } from "@/lib/pin";
 import {
+  findApprovedStaffDevice,
   getStaffDeviceCookieName,
-  matchesStaffDeviceToken,
 } from "@/lib/staff-device";
 import { and, eq, inArray } from "drizzle-orm";
 import { cookies } from "next/headers";
@@ -160,10 +160,11 @@ export async function POST(request: Request) {
       );
     }
 
-    const [enrollment] = account?.canAccessClock
+    const activeDevices = account?.canAccessClock
       ? await db
           .select({
             id: staffDeviceEnrollments.id,
+            status: staffDeviceEnrollments.status,
             tokenHash: staffDeviceEnrollments.tokenHash,
             pinHash: staffDeviceEnrollments.pinHash,
           })
@@ -181,16 +182,13 @@ export async function POST(request: Request) {
               eq(outlets.isActive, true),
             ),
           )
-          .limit(1)
       : [];
 
     const deviceToken = (await cookies()).get(
       getStaffDeviceCookieName(userId),
     )?.value;
-    const deviceApproved = Boolean(
-      enrollment && matchesStaffDeviceToken(deviceToken, enrollment.tokenHash),
-    );
-    if (!account || !enrollment || !deviceApproved) {
+    const enrollment = findApprovedStaffDevice(deviceToken, activeDevices);
+    if (!account || !enrollment) {
       await recordFailure([addressKey], now);
       return Response.json(
         {
