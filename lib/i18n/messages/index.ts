@@ -6,6 +6,7 @@ import { enDialogs } from "./en/dialogs";
 import { enErrors } from "./en/errors";
 import { enHistory } from "./en/history";
 import { enProfile } from "./en/profile";
+import { enSchedule } from "./en/schedule";
 import { enShell } from "./en/shell";
 import { idAuth } from "./id/auth";
 import { idClock } from "./id/clock";
@@ -14,6 +15,7 @@ import { idDialogs } from "./id/dialogs";
 import { idErrors } from "./id/errors";
 import { idHistory } from "./id/history";
 import { idProfile } from "./id/profile";
+import { idSchedule } from "./id/schedule";
 import { idShell } from "./id/shell";
 import { msAuth } from "./ms/auth";
 import { msClock } from "./ms/clock";
@@ -22,6 +24,7 @@ import { msDialogs } from "./ms/dialogs";
 import { msErrors } from "./ms/errors";
 import { msHistory } from "./ms/history";
 import { msProfile } from "./ms/profile";
+import { msSchedule } from "./ms/schedule";
 import { msShell } from "./ms/shell";
 
 export type Messages = {
@@ -30,6 +33,7 @@ export type Messages = {
   errors: typeof enErrors;
   clock: typeof enClock;
   history: typeof enHistory;
+  schedule: typeof enSchedule;
   dialogs: typeof enDialogs;
   shell: typeof enShell;
   profile: typeof enProfile;
@@ -42,6 +46,7 @@ const dictionaries: Record<Locale, Messages> = {
     errors: enErrors,
     clock: enClock,
     history: enHistory,
+    schedule: enSchedule,
     dialogs: enDialogs,
     shell: enShell,
     profile: enProfile,
@@ -52,6 +57,7 @@ const dictionaries: Record<Locale, Messages> = {
     errors: msErrors,
     clock: msClock,
     history: msHistory,
+    schedule: msSchedule,
     dialogs: msDialogs,
     shell: msShell,
     profile: msProfile,
@@ -62,6 +68,7 @@ const dictionaries: Record<Locale, Messages> = {
     errors: idErrors,
     clock: idClock,
     history: idHistory,
+    schedule: idSchedule,
     dialogs: idDialogs,
     shell: idShell,
     profile: idProfile,

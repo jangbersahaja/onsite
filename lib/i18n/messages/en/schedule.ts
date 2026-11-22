@@ -1,0 +1,53 @@
+export const enSchedule = {
+  navigation: "Schedule",
+  page: {
+    title: "Schedule",
+    subheading: "Your published shifts, in outlet time.",
+    fallbackWorkspace: "Timekeeping",
+  },
+  controls: {
+    week: "Week",
+    month: "Month",
+    calendar: "Calendar",
+    agenda: "Agenda",
+    previousWeek: "Previous week",
+    nextWeek: "Next week",
+    previousMonth: "Previous month",
+    nextMonth: "Next month",
+    today: "Today",
+    jumpToDate: "Jump to date",
+    refresh: "Refresh schedule",
+    download: "Add to calendar",
+  },
+  summary: {
+    shifts: "Shifts",
+    scheduledTime: "Scheduled time",
+    nextShift: "Next shift",
+    noneScheduled: "Nothing scheduled",
+  },
+  shift: {
+    published: "Published",
+    start: "Start",
+    end: "End",
+    break: "Unpaid break",
+    paidTime: "Paid time",
+    note: "Shift note",
+    outlet: "Outlet",
+    overnight: "Ends next day",
+    openClock: "Open Clock",
+    details: "Shift details",
+    close: "Close shift details",
+  },
+  states: {
+    loading: "Loading your schedule...",
+    openingBackoffice: "Opening Backoffice...",
+    emptyTitle: "No published shifts",
+    emptyBody: "Your manager has not published shifts for this range yet.",
+    noOutletTitle: "No outlet assigned",
+    noOutletBody:
+      "An active outlet membership is required to view your schedule.",
+  },
+  errors: {
+    loadFailed: "Could not load your schedule.",
+  },
+};

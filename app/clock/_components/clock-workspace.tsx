@@ -64,6 +64,12 @@ export function ClockWorkspaceFrame({
           requiredAccess: "clock",
         },
         {
+          href: "/clock/schedule",
+          label: messages.schedule.navigation,
+          glyph: "▦",
+          requiredAccess: "clock",
+        },
+        {
           href: "/clock/history",
           label: messages.clock.navigation.history,
           glyph: "▤",
