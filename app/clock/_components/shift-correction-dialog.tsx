@@ -29,6 +29,7 @@ export type ShiftCorrectionShift = {
   clockInAt: string;
   clockOutAt: string | null;
   breaks: { id: string; startedAt: string; endedAt: string | null }[];
+  staffUserId?: string;
 };
 
 type ShiftCorrectionDialogProps = {
@@ -136,6 +137,7 @@ export function ShiftCorrectionDialog({
           body: JSON.stringify({
             outletId: shift.outletId,
             workSessionId: shift.id,
+            ...(shift.staffUserId ? { staffUserId: shift.staffUserId } : {}),
             reasonCode,
             reason:
               reasonCode === "other" ? reason : t.reasonOptions[reasonCode],

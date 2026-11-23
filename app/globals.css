@@ -5166,6 +5166,16 @@ small,
   position: relative;
   border-bottom: 1px solid var(--line);
 }
+.dashboard-roster-row.is-clickable {
+  cursor: pointer;
+}
+.dashboard-roster-row.is-clickable:hover {
+  background: color-mix(in srgb, var(--line) 35%, transparent);
+}
+.dashboard-roster-row.is-clickable:focus-visible {
+  outline: 2px solid var(--break);
+  outline-offset: -2px;
+}
 .dashboard-roster-row:last-child {
   border-bottom: 0;
 }

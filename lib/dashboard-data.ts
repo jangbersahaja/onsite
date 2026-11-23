@@ -2,6 +2,7 @@ import { outletDateTimeToISOString } from "@/lib/outlet-time";
 import type { AttendanceFlag, AttendanceStatus } from "@/lib/schedule-rules";
 
 export type DashboardBreak = {
+  id: string;
   startedAt: Date | string;
   endedAt: Date | string | null;
 };
@@ -63,6 +64,7 @@ export type DashboardSessionSummary = Pick<
   | "clockOutLocal"
   | "status"
   | "unscheduled"
+  | "breaks"
 >;
 
 /** Groups one person's clock sessions for the day into a single roster row. */
@@ -115,7 +117,10 @@ export function groupDashboardSessions(
       ),
       breaks: ordered
         .flatMap((session) => session.breaks)
-        .sort((first, second) => timestamp(first.startedAt) - timestamp(second.startedAt)),
+        .sort(
+          (first, second) =>
+            timestamp(first.startedAt) - timestamp(second.startedAt),
+        ),
       schedules: [...schedules.values()],
       unscheduled: ordered.every((session) => session.unscheduled),
       sessions: ordered.map(
@@ -127,6 +132,7 @@ export function groupDashboardSessions(
           clockOutLocal,
           status,
           unscheduled,
+          breaks,
         }): DashboardSessionSummary => ({
           id,
           clockInAt,
@@ -135,6 +141,7 @@ export function groupDashboardSessions(
           clockOutLocal,
           status,
           unscheduled,
+          breaks,
         }),
       ),
     };
@@ -262,7 +269,7 @@ function clippedIntervalMinutes(
 export function getDashboardShiftMetrics(
   clockInAt: Date | string,
   clockOutAt: Date | string | null,
-  breaks: DashboardBreak[],
+  breaks: Pick<DashboardBreak, "startedAt" | "endedAt">[],
   windowStartAt: Date,
   windowEndAt: Date,
   evaluatedAt: Date,
@@ -287,7 +294,7 @@ export function getDashboardShiftMetrics(
 export function getDashboardShiftStatus(
   clockInAt: Date | string,
   clockOutAt: Date | string | null,
-  breaks: DashboardBreak[],
+  breaks: Pick<DashboardBreak, "startedAt" | "endedAt">[],
   evaluatedAt: Date,
 ): DashboardShiftStatus {
   const now = evaluatedAt.getTime();

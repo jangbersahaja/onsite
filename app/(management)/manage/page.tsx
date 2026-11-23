@@ -5,6 +5,10 @@ import { RefreshIcon } from "@/app/_components/icons";
 import { OutletAvatar } from "@/app/_components/outlet-avatar";
 import { OutletHero } from "@/app/_components/outlet-hero";
 import {
+  ShiftCorrectionDialog,
+  type ShiftCorrectionShift,
+} from "@/app/clock/_components/shift-correction-dialog";
+import {
   dashboardRowFlags,
   getTimelineSpan,
   outletCalendarDate,
@@ -32,6 +36,7 @@ type DashboardSession = {
   clockOutLocal: string | null;
   status: DashboardShiftStatus;
   unscheduled: boolean;
+  breaks: { id: string; startedAt: string; endedAt: string | null }[];
 };
 
 type DashboardShift = {
@@ -203,14 +208,17 @@ function RosterRow({
   outlet,
   nowPercent,
   showNow,
+  onOpen,
 }: {
   shift: DashboardShift;
   index: number;
   outlet: DashboardOutlet;
   nowPercent: number;
   showNow: boolean;
+  onOpen: (shift: DashboardShift) => void;
 }) {
   const isLive = shift.status === "on_shift" || shift.status === "on_break";
+  const isClickable = shift.sessions.length > 0;
   const sessionSpans = shift.sessions.map((session) => ({
     session,
     span: getTimelineSpan(
@@ -267,7 +275,22 @@ function RosterRow({
   return (
     <motion.div
       layout
-      className={`dashboard-roster-row is-${shift.status}`}
+      className={`dashboard-roster-row is-${shift.status}${isClickable ? " is-clickable" : ""}`}
+      role={isClickable ? "button" : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+      aria-label={
+        isClickable ? `Adjust ${shift.employeeName}'s shift` : undefined
+      }
+      onClick={isClickable ? () => onOpen(shift) : undefined}
+      onKeyDown={
+        isClickable
+          ? (event) => {
+              if (event.key !== "Enter" && event.key !== " ") return;
+              event.preventDefault();
+              onOpen(shift);
+            }
+          : undefined
+      }
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.25, delay: index * 0.03 }}
@@ -405,7 +428,13 @@ function RosterRow({
   );
 }
 
-function ShiftRoster({ outlet }: { outlet: DashboardOutlet }) {
+function ShiftRoster({
+  outlet,
+  onOpenShift,
+}: {
+  outlet: DashboardOutlet;
+  onOpenShift: (shift: DashboardShift, outlet: DashboardOutlet) => void;
+}) {
   const windowStart = timestampMs(outlet.windowStartAt);
   const windowEnd = timestampMs(outlet.windowEndAt);
   const nowPercent =
@@ -415,6 +444,7 @@ function ShiftRoster({ outlet }: { outlet: DashboardOutlet }) {
   const showNow = nowPercent > 0 && nowPercent < 100;
   const upcoming = outlet.shifts.filter((shift) => shift.status === "upcoming");
   const current = outlet.shifts.filter((shift) => shift.status !== "upcoming");
+  const onOpen = (shift: DashboardShift) => onOpenShift(shift, outlet);
 
   return (
     <div
@@ -441,6 +471,7 @@ function ShiftRoster({ outlet }: { outlet: DashboardOutlet }) {
           outlet={outlet}
           nowPercent={nowPercent}
           showNow={showNow}
+          onOpen={onOpen}
         />
       ))}
       {upcoming.length > 0 && (
@@ -454,6 +485,7 @@ function ShiftRoster({ outlet }: { outlet: DashboardOutlet }) {
               outlet={outlet}
               nowPercent={nowPercent}
               showNow={showNow}
+              onOpen={onOpen}
             />
           ))}
         </details>
@@ -497,6 +529,22 @@ export default function ManagePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [refreshCount, setRefreshCount] = useState(0);
+  const [editing, setEditing] = useState<ShiftCorrectionShift | null>(null);
+
+  const openShift = (shift: DashboardShift, outlet: DashboardOutlet) => {
+    const session = shift.sessions[shift.sessions.length - 1];
+    if (!session || !shift.userId) return;
+    setEditing({
+      id: session.id,
+      outletId: outlet.id,
+      outletName: outlet.name,
+      timezone: outlet.timezone,
+      clockInAt: session.clockInAt,
+      clockOutAt: session.clockOutAt,
+      breaks: session.breaks,
+      staffUserId: shift.userId,
+    });
+  };
 
   useEffect(() => {
     let active = true;
@@ -698,7 +746,7 @@ export default function ManagePage() {
                 )}
 
                 {outlet.shifts.length > 0 ? (
-                  <ShiftRoster outlet={outlet} />
+                  <ShiftRoster outlet={outlet} onOpenShift={openShift} />
                 ) : (
                   <p className="dashboard-empty">
                     No shift records for this date.
@@ -711,6 +759,19 @@ export default function ManagePage() {
           <p className="dashboard-updating" role="status">
             Updating schedule…
           </p>
+        )}
+        {editing && (
+          <ShiftCorrectionDialog
+            key={editing.id}
+            shift={editing}
+            onOpenChange={(open) => {
+              if (!open) setEditing(null);
+            }}
+            onSaved={async (error) => {
+              setRefreshCount((count) => count + 1);
+              if (error) setMessage(error.text);
+            }}
+          />
         )}
       </main>
     </MotionConfig>
