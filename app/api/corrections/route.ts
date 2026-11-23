@@ -40,6 +40,8 @@ const timestampSchema = z.string().datetime({ offset: true });
 const correctionSchema = z
   .object({
     outletId: z.string().uuid(),
+    // Set by a manager adjusting a staff member's shift from the dashboard.
+    staffUserId: z.string().uuid().optional(),
     workSessionId: z.string().uuid().nullable(),
     event: z.enum(CORRECTION_EVENTS),
     requestedAt: timestampSchema,
@@ -1413,6 +1415,22 @@ export async function POST(request: Request) {
       );
     }
 
+    const actingForStaff =
+      input.staffUserId !== undefined && input.staffUserId !== session.user.id;
+    if (actingForStaff) {
+      const access = await getTeamAccess(session.user.id);
+      if (!access?.outletIds.includes(input.outletId)) {
+        return Response.json(
+          {
+            error: "You cannot adjust shifts for this outlet.",
+            code: "outlet_not_managed",
+          },
+          { status: 403 },
+        );
+      }
+    }
+    const subjectUserId = actingForStaff ? input.staffUserId! : session.user.id;
+
     const db = getDb();
     const [assignment] = await db
       .select({
@@ -1422,7 +1440,7 @@ export async function POST(request: Request) {
       .innerJoin(outlets, eq(outletMemberships.outletId, outlets.id))
       .where(
         and(
-          eq(outletMemberships.userId, session.user.id),
+          eq(outletMemberships.userId, subjectUserId),
           eq(outletMemberships.outletId, input.outletId),
           eq(outletMemberships.isActive, true),
           eq(outlets.isActive, true),
@@ -1440,7 +1458,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (isStaffDeviceRequired(session.user.canAccessClock)) {
+    if (!actingForStaff && isStaffDeviceRequired(session.user.canAccessClock)) {
       const cookieStore = await cookies();
       const deviceToken = cookieStore.get(
         getStaffDeviceCookieName(session.user.id),
@@ -1481,7 +1499,7 @@ export async function POST(request: Request) {
         return submitBreakCorrection(tx, {
           event: input.event,
           input,
-          userId: session.user.id,
+          userId: subjectUserId,
           timezone: assignment.timezone,
           now,
         });
@@ -1494,7 +1512,7 @@ export async function POST(request: Request) {
           .where(
             and(
               eq(workSessions.id, input.workSessionId),
-              eq(workSessions.userId, session.user.id),
+              eq(workSessions.userId, subjectUserId),
               eq(workSessions.outletId, input.outletId),
             ),
           )
@@ -1521,7 +1539,7 @@ export async function POST(request: Request) {
           .from(workSessions)
           .where(
             and(
-              eq(workSessions.userId, session.user.id),
+              eq(workSessions.userId, subjectUserId),
               isNull(workSessions.clockOutAt),
             ),
           )
@@ -1552,7 +1570,7 @@ export async function POST(request: Request) {
 
       if (input.event === "clock_in") {
         const overlapConditions = [
-          eq(workSessions.userId, session.user.id),
+          eq(workSessions.userId, subjectUserId),
           lte(workSessions.clockInAt, requestedAt),
           or(
             isNull(workSessions.clockOutAt),
@@ -1655,7 +1673,7 @@ export async function POST(request: Request) {
         [updatedSession] = await tx
           .insert(workSessions)
           .values({
-            userId: session.user.id,
+            userId: subjectUserId,
             outletId: input.outletId,
             timezone: assignment.timezone,
             clockInAt: requestedAt,
@@ -1676,7 +1694,7 @@ export async function POST(request: Request) {
       const [correction] = await tx
         .insert(correctionRequests)
         .values({
-          requestedBy: session.user.id,
+          requestedBy: subjectUserId,
           outletId: input.outletId,
           timezone: assignment.timezone,
           workSessionId: updatedSession.id,
