@@ -1,4 +1,10 @@
-import { scheduledShifts, user, workBreaks, workSessions } from "@/db/schema";
+import {
+  scheduledShifts,
+  shiftTemplates,
+  user,
+  workBreaks,
+  workSessions,
+} from "@/db/schema";
 import { hasServerConfiguration } from "@/lib/app-config";
 import { getAuth } from "@/lib/auth";
 import {
@@ -127,9 +133,15 @@ export async function GET(request: Request) {
               startAt: scheduledShifts.startAt,
               endAt: scheduledShifts.endAt,
               breakMinutes: scheduledShifts.breakMinutes,
+              note: scheduledShifts.note,
+              templateName: shiftTemplates.name,
             })
             .from(scheduledShifts)
             .innerJoin(user, eq(scheduledShifts.userId, user.id))
+            .leftJoin(
+              shiftTemplates,
+              eq(scheduledShifts.templateId, shiftTemplates.id),
+            )
             .where(
               and(
                 eq(scheduledShifts.outletId, outlet.id),
@@ -182,15 +194,27 @@ export async function GET(request: Request) {
         );
         const scheduleSessionLinks = new Map<
           string,
-          { startAt: Date; endAt: Date; flags: AttendanceFlag[] }
+          {
+            id: string;
+            startAt: Date;
+            endAt: Date;
+            breakMinutes: number;
+            templateName: string | null;
+            note: string | null;
+            flags: AttendanceFlag[];
+          }
         >();
         for (const row of scheduleRows) {
           const result = attendance.results.get(row.id);
           const firstSessionId = result?.sessionIds[0];
           if (result && firstSessionId) {
             scheduleSessionLinks.set(firstSessionId, {
+              id: row.id,
               startAt: row.startAt,
               endAt: row.endAt,
+              breakMinutes: row.breakMinutes,
+              templateName: row.templateName,
+              note: row.note,
               flags: result.flags,
             });
           }
@@ -219,8 +243,12 @@ export async function GET(request: Request) {
               breaks: [],
               schedules: [
                 {
+                  id: row.id,
                   startAt: row.startAt,
                   endAt: row.endAt,
+                  breakMinutes: row.breakMinutes,
+                  templateName: row.templateName,
+                  note: row.note,
                   flags: result.flags,
                 },
               ],

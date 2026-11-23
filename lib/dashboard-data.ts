@@ -36,8 +36,12 @@ export function orderDashboardShifts<
 }
 
 export type DashboardSchedule = {
+  id: string;
   startAt: Date | string;
   endAt: Date | string;
+  breakMinutes: number;
+  templateName: string | null;
+  note: string | null;
   flags: AttendanceFlag[];
 };
 

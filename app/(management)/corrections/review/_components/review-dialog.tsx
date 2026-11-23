@@ -47,7 +47,7 @@ export function ReviewDialog({
       labelledBy={titleId}
     >
       {header && (
-        <div className="dialog-panel">
+        <div className="dialog-panel correction-review-dialog">
           <header className="dialog-header">
             <div>
               <p className="eyebrow">{header.eyebrow}</p>

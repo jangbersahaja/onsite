@@ -220,8 +220,12 @@ function session(
 
 test("one person's sessions in a day form a single row with combined totals", () => {
   const schedule = {
+    id: "schedule-1",
     startAt: "2026-10-04T01:00:00Z",
     endAt: "2026-10-04T08:00:00Z",
+    breakMinutes: 60,
+    templateName: "Morning",
+    note: null,
     flags: ["late" as const],
   };
   const [row] = groupDashboardSessions([

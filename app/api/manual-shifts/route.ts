@@ -2,6 +2,8 @@ import {
   manualShiftRequests,
   outletMemberships,
   outlets,
+  scheduledShifts,
+  shiftTemplates,
   user,
   workBreaks,
   workSessions,
@@ -18,9 +20,13 @@ import {
 } from "@/lib/manual-shift-request";
 import { outletDateTimeToISOString } from "@/lib/outlet-time";
 import { notifyOutletManagers } from "@/lib/push-notifications";
+import {
+  bestCorrectionSchedule,
+  snapshotCorrectionSchedule,
+} from "@/lib/shift-correction";
 import { getActor, getStaffActor } from "@/lib/timesheet-actor";
 import { hasOverlap, validateManualShift } from "@/lib/timesheet-create-rules";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte } from "drizzle-orm";
 
 function unavailable() {
   return Response.json(
@@ -91,7 +97,70 @@ export async function GET(request: Request) {
         )
         .orderBy(desc(manualShiftRequests.createdAt))
         .limit(100);
-      return Response.json({ requests: rows });
+      if (!rows.length) return Response.json({ requests: [] });
+
+      const lowerBound = new Date(
+        Math.min(...rows.map((row) => row.clockInAt.getTime())) -
+          3 * 60 * 60 * 1000,
+      );
+      const upperBound = new Date(
+        Math.max(...rows.map((row) => row.clockOutAt.getTime())) +
+          3 * 60 * 60 * 1000,
+      );
+      const schedules = await db
+        .select({
+          id: scheduledShifts.id,
+          userId: scheduledShifts.userId,
+          outletId: scheduledShifts.outletId,
+          startAt: scheduledShifts.startAt,
+          endAt: scheduledShifts.endAt,
+          breakMinutes: scheduledShifts.breakMinutes,
+          note: scheduledShifts.note,
+          templateName: shiftTemplates.name,
+        })
+        .from(scheduledShifts)
+        .leftJoin(
+          shiftTemplates,
+          eq(scheduledShifts.templateId, shiftTemplates.id),
+        )
+        .where(
+          and(
+            eq(scheduledShifts.status, "published"),
+            inArray(scheduledShifts.outletId, visibleOutletIds),
+            inArray(scheduledShifts.userId, [
+              ...new Set(rows.map((row) => row.requestedBy)),
+            ]),
+            gte(scheduledShifts.endAt, lowerBound),
+            lte(scheduledShifts.startAt, upperBound),
+          ),
+        );
+      return Response.json({
+        requests: rows.map((row) => {
+          const schedule = bestCorrectionSchedule(
+            schedules
+              .filter(
+                (candidate) =>
+                  candidate.userId === row.requestedBy &&
+                  candidate.outletId === row.outletId,
+              )
+              .map((candidate) => ({
+                ...candidate,
+                startAt: candidate.startAt.toISOString(),
+                endAt: candidate.endAt.toISOString(),
+              })),
+            {
+              clockInAt: row.clockInAt.toISOString(),
+              clockOutAt: row.clockOutAt.toISOString(),
+            },
+          );
+          return {
+            ...row,
+            scheduleSnapshot: schedule
+              ? snapshotCorrectionSchedule(schedule, row.createdAt)
+              : null,
+          };
+        }),
+      });
     }
 
     const staff = await getStaffActor(request);

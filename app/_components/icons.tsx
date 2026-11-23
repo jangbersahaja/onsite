@@ -95,3 +95,38 @@ export function BellOffIcon(props: IconProps) {
     </IconBase>
   );
 }
+
+export function EyeIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </IconBase>
+  );
+}
+
+export function CheckIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M20 6 9 17l-5-5" />
+    </IconBase>
+  );
+}
+
+export function AlertIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 8v4" />
+      <path d="M12 16h.01" />
+    </IconBase>
+  );
+}
+
+export function LoaderIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      <path d="M21 12a9 9 0 1 1-6.22-8.56" />
+    </IconBase>
+  );
+}

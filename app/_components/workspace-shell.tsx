@@ -437,16 +437,9 @@ export function WorkspaceShell({
             </select>
           </label>
         ) : (
-          <div className="outlet-switcher workspace-context">
-            <OutletAvatar
-              name={workspaceName}
-              imageUrl={selectedOutlet?.imageUrl}
-              fallback={workspaceName.slice(0, 1).toUpperCase()}
-            />
-            <span className="outlet-copy">
-              <strong>{selectedOutlet?.name ?? workspaceName}</strong>
-              <small>{messages.shell.currentWorkspace}</small>
-            </span>
+          <div className="workspace-context">
+            <strong>{selectedOutlet?.name ?? workspaceName}</strong>
+            <small>{messages.shell.currentWorkspace}</small>
           </div>
         )}
 
@@ -514,17 +507,6 @@ export function WorkspaceShell({
         </nav>
 
         <div className="rail-bottom">
-          <div
-            className="demo-status"
-            title={
-              isSidebarCollapsed ? messages.shell.connectedWorkspace : undefined
-            }
-          >
-            <span className="status-dot" />
-            <span className="rail-label">
-              {messages.shell.connectedWorkspace}
-            </span>
-          </div>
           <div className="profile-account" ref={accountMenuRef}>
             <button
               className="profile-button"
@@ -547,11 +529,24 @@ export function WorkspaceShell({
               )}
               <span className="profile-copy">
                 <strong>{userName}</strong>
-                <small>{messages.shell.manageAccount}</small>
+                <small>
+                  {canAccessBackoffice ? "Backoffice account" : "Clock account"}
+                </small>
               </span>
-              <span className="switcher-chevron" aria-hidden="true">
-                ···
-              </span>
+              <svg
+                className="profile-chevron"
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="m9 18 6-6-6-6" />
+              </svg>
             </button>
             {isAccountMenuOpen && (
               <div className="profile-menu" id="profile-account-menu">

@@ -249,6 +249,7 @@ export default function TeamPage() {
   const [permissionUserId, setPermissionUserId] = useState("");
   const [activeTeamView, setActiveTeamView] = useState<TeamView>("people");
   const [openActionMenu, setOpenActionMenu] = useState<string | null>(null);
+  const [peopleSearch, setPeopleSearch] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -664,6 +665,20 @@ export default function TeamPage() {
   }
   const visiblePeople = Array.from(peopleById.values());
   visiblePeople.sort((left, right) => left.name.localeCompare(right.name));
+  const peopleSearchTerm = peopleSearch.trim().toLowerCase();
+  const filteredPeople = peopleSearchTerm
+    ? visiblePeople.filter((person) => {
+        const assignments = person.assignments
+          .map((assignment) => assignment.outletName)
+          .join(" ");
+        return [
+          person.name,
+          person.email,
+          person.staffCode ?? "",
+          assignments,
+        ].some((value) => value.toLowerCase().includes(peopleSearchTerm));
+      })
+    : visiblePeople;
   const resetPerson = visiblePeople.find(
     (person) => person.userId === resetUserId,
   );
@@ -788,6 +803,18 @@ export default function TeamPage() {
                   }}
                 >
                   Reset password
+                </button>
+              )}
+              {actionPerson?.canManageAccess && (
+                <button
+                  className="btn btn-secondary btn-block"
+                  type="button"
+                  onClick={() => {
+                    setOpenActionMenu(null);
+                    openStaffCodeDialog(actionPerson);
+                  }}
+                >
+                  Staff code
                 </button>
               )}
               {actionPending && (
@@ -958,178 +985,245 @@ export default function TeamPage() {
               </p>
             </div>
             <div className="team-heading-actions">
-              <span className="team-count">{visiblePeople.length}</span>
+              <span className="team-count">{filteredPeople.length}</span>
             </div>
           </div>
-          <div className="team-table-wrap">
-            <table className="team-table">
-              <thead>
-                <tr>
-                  <th>PERSON</th>
-                  <th>OUTLET ACCESS</th>
-                  <th>APP ACCESS</th>
-                  <th>DEVICE</th>
-                  <th>ACTIONS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visiblePeople.map((person) => (
-                  <tr key={person.userId}>
-                    <td className="team-person-cell">
-                      <div className="team-person">
-                        <TeamAvatar
-                          name={person.name}
-                          photoUrl={person.profilePhotoUrl}
+          <label className="team-people-search">
+            <span>Search people</span>
+            <input
+              type="search"
+              value={peopleSearch}
+              placeholder="Name, email, staff code, or outlet"
+              onChange={(event) => setPeopleSearch(event.target.value)}
+            />
+          </label>
+          <div className="team-directory" aria-label="Team people">
+            <div className="team-mobile-list" aria-label="Mobile team people">
+              {filteredPeople.map((person) => (
+                <article className="team-mobile-person" key={person.userId}>
+                  <div className="team-mobile-person-main">
+                    <TeamAvatar
+                      name={person.name}
+                      photoUrl={person.profilePhotoUrl}
+                    />
+                    <div className="team-mobile-person-text">
+                      <strong>{person.name}</strong>
+                      <small>{person.email}</small>
+                      <span>
+                        {person.assignments
+                          .map((assignment) => assignment.outletName)
+                          .join(" · ")}
+                      </span>
+                    </div>
+                    {(person.canReset ||
+                      person.canManageAccess ||
+                      person.pendingDevice ||
+                      person.activeDevices.length > 0) && (
+                      <TeamCardMenuButton
+                        name={person.name}
+                        onOpen={() => setOpenActionMenu(person.userId)}
+                      />
+                    )}
+                  </div>
+                  <div className="team-mobile-person-meta">
+                    <div className="team-mobile-access">
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={person.canAccessClock}
+                          disabled={
+                            !person.canManageAccess ||
+                            permissionUserId === person.userId ||
+                            (person.canAccessClock &&
+                              !person.canAccessBackoffice)
+                          }
+                          onChange={(event) =>
+                            void handleAccessChange(
+                              person,
+                              "canAccessClock",
+                              event.target.checked,
+                            )
+                          }
                         />
-                        <div className="team-person-text">
-                          <strong>{person.name}</strong>
-                          <small>{person.email}</small>
-                          <small>
-                            Staff code: {person.staffCode ?? "Not set"}
-                          </small>
-                        </div>
-                      </div>
-                      {(person.canReset ||
-                        person.pendingDevice ||
-                        person.activeDevices.length > 0) && (
-                        <TeamCardMenuButton
-                          name={person.name}
-                          onOpen={() => setOpenActionMenu(person.userId)}
+                        Clock
+                      </label>
+                      <label>
+                        <input
+                          type="checkbox"
+                          checked={person.canAccessBackoffice}
+                          disabled={
+                            !person.canManageAccess ||
+                            permissionUserId === person.userId ||
+                            (person.canAccessBackoffice &&
+                              !person.canAccessClock)
+                          }
+                          onChange={(event) =>
+                            void handleAccessChange(
+                              person,
+                              "canAccessBackoffice",
+                              event.target.checked,
+                            )
+                          }
                         />
-                      )}
-                    </td>
-                    <td
-                      className="team-assignment-cell"
-                      data-label="Outlet access"
+                        Backoffice
+                      </label>
+                    </div>
+                    <div className="team-mobile-device">
+                      <strong>{deviceStatusLabel(person)}</strong>
+                      {person.pendingDevice ? (
+                        <small>
+                          {person.pendingDevice.deviceName ?? "Unknown device"}
+                        </small>
+                      ) : person.activeDevices[0]?.approvedAt ? (
+                        <small>
+                          {formatExpiry(person.activeDevices[0].approvedAt)}
+                        </small>
+                      ) : null}
+                    </div>
+                  </div>
+                </article>
+              ))}
+              {!filteredPeople.length && (
+                <p className="team-directory-empty">
+                  {peopleSearchTerm
+                    ? "No people match your search."
+                    : "No team members found."}
+                </p>
+              )}
+            </div>
+            {filteredPeople.map((person) => (
+              <article className="team-directory-row" key={person.userId}>
+                <div className="team-directory-person">
+                  <TeamAvatar
+                    name={person.name}
+                    photoUrl={person.profilePhotoUrl}
+                  />
+                  <div className="team-directory-person-text">
+                    <strong>{person.name}</strong>
+                    <small>{person.email}</small>
+                    <span>Staff code: {person.staffCode ?? "Not set"}</span>
+                  </div>
+                </div>
+
+                <div className="team-directory-access">
+                  <span className="team-directory-label">Outlets</span>
+                  <div className="team-directory-outlets">
+                    {person.assignments.map((assignment) => (
+                      <span key={assignment.outletId}>
+                        {assignment.outletName}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="team-directory-apps">
+                  <span className="team-directory-label">App access</span>
+                  <div className="team-permission-options">
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={person.canAccessClock}
+                        disabled={
+                          !person.canManageAccess ||
+                          permissionUserId === person.userId ||
+                          (person.canAccessClock && !person.canAccessBackoffice)
+                        }
+                        onChange={(event) =>
+                          void handleAccessChange(
+                            person,
+                            "canAccessClock",
+                            event.target.checked,
+                          )
+                        }
+                      />
+                      Clock
+                    </label>
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={person.canAccessBackoffice}
+                        disabled={
+                          !person.canManageAccess ||
+                          permissionUserId === person.userId ||
+                          (person.canAccessBackoffice && !person.canAccessClock)
+                        }
+                        onChange={(event) =>
+                          void handleAccessChange(
+                            person,
+                            "canAccessBackoffice",
+                            event.target.checked,
+                          )
+                        }
+                      />
+                      Backoffice
+                    </label>
+                  </div>
+                </div>
+
+                <div className="team-directory-device">
+                  <span className="team-directory-label">Device</span>
+                  <div className="team-directory-device-status">
+                    <strong>{deviceStatusLabel(person)}</strong>
+                    {person.pendingDevice ? (
+                      <small>
+                        {person.pendingDevice.deviceName ?? "Unknown device"}
+                        {" · "}
+                        {formatExpiry(person.pendingDevice.createdAt)}
+                      </small>
+                    ) : person.activeDevices[0]?.approvedAt ? (
+                      <small>
+                        {formatExpiry(person.activeDevices[0].approvedAt)}
+                      </small>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="team-directory-actions">
+                  {(person.canReset ||
+                    person.canManageAccess ||
+                    person.pendingDevice ||
+                    person.activeDevices.length > 0) && (
+                    <TeamCardMenuButton
+                      name={person.name}
+                      onOpen={() => setOpenActionMenu(person.userId)}
+                    />
+                  )}
+                  {person.canReset && (
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      type="button"
+                      onClick={() => setResetUserId(person.userId)}
                     >
-                      <div className="team-access-list">
-                        {person.assignments.map((assignment) => (
-                          <div
-                            className="team-access-item"
-                            key={assignment.outletId}
-                          >
-                            <span>{assignment.outletName}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </td>
-                    <td data-label="App access">
-                      <div className="team-permission-options">
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={person.canAccessClock}
-                            disabled={
-                              !person.canManageAccess ||
-                              permissionUserId === person.userId ||
-                              (person.canAccessClock &&
-                                !person.canAccessBackoffice)
-                            }
-                            onChange={(event) =>
-                              void handleAccessChange(
-                                person,
-                                "canAccessClock",
-                                event.target.checked,
-                              )
-                            }
-                          />
-                          Clock
-                        </label>
-                        <label>
-                          <input
-                            type="checkbox"
-                            checked={person.canAccessBackoffice}
-                            disabled={
-                              !person.canManageAccess ||
-                              permissionUserId === person.userId ||
-                              (person.canAccessBackoffice &&
-                                !person.canAccessClock)
-                            }
-                            onChange={(event) =>
-                              void handleAccessChange(
-                                person,
-                                "canAccessBackoffice",
-                                event.target.checked,
-                              )
-                            }
-                          />
-                          Backoffice
-                        </label>
-                      </div>
-                    </td>
-                    <td data-label="Device">
-                      <div className="device-cell">
-                        <div>
-                          {deviceStatusLabel(person)}
-                          {person.pendingDevice ? (
-                            <small>
-                              {person.pendingDevice.deviceName ??
-                                "Unknown device"}
-                              {" · "}
-                              {formatExpiry(person.pendingDevice.createdAt)}
-                            </small>
-                          ) : person.activeDevices[0]?.approvedAt ? (
-                            <small>
-                              {formatExpiry(person.activeDevices[0].approvedAt)}
-                            </small>
-                          ) : null}
-                        </div>
-                        {person.activeDevices.map((device) => (
-                          <button
-                            key={device.id}
-                            className="btn btn-danger btn-icon btn-sm"
-                            type="button"
-                            aria-label={`Revoke ${device.deviceName ?? "device"}`}
-                            title={`Revoke ${device.deviceName ?? "device"}`}
-                            disabled={Boolean(deviceActionId)}
-                            onClick={() =>
-                              void handleStaffDeviceAction(device.id, "revoke")
-                            }
-                          >
-                            <CloseIcon />
-                          </button>
-                        ))}
-                      </div>
-                    </td>
-                    <td data-label="Actions">
-                      {person.canReset && (
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          type="button"
-                          onClick={() => setResetUserId(person.userId)}
-                        >
-                          Reset password
-                        </button>
-                      )}
-                      {person.canManageAccess && (
-                        <button
-                          className="btn btn-secondary btn-sm"
-                          type="button"
-                          onClick={() => openStaffCodeDialog(person)}
-                        >
-                          Staff code
-                        </button>
-                      )}
-                      {person.pendingDevice && (
-                        <Link
-                          className="btn btn-secondary btn-sm"
-                          href="/corrections/review"
-                        >
-                          Review request
-                        </Link>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {!visiblePeople.length && (
-                  <tr>
-                    <td colSpan={5} className="empty-table">
-                      No team members found.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                      Reset password
+                    </button>
+                  )}
+                  {person.canManageAccess && (
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      type="button"
+                      onClick={() => openStaffCodeDialog(person)}
+                    >
+                      Staff code
+                    </button>
+                  )}
+                  {person.pendingDevice && (
+                    <Link
+                      className="btn btn-secondary btn-sm"
+                      href="/corrections/review"
+                    >
+                      Review request
+                    </Link>
+                  )}
+                </div>
+              </article>
+            ))}
+            {!filteredPeople.length && (
+              <p className="team-directory-empty">
+                {peopleSearchTerm
+                  ? "No people match your search."
+                  : "No team members found."}
+              </p>
+            )}
           </div>
           {issuedResetLink && (
             <div className="issued-invite">

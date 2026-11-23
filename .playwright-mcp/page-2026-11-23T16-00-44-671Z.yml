@@ -1,0 +1,35 @@
+- generic [ref=e3]:
+  - generic [ref=e5]:
+    - generic [ref=e6]: 21 awaiting review
+    - generic [ref=e7]: Updated 23:57
+  - tablist [ref=e8]:
+    - button "Clock corrections 21" [pressed] [ref=e9] [cursor=pointer]:
+      - text: Clock corrections
+      - generic [ref=e10]: "21"
+    - button "Past shifts 0" [ref=e11] [cursor=pointer]:
+      - text: Past shifts
+      - generic [ref=e12]: "0"
+  - region "Clock corrections" [ref=e13]:
+    - list [ref=e14]:
+      - listitem [ref=e15]:
+        - button "KSNU · Clock in MUHAMMAD HAZRIQ AIRY BIN ZAMRI Clock in was not recorded → 14:05 Scheduled clock in 13 Nov 2026, 14:00 13 Nov 2026, 14:05 Waiting 9 d · Overdue Review" [ref=e16] [cursor=pointer]:
+          - generic [ref=e17]:
+            - generic [ref=e18]: KSNU · Clock in
+            - strong [ref=e19]: MUHAMMAD HAZRIQ AIRY BIN ZAMRI
+            - generic [ref=e20]: Clock in was not recorded → 14:05
+            - generic [ref=e21]: Scheduled clock in 13 Nov 2026, 14:00
+          - generic [ref=e22]:
+            - generic [ref=e23]: 13 Nov 2026, 14:05
+            - generic [ref=e24]: Waiting 9 d · Overdue
+          - generic [ref=e25]: Review
+      - listitem [ref=e26]:
+        - button "KSNU · Clock out MUHAMMAD HAZRIQ AIRY BIN ZAMRI Clock out was not recorded → 22:41 Scheduled clock out 16 Nov 2026, 22:00 16 Nov 2026, 22:41 Waiting 7 d · Overdue Review" [ref=e27] [cursor=pointer]:
+          - generic [ref=e28]:
+            - generic [ref=e29]: KSNU · Clock out
+            - strong [ref=e30]: MUHAMMAD HAZRIQ AIRY BIN ZAMRI
+            - generic [ref=e31]: Clock out was not recorded → 22:41
+            - generic [ref=e32]: Scheduled clock out 16 Nov 2026, 22:00
+          - generic [ref=e33]:
+            - generic [ref=e34]: 16 Nov 2026, 22:41
+            - generic [ref=e35]: Waiting 7 d · Overdue
+          - generic [ref=e36]: Review

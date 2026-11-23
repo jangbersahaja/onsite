@@ -1,4 +1,5 @@
 import type { CorrectionEvent } from "@/lib/break-corrections";
+import type { CorrectionScheduleSnapshot } from "@/lib/shift-correction";
 
 export type ReviewList<T> = {
   items: T[] | null;
@@ -22,6 +23,16 @@ export type CorrectionReviewRequest = {
   reason: string;
   status: "reconciliation";
   appliedAt: string | null;
+  scheduleSnapshot: CorrectionScheduleSnapshot | null;
+  scheduleStatus: "matched" | "no-match" | "none-published";
+  previousPunch: {
+    clockInAt: string | null;
+    clockOutAt: string | null;
+  } | null;
+  previousBreak: {
+    startedAt: string;
+    endedAt: string | null;
+  } | null;
   createdAt: string;
 };
 
@@ -37,6 +48,7 @@ export type PastShiftReviewRequest = {
   clockOutAt: string;
   reason: string;
   status: "pending";
+  scheduleSnapshot: CorrectionScheduleSnapshot | null;
   createdAt: string;
 };
 
@@ -151,14 +163,38 @@ export function formatWaitingSince(createdAt: string, now: number): string {
   return `Waiting ${Math.floor(hours / 24)} d`;
 }
 
-export function formatReviewDateTime(value: string, timezone?: string) {
+export function formatReviewTime(value: string, timezone?: string) {
   return new Intl.DateTimeFormat("en-SG", {
     timeZone: timezone,
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-    year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    hour12: false,
   }).format(new Date(value));
+}
+
+export function formatReviewDate(value: string, timezone?: string) {
+  return new Intl.DateTimeFormat("en-SG", {
+    timeZone: timezone,
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(value));
+}
+
+export function formatReviewDateTime(value: string, timezone?: string) {
+  return `${formatReviewDate(value, timezone)}, ${formatReviewTime(value, timezone)}`;
+}
+
+export function formatReviewRange(
+  startValue: string,
+  endValue: string,
+  timezone?: string,
+) {
+  const startDate = formatReviewDate(startValue, timezone);
+  const endDate = formatReviewDate(endValue, timezone);
+  const startTime = formatReviewTime(startValue, timezone);
+  const endTime = formatReviewTime(endValue, timezone);
+  return startDate === endDate
+    ? `${startDate}, ${startTime} – ${endTime}`
+    : `${formatReviewDateTime(startValue, timezone)} – ${formatReviewDateTime(endValue, timezone)}`;
 }

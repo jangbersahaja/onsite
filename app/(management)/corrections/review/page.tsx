@@ -9,7 +9,10 @@ import {
 } from "@/lib/outlet-time";
 import {
   CORRECTION_EVENT_LABELS,
+  formatReviewDate,
   formatReviewDateTime,
+  formatReviewRange,
+  formatReviewTime,
   loadReviewLists,
   mergeReviewList,
   sortOldestFirst,
@@ -34,12 +37,12 @@ import {
   ReviewNotice,
   type ReviewNoticeState,
 } from "./_components/review-dialog";
-import { ReviewQueue } from "./_components/review-queue";
+import { ReviewQueue, type ReviewRowState } from "./_components/review-queue";
 
 type ReviewKind = "correction" | "pastShift" | "device";
 type Selection = { kind: ReviewKind; id: string } | null;
 type CorrectionDecision = "confirm" | "adjust" | "reject" | "save_note";
-type PendingDecision = { key: string; label: string };
+type RowProgress = { status: "queued" | "sending" | "failed"; label: string };
 type ScheduledCommit = { timer: number; run: () => Promise<void> };
 
 /** Window in which a decision can be undone before it is sent. */
@@ -87,15 +90,52 @@ function noteFieldOf(form: HTMLFormElement) {
   return form.querySelector<HTMLTextAreaElement>('textarea[name="reason"]');
 }
 
-function pendingKey(kind: ReviewKind, id: string) {
+function rowKey(kind: ReviewKind, id: string) {
   return `${kind}:${id}`;
 }
 
 function formatClock(value: number) {
-  return new Date(value).toLocaleTimeString("en-SG", {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const date = new Date(value);
+  return `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+function formatMinuteVariance(value: number) {
+  if (value === 0) return "on schedule";
+  const absolute = Math.abs(value);
+  return `${absolute} min ${value > 0 ? "after" : "before"}`;
+}
+
+function correctionScheduleComparison(request: CorrectionReviewRequest) {
+  const schedule = request.scheduleSnapshot;
+  if (!schedule) return null;
+  if (request.event === "clock_in") {
+    return `Requested start is ${formatMinuteVariance(
+      Math.round(
+        (Date.parse(request.requestedAt) -
+          Date.parse(schedule.scheduledStartAt)) /
+          60_000,
+      ),
+    )}.`;
+  }
+  if (request.event === "clock_out") {
+    return `Requested end is ${formatMinuteVariance(
+      Math.round(
+        (Date.parse(request.requestedAt) -
+          Date.parse(schedule.scheduledEndAt)) /
+          60_000,
+      ),
+    )}.`;
+  }
+  if (request.breakStartedAt && request.breakEndedAt) {
+    const minutes = Math.round(
+      (Date.parse(request.breakEndedAt) - Date.parse(request.breakStartedAt)) /
+        60_000,
+    );
+    return `Requested break is ${minutes} min; scheduled break is ${schedule.breakMinutes} min.`;
+  }
+  return request.event === "break_delete"
+    ? "This request removes a recorded break."
+    : "Compare the requested break with the scheduled break duration.";
 }
 
 function withoutItem<T extends { id: string }>(
@@ -106,6 +146,19 @@ function withoutItem<T extends { id: string }>(
     ...list,
     items: list.items?.filter((item) => item.id !== id) ?? null,
   };
+}
+
+/** Open items plus items completed this session, oldest first, without duplicates. */
+function withCompleted<T extends { id: string; createdAt: string }>(
+  open: T[] | null,
+  completed: T[],
+): T[] | null {
+  if (open === null) return null;
+  const openIds = new Set(open.map((item) => item.id));
+  return sortOldestFirst([
+    ...open,
+    ...completed.filter((item) => !openIds.has(item.id)),
+  ]);
 }
 
 /** A selection is only dropped when its queue loaded successfully and no longer lists it. */
@@ -131,7 +184,16 @@ export default function CorrectionReviewPage() {
   const [adjusting, setAdjusting] = useState(false);
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState<ReviewNoticeState | null>(null);
-  const [pending, setPending] = useState<PendingDecision[]>([]);
+  const [progress, setProgress] = useState<Record<string, RowProgress>>({});
+  const [completedCorrections, setCompletedCorrections] = useState<
+    CorrectionReviewRequest[]
+  >([]);
+  const [completedPastShifts, setCompletedPastShifts] = useState<
+    PastShiftReviewRequest[]
+  >([]);
+  const [completedDevices, setCompletedDevices] = useState<
+    DeviceReviewRequest[]
+  >([]);
   const loadSeq = useRef(0);
   const commits = useRef(new Map<string, ScheduledCommit>());
 
@@ -188,12 +250,15 @@ export default function CorrectionReviewPage() {
     };
   }, []);
 
+  const unsettled = Object.values(progress).some(
+    (row) => row.status !== "failed",
+  );
   useEffect(() => {
-    if (pending.length === 0) return;
+    if (!unsettled) return;
     const warn = (event: BeforeUnloadEvent) => event.preventDefault();
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [pending.length]);
+  }, [unsettled]);
 
   useEffect(() => {
     if (notice?.tone !== "success") return;
@@ -204,9 +269,17 @@ export default function CorrectionReviewPage() {
     return () => window.clearTimeout(id);
   }, [notice]);
 
-  const pendingKeys = new Set(pending.map((item) => item.key));
-  const isVisible = (kind: ReviewKind, id: string) =>
-    !pendingKeys.has(pendingKey(kind, id));
+  function rowStateOf(
+    kind: ReviewKind,
+    id: string,
+    completed: { id: string }[],
+  ): ReviewRowState {
+    if (completed.some((item) => item.id === id)) return "done";
+    return progress[rowKey(kind, id)]?.status ?? "open";
+  }
+  const queued = Object.entries(progress).filter(
+    ([, row]) => row.status === "queued",
+  );
 
   const correctionQueue: ReviewList<CorrectionReviewRequest> = {
     items:
@@ -214,9 +287,7 @@ export default function CorrectionReviewPage() {
         ? null
         : sortOldestFirst(
             lists.correction.items.filter(
-              (request) =>
-                request.status === "reconciliation" &&
-                isVisible("correction", request.id),
+              (request) => request.status === "reconciliation",
             ),
           ),
     error: lists.correction.error,
@@ -225,24 +296,31 @@ export default function CorrectionReviewPage() {
     items:
       lists.pastShift.items === null
         ? null
-        : sortOldestFirst(
-            lists.pastShift.items.filter((request) =>
-              isVisible("pastShift", request.id),
-            ),
-          ),
+        : sortOldestFirst(lists.pastShift.items),
     error: lists.pastShift.error,
   };
   const deviceQueue: ReviewList<DeviceReviewRequest> = {
     items:
-      lists.device.items === null
-        ? null
-        : sortOldestFirst(
-            lists.device.items.filter((request) =>
-              isVisible("device", request.id),
-            ),
-          ),
+      lists.device.items === null ? null : sortOldestFirst(lists.device.items),
     error: lists.device.error,
   };
+
+  const correctionRows: ReviewList<CorrectionReviewRequest> = {
+    items: withCompleted(correctionQueue.items, completedCorrections),
+    error: correctionQueue.error,
+  };
+  const pastShiftRows: ReviewList<PastShiftReviewRequest> = {
+    items: withCompleted(pastShiftQueue.items, completedPastShifts),
+    error: pastShiftQueue.error,
+  };
+  const deviceRows: ReviewList<DeviceReviewRequest> = {
+    items: withCompleted(deviceQueue.items, completedDevices),
+    error: deviceQueue.error,
+  };
+  const completedTotal =
+    completedCorrections.length +
+    completedPastShifts.length +
+    completedDevices.length;
 
   const selectedCorrection =
     selection?.kind === "correction"
@@ -274,13 +352,16 @@ export default function CorrectionReviewPage() {
     (sum, { kind }) => sum + (queueCounts[kind] ?? 0),
     0,
   );
-  const allCaughtUp = allLoaded && openTotal === 0 && pending.length === 0;
+  const allCaughtUp = allLoaded && openTotal === 0 && completedTotal === 0;
 
   const dialogNotice = notice ? <ReviewNotice notice={notice} /> : null;
 
   function handleOutletChange(nextOutletId: string) {
     setOutletId(nextOutletId);
     setLists(EMPTY_LISTS);
+    setCompletedCorrections([]);
+    setCompletedPastShifts([]);
+    setCompletedDevices([]);
     setSelection(null);
     setAdjusting(false);
     setNotice(null);
@@ -347,31 +428,45 @@ export default function CorrectionReviewPage() {
     }
   }
 
-  /**
-   * Hides the request and sends the decision after UNDO_MS unless undone.
-   * The request leaves the list only after the server accepts it.
-   */
+  function setProgressFor(key: string, value: RowProgress | null) {
+    setProgress((current) => {
+      const next = { ...current };
+      if (value) {
+        next[key] = value;
+      } else {
+        delete next[key];
+      }
+      return next;
+    });
+  }
+
+  /** Queues the decision for UNDO_MS so it can be undone, then sends it. */
   function scheduleDecision(
     kind: ReviewKind,
     id: string,
     label: string,
     send: () => Promise<boolean>,
     successText: string,
+    onDone: () => void,
   ) {
-    const key = pendingKey(kind, id);
+    const key = rowKey(kind, id);
     if (commits.current.has(key)) return;
 
     const run = async () => {
       commits.current.delete(key);
-      setPending((current) => current.filter((item) => item.key !== key));
+      setProgressFor(key, { status: "sending", label });
       if (await send()) {
+        setProgressFor(key, null);
         removeRequest(kind, id);
+        onDone();
         setNotice({ tone: "success", text: successText });
+      } else {
+        setProgressFor(key, { status: "failed", label });
       }
     };
     const timer = window.setTimeout(() => void run(), UNDO_MS);
     commits.current.set(key, { timer, run });
-    setPending((current) => [...current, { key, label }]);
+    setProgressFor(key, { status: "queued", label });
     setSelection(null);
     setAdjusting(false);
     setNotice(null);
@@ -382,7 +477,7 @@ export default function CorrectionReviewPage() {
     if (!entry) return;
     window.clearTimeout(entry.timer);
     commits.current.delete(key);
-    setPending((current) => current.filter((item) => item.key !== key));
+    setProgressFor(key, null);
   }
 
   async function decideCorrection(
@@ -466,12 +561,23 @@ export default function CorrectionReviewPage() {
       adjust: `Saving the adjusted time for ${request.requesterName}.`,
       reject: `Rejecting ${request.requesterName}'s correction.`,
     };
+    const reconciled: CorrectionReviewRequest =
+      decision === "adjust"
+        ? {
+            ...request,
+            requestedAt: requestedAt ?? request.requestedAt,
+            breakStartedAt: breakStartedAt ?? request.breakStartedAt,
+            breakEndedAt:
+              breakEndedAt !== undefined ? breakEndedAt : request.breakEndedAt,
+          }
+        : request;
     scheduleDecision(
       "correction",
       request.id,
       label[decision],
       send,
       CORRECTION_SUCCESS[decision],
+      () => setCompletedCorrections((current) => [...current, reconciled]),
     );
   }
 
@@ -520,6 +626,7 @@ export default function CorrectionReviewPage() {
       approved
         ? "Past shift approved and added to history."
         : "Past shift rejected.",
+      () => setCompletedPastShifts((current) => [...current, request]),
     );
   }
 
@@ -545,6 +652,7 @@ export default function CorrectionReviewPage() {
       approved
         ? "Device approved. Any previous device for this staff member is now revoked."
         : "Device request rejected.",
+      () => setCompletedDevices((current) => [...current, request]),
     );
   }
 
@@ -577,6 +685,9 @@ export default function CorrectionReviewPage() {
           </select>
         </label>
         <div className="review-toolbar-actions">
+          <span className="review-awaiting">
+            {openTotal === 0 ? "All caught up" : `${openTotal} awaiting review`}
+          </span>
           {updatedAt !== null && (
             <span className="review-updated">
               Updated {formatClock(updatedAt)}
@@ -598,13 +709,13 @@ export default function CorrectionReviewPage() {
         </div>
       </div>
 
-      {pending.map((item) => (
-        <div key={item.key} className="correction-review-undo" role="status">
-          <span>{item.label}</span>
+      {queued.map(([key, row]) => (
+        <div key={key} className="correction-review-undo" role="status">
+          <span>{row.label}</span>
           <button
             className="btn btn-ghost btn-sm"
             type="button"
-            onClick={() => undoDecision(item.key)}
+            onClick={() => undoDecision(key)}
           >
             Undo
           </button>
@@ -640,27 +751,86 @@ export default function CorrectionReviewPage() {
           {tab === "correction" && (
             <ReviewQueue
               label="Clock corrections"
-              queue={correctionQueue}
+              queue={correctionRows}
+              stateOf={(item) =>
+                rowStateOf("correction", item.id, completedCorrections)
+              }
               now={now}
               loadingText="Loading clock corrections…"
               emptyText="No clock corrections need review."
               onSelect={(id) => openItem("correction", id)}
-              describe={(request) => ({
-                eyebrow: `${request.outletName} · ${CORRECTION_EVENT_LABELS[request.event]}`,
-                title: request.requesterName,
-                detail: formatReviewDateTime(
-                  request.requestedAt,
-                  request.timezone,
-                ),
-                createdAt: request.createdAt,
-              })}
+              describe={(request) => {
+                const scheduled = request.scheduleSnapshot
+                  ? formatReviewRange(
+                      request.scheduleSnapshot.scheduledStartAt,
+                      request.scheduleSnapshot.scheduledEndAt,
+                      request.timezone,
+                    )
+                  : request.scheduleStatus === "no-match"
+                    ? "Published schedule exists; no close match"
+                    : "No schedule published for this date";
+                const before =
+                  request.event === "clock_in"
+                    ? request.previousPunch?.clockInAt
+                      ? formatReviewDateTime(
+                          request.previousPunch.clockInAt,
+                          request.timezone,
+                        )
+                      : "Not recorded"
+                    : request.event === "clock_out"
+                      ? request.previousPunch?.clockOutAt
+                        ? formatReviewDateTime(
+                            request.previousPunch.clockOutAt,
+                            request.timezone,
+                          )
+                        : "Not recorded"
+                      : request.previousBreak
+                        ? `${formatReviewDateTime(request.previousBreak.startedAt, request.timezone)} – ${request.previousBreak.endedAt ? formatReviewDateTime(request.previousBreak.endedAt, request.timezone) : "Open"}`
+                        : "Not recorded";
+                const requested =
+                  request.event === "clock_in" || request.event === "clock_out"
+                    ? formatReviewDateTime(
+                        request.requestedAt,
+                        request.timezone,
+                      )
+                    : request.breakStartedAt
+                      ? `${formatReviewDateTime(request.breakStartedAt, request.timezone)}${request.breakEndedAt ? ` – ${formatReviewDateTime(request.breakEndedAt, request.timezone)}` : " – Open"}`
+                      : "Change requested";
+                return {
+                  eyebrow: `${request.outletName} · ${CORRECTION_EVENT_LABELS[request.event]}`,
+                  title: request.requesterName,
+                  detail: formatReviewDateTime(
+                    request.requestedAt,
+                    request.timezone,
+                  ),
+                  change:
+                    request.event === "clock_in"
+                      ? `Clock in ${before === "Not recorded" ? "was not recorded" : `was ${before}`} → ${formatReviewTime(request.requestedAt, request.timezone)}`
+                      : request.event === "clock_out"
+                        ? `Clock out ${before === "Not recorded" ? "was not recorded" : `was ${before}`} → ${formatReviewTime(request.requestedAt, request.timezone)}`
+                        : `${before} → ${requested}`,
+                  schedule: request.scheduleSnapshot
+                    ? request.event === "clock_in"
+                      ? `Scheduled clock in ${formatReviewDate(request.scheduleSnapshot.scheduledStartAt, request.timezone)}, ${formatReviewTime(request.scheduleSnapshot.scheduledStartAt, request.timezone)}`
+                      : request.event === "clock_out"
+                        ? `Scheduled clock out ${formatReviewDate(request.scheduleSnapshot.scheduledEndAt, request.timezone)}, ${formatReviewTime(request.scheduleSnapshot.scheduledEndAt, request.timezone)}`
+                        : scheduled
+                    : request.scheduleStatus === "no-match"
+                      ? "Published schedule exists; no close match"
+                      : "No schedule published for this date",
+                  createdAt: request.createdAt,
+                };
+              }}
             />
           )}
 
           {tab === "pastShift" && (
             <ReviewQueue
               label="Past shifts"
-              queue={pastShiftQueue}
+              queue={pastShiftRows}
+              stateOf={(item) =>
+                rowStateOf("pastShift", item.id, completedPastShifts)
+              }
               now={now}
               loadingText="Loading past shift requests…"
               emptyText="No past shift requests need review."
@@ -668,7 +838,15 @@ export default function CorrectionReviewPage() {
               describe={(request) => ({
                 eyebrow: `${request.outletName} · Past shift`,
                 title: request.requesterName,
-                detail: `${formatReviewDateTime(request.clockInAt, request.timezone)} – ${formatReviewDateTime(request.clockOutAt, request.timezone)}`,
+                detail: formatReviewRange(
+                  request.clockInAt,
+                  request.clockOutAt,
+                  request.timezone,
+                ),
+                change: `Past shift: ${formatReviewRange(request.clockInAt, request.clockOutAt, request.timezone)}`,
+                schedule: request.scheduleSnapshot
+                  ? `Scheduled ${formatReviewRange(request.scheduleSnapshot.scheduledStartAt, request.scheduleSnapshot.scheduledEndAt, request.timezone)}`
+                  : "No schedule published for this date",
                 createdAt: request.createdAt,
               })}
             />
@@ -677,7 +855,10 @@ export default function CorrectionReviewPage() {
           {tab === "device" && (
             <ReviewQueue
               label="Device enrollments"
-              queue={deviceQueue}
+              queue={deviceRows}
+              stateOf={(item) =>
+                rowStateOf("device", item.id, completedDevices)
+              }
               now={now}
               loadingText="Loading device enrollments…"
               emptyText="No pending device enrollments."
@@ -686,6 +867,10 @@ export default function CorrectionReviewPage() {
                 eyebrow: `Trusted device · ${request.outletNames.join(", ") || "No outlet"}`,
                 title: request.employeeName,
                 detail: `Requested ${formatReviewDateTime(request.createdAt)}`,
+                change: `${request.employeeName} requested device enrollment`,
+                schedule: request.outletNames.length
+                  ? `Outlets: ${request.outletNames.join(", ")}`
+                  : "No outlet assigned",
                 createdAt: request.createdAt,
               })}
             />
@@ -696,33 +881,78 @@ export default function CorrectionReviewPage() {
       <ReviewDialog
         titleId="correction-review-title"
         onClose={closeDialog}
-        notice={dialogNotice}
         header={
           selectedCorrection
             ? {
                 eyebrow: `${selectedCorrection.outletName} · ${CORRECTION_EVENT_LABELS[selectedCorrection.event]}`,
-                title: selectedCorrection.requesterName,
-                subtitle: selectedCorrection.requesterEmail,
+                title: `${CORRECTION_EVENT_LABELS[selectedCorrection.event]} correction`,
+                subtitle: `${selectedCorrection.requesterName} · ${selectedCorrection.requesterEmail}`,
               }
             : null
         }
         summary={
           selectedCorrection && (
             <>
-              <strong className="correction-requested-time">
-                {formatReviewDateTime(
-                  selectedCorrection.requestedAt,
-                  selectedCorrection.timezone,
-                )}
-              </strong>
-              <p className="correction-request-reason">
-                {selectedCorrection.reason}
-              </p>
-              <small>
-                {selectedCorrection.appliedAt
-                  ? `Took effect ${formatReviewDateTime(selectedCorrection.appliedAt, selectedCorrection.timezone)}`
-                  : "Takes effect immediately"}
-              </small>
+              <div className="correction-review-summary-grid">
+                <div>
+                  <span>Before</span>
+                  <strong>
+                    {selectedCorrection.previousPunch
+                      ? selectedCorrection.event === "clock_in"
+                        ? `${formatReviewDate(selectedCorrection.previousPunch.clockInAt ?? selectedCorrection.requestedAt, selectedCorrection.timezone)}, ${formatReviewTime(selectedCorrection.previousPunch.clockInAt ?? selectedCorrection.requestedAt, selectedCorrection.timezone)}`
+                        : formatReviewDateTime(
+                            selectedCorrection.previousPunch.clockOutAt ??
+                              selectedCorrection.requestedAt,
+                            selectedCorrection.timezone,
+                          )
+                      : selectedCorrection.previousBreak
+                        ? `${formatReviewDateTime(selectedCorrection.previousBreak.startedAt, selectedCorrection.timezone)}${selectedCorrection.previousBreak.endedAt ? ` – ${formatReviewDateTime(selectedCorrection.previousBreak.endedAt, selectedCorrection.timezone)}` : " – Open"}`
+                        : "Not recorded"}
+                  </strong>
+                </div>
+                <div>
+                  <span>Requested</span>
+                  <strong>
+                    {selectedCorrection.event === "clock_in" ||
+                    selectedCorrection.event === "clock_out"
+                      ? formatReviewDateTime(
+                          selectedCorrection.requestedAt,
+                          selectedCorrection.timezone,
+                        )
+                      : selectedCorrection.breakStartedAt
+                        ? `${formatReviewDateTime(selectedCorrection.breakStartedAt, selectedCorrection.timezone)}${selectedCorrection.breakEndedAt ? ` – ${formatReviewDateTime(selectedCorrection.breakEndedAt, selectedCorrection.timezone)}` : " – Open"}`
+                        : "Change requested"}
+                  </strong>
+                  {!adjusting &&
+                    selectedCorrection.event !== "break_delete" && (
+                      <button
+                        className="btn btn-secondary btn-sm correction-adjust-trigger"
+                        type="button"
+                        disabled={busy !== ""}
+                        onClick={() => setAdjusting(true)}
+                      >
+                        Adjust time
+                      </button>
+                    )}
+                </div>
+                <div>
+                  <span>Published schedule</span>
+                  <strong>
+                    {selectedCorrection.scheduleSnapshot
+                      ? formatReviewRange(
+                          selectedCorrection.scheduleSnapshot.scheduledStartAt,
+                          selectedCorrection.scheduleSnapshot.scheduledEndAt,
+                          selectedCorrection.timezone,
+                        )
+                      : selectedCorrection.scheduleStatus === "no-match"
+                        ? "Published schedule exists; no close match"
+                        : "No schedule published for this date"}
+                  </strong>
+                  {selectedCorrection.scheduleSnapshot && (
+                    <p>{correctionScheduleComparison(selectedCorrection)}</p>
+                  )}
+                </div>
+              </div>
             </>
           )
         }
@@ -733,6 +963,106 @@ export default function CorrectionReviewPage() {
               void decideCorrection(event, selectedCorrection)
             }
           >
+            {adjusting && (
+              <div className="correction-adjust-panel">
+                {isBreakCorrectionEvent(selectedCorrection.event) ? (
+                  selectedCorrection.event !== "break_delete" && (
+                    <>
+                      <label>
+                        Adjust break start
+                        <input
+                          name="breakStartedAt"
+                          type="datetime-local"
+                          required
+                          defaultValue={formatOutletDateTime(
+                            selectedCorrection.breakStartedAt ??
+                              selectedCorrection.requestedAt,
+                            selectedCorrection.timezone,
+                          )}
+                        />
+                      </label>
+                      {selectedCorrection.breakEndedAt && (
+                        <label>
+                          Adjust break end
+                          <input
+                            name="breakEndedAt"
+                            type="datetime-local"
+                            required
+                            defaultValue={formatOutletDateTime(
+                              selectedCorrection.breakEndedAt,
+                              selectedCorrection.timezone,
+                            )}
+                          />
+                        </label>
+                      )}
+                    </>
+                  )
+                ) : (
+                  <label>
+                    Adjust punch time
+                    <input
+                      name="requestedAt"
+                      type="datetime-local"
+                      required
+                      defaultValue={formatOutletDateTime(
+                        selectedCorrection.requestedAt,
+                        selectedCorrection.timezone,
+                      )}
+                    />
+                  </label>
+                )}
+                <div className="correction-adjust-actions">
+                  {selectedCorrection.scheduleSnapshot &&
+                    (selectedCorrection.event === "clock_in" ||
+                      selectedCorrection.event === "clock_out") && (
+                      <button
+                        className="btn btn-ghost btn-sm correction-use-schedule"
+                        type="button"
+                        onClick={(event) => {
+                          const input =
+                            event.currentTarget.form?.elements.namedItem(
+                              "requestedAt",
+                            );
+                          const schedule = selectedCorrection.scheduleSnapshot!;
+                          if (input instanceof HTMLInputElement) {
+                            input.value = formatOutletDateTime(
+                              selectedCorrection.event === "clock_in"
+                                ? schedule.scheduledStartAt
+                                : schedule.scheduledEndAt,
+                              selectedCorrection.timezone,
+                            );
+                          }
+                        }}
+                      >
+                        Use scheduled{" "}
+                        {selectedCorrection.event === "clock_in"
+                          ? "start"
+                          : "end"}
+                      </button>
+                    )}
+                  <div className="correction-adjust-buttons">
+                    <button
+                      className="btn btn-ghost"
+                      type="button"
+                      onClick={() => setAdjusting(false)}
+                    >
+                      Cancel adjust
+                    </button>
+                    <DecisionButton
+                      variant="approve"
+                      action="adjust"
+                      busy={busy}
+                    >
+                      Save adjustment
+                    </DecisionButton>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div className="correction-review-reason">
+              <span>Staff reasoning</span>
+              <p>{selectedCorrection.reason}</p>
+            </div>
             <label>
               <span>Reviewer note</span>
               <textarea
@@ -743,108 +1073,39 @@ export default function CorrectionReviewPage() {
                 placeholder="Context for the record."
               />
             </label>
-            <p id="correction-note-hint" className="correction-field-hint">
-              Required to reject or save a note.
-            </p>
-            {adjusting &&
-              (isBreakCorrectionEvent(selectedCorrection.event) ? (
-                selectedCorrection.event !== "break_delete" && (
-                  <>
-                    <label>
-                      Adjust break start
-                      <input
-                        name="breakStartedAt"
-                        type="datetime-local"
-                        required
-                        defaultValue={formatOutletDateTime(
-                          selectedCorrection.breakStartedAt ??
-                            selectedCorrection.requestedAt,
-                          selectedCorrection.timezone,
-                        )}
-                      />
-                    </label>
-                    {selectedCorrection.breakEndedAt && (
-                      <label>
-                        Adjust break end
-                        <input
-                          name="breakEndedAt"
-                          type="datetime-local"
-                          required
-                          defaultValue={formatOutletDateTime(
-                            selectedCorrection.breakEndedAt,
-                            selectedCorrection.timezone,
-                          )}
-                        />
-                      </label>
-                    )}
-                  </>
-                )
-              ) : (
-                <label>
-                  Adjust punch time
-                  <input
-                    name="requestedAt"
-                    type="datetime-local"
-                    required
-                    defaultValue={formatOutletDateTime(
-                      selectedCorrection.requestedAt,
-                      selectedCorrection.timezone,
-                    )}
-                  />
-                </label>
-              ))}
-            <div className="dialog-actions correction-decision-actions">
-              {adjusting ? (
-                <>
-                  <button
-                    className="btn btn-ghost"
-                    type="button"
-                    onClick={() => setAdjusting(false)}
-                  >
-                    Cancel adjust
-                  </button>
-                  <DecisionButton variant="approve" action="adjust" busy={busy}>
-                    Save adjustment
-                  </DecisionButton>
-                </>
-              ) : (
-                <>
-                  <DecisionButton
-                    variant="reject"
-                    action="reject"
-                    busy={busy}
-                    formNoValidate
-                  >
-                    Reject
-                  </DecisionButton>
-                  <DecisionButton
-                    variant="note"
-                    action="save_note"
-                    busy={busy}
-                    formNoValidate
-                  >
-                    Save note
-                  </DecisionButton>
-                  {selectedCorrection.event !== "break_delete" && (
-                    <button
-                      className="btn btn-secondary"
-                      type="button"
-                      disabled={busy !== ""}
-                      onClick={() => setAdjusting(true)}
-                    >
-                      Adjust time
-                    </button>
-                  )}
-                  <DecisionButton
-                    variant="approve"
-                    action="confirm"
-                    busy={busy}
-                  >
-                    Confirm
-                  </DecisionButton>
-                </>
+            {dialogNotice}
+            <div className="correction-note-row">
+              <p id="correction-note-hint" className="correction-field-hint">
+                {adjusting
+                  ? "Optional for adjustments."
+                  : "Required to reject or save a note."}
+              </p>
+              {!adjusting && (
+                <DecisionButton
+                  variant="note"
+                  action="save_note"
+                  busy={busy}
+                  formNoValidate
+                >
+                  Save note
+                </DecisionButton>
               )}
             </div>
+            {!adjusting && (
+              <div className="dialog-actions correction-decision-actions">
+                <DecisionButton
+                  variant="reject"
+                  action="reject"
+                  busy={busy}
+                  formNoValidate
+                >
+                  Reject
+                </DecisionButton>
+                <DecisionButton variant="approve" action="confirm" busy={busy}>
+                  Confirm
+                </DecisionButton>
+              </div>
+            )}
           </DecisionForm>
         )}
       </ReviewDialog>
@@ -866,12 +1127,8 @@ export default function CorrectionReviewPage() {
           selectedPastShift && (
             <>
               <strong className="correction-requested-time">
-                {formatReviewDateTime(
+                {formatReviewRange(
                   selectedPastShift.clockInAt,
-                  selectedPastShift.timezone,
-                )}{" "}
-                –{" "}
-                {formatReviewDateTime(
                   selectedPastShift.clockOutAt,
                   selectedPastShift.timezone,
                 )}
@@ -879,6 +1136,54 @@ export default function CorrectionReviewPage() {
               <p className="correction-request-reason">
                 {selectedPastShift.reason}
               </p>
+              <div className="correction-schedule-context">
+                {selectedPastShift.scheduleSnapshot ? (
+                  <>
+                    <span>Published schedule</span>
+                    <strong>
+                      {formatReviewRange(
+                        selectedPastShift.scheduleSnapshot.scheduledStartAt,
+                        selectedPastShift.scheduleSnapshot.scheduledEndAt,
+                        selectedPastShift.timezone,
+                      )}
+                    </strong>
+                    <small>
+                      {selectedPastShift.scheduleSnapshot.templateName ??
+                        "Custom shift"}
+                      {` · ${selectedPastShift.scheduleSnapshot.breakMinutes}m break`}
+                    </small>
+                    <p>
+                      Requested start is{" "}
+                      {formatMinuteVariance(
+                        Math.round(
+                          (Date.parse(selectedPastShift.clockInAt) -
+                            Date.parse(
+                              selectedPastShift.scheduleSnapshot
+                                .scheduledStartAt,
+                            )) /
+                            60_000,
+                        ),
+                      )}
+                      ; requested end is{" "}
+                      {formatMinuteVariance(
+                        Math.round(
+                          (Date.parse(selectedPastShift.clockOutAt) -
+                            Date.parse(
+                              selectedPastShift.scheduleSnapshot.scheduledEndAt,
+                            )) /
+                            60_000,
+                        ),
+                      )}
+                      .
+                    </p>
+                  </>
+                ) : (
+                  <p>
+                    No matching published schedule was found for this past
+                    shift.
+                  </p>
+                )}
+              </div>
             </>
           )
         }

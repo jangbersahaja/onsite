@@ -15,6 +15,8 @@ import {
 } from "@/lib/outlet-time";
 import {
   buildShiftCorrectionRequests,
+  correctionScheduleVariance,
+  type CorrectionSchedule,
   type ShiftCorrectionBreak,
   type ShiftCorrectionRequest,
   type ShiftCorrectionSnapshot,
@@ -22,7 +24,7 @@ import {
 import { useState, type FormEvent } from "react";
 
 export type ShiftCorrectionShift = {
-  id: string;
+  id: string | null;
   outletId: string;
   outletName: string;
   timezone: string;
@@ -30,6 +32,7 @@ export type ShiftCorrectionShift = {
   clockOutAt: string | null;
   breaks: { id: string; startedAt: string; endedAt: string | null }[];
   staffUserId?: string;
+  schedule?: CorrectionSchedule | null;
 };
 
 type ShiftCorrectionDialogProps = {
@@ -38,18 +41,29 @@ type ShiftCorrectionDialogProps = {
   onSaved: (error: ErrorText | null) => Promise<void>;
 };
 
+function formatDuration(minutes: number) {
+  const absolute = Math.abs(minutes);
+  return `${Math.floor(absolute / 60)}h ${String(absolute % 60).padStart(2, "0")}m`;
+}
+
+function formatVariance(minutes: number) {
+  return `${minutes > 0 ? "+" : minutes < 0 ? "-" : ""}${formatDuration(minutes)}`;
+}
+
 function snapshotOf(shift: ShiftCorrectionShift): ShiftCorrectionSnapshot {
   const toLocal = (value: string) =>
     formatOutletDateTime(value, shift.timezone);
-  return {
-    clockInAt: toLocal(shift.clockInAt),
-    clockOutAt: shift.clockOutAt ? toLocal(shift.clockOutAt) : "",
-    breaks: shift.breaks.map((item) => ({
-      id: item.id,
-      startedAt: toLocal(item.startedAt),
-      endedAt: item.endedAt ? toLocal(item.endedAt) : "",
-    })),
-  };
+  return shift.id === null
+    ? { clockInAt: "", clockOutAt: "", breaks: [] }
+    : {
+        clockInAt: toLocal(shift.clockInAt),
+        clockOutAt: shift.clockOutAt ? toLocal(shift.clockOutAt) : "",
+        breaks: shift.breaks.map((item) => ({
+          id: item.id,
+          startedAt: toLocal(item.startedAt),
+          endedAt: item.endedAt ? toLocal(item.endedAt) : "",
+        })),
+      };
 }
 
 export function ShiftCorrectionDialog({
@@ -61,8 +75,16 @@ export function ShiftCorrectionDialog({
   const t = messages.dialogs.correction;
   const { confirm, confirmDialog } = useConfirmDialog();
   const [original] = useState(() => snapshotOf(shift));
-  const [clockInAt, setClockInAt] = useState(original.clockInAt);
-  const [clockOutAt, setClockOutAt] = useState(original.clockOutAt);
+  const [clockInAt, setClockInAt] = useState(() =>
+    shift.id === null
+      ? formatOutletDateTime(shift.clockInAt, shift.timezone)
+      : original.clockInAt,
+  );
+  const [clockOutAt, setClockOutAt] = useState(() =>
+    shift.id === null && shift.clockOutAt
+      ? formatOutletDateTime(shift.clockOutAt, shift.timezone)
+      : original.clockOutAt,
+  );
   const [breaks, setBreaks] = useState<ShiftCorrectionBreak[]>(original.breaks);
   const [reasonCode, setReasonCode] = useState<CorrectionReasonCode | "">("");
   const [reason, setReason] = useState("");
@@ -76,6 +98,44 @@ export function ShiftCorrectionDialog({
   );
   const toISO = (local: string) =>
     outletDateTimeToISOString(local, shift.timezone);
+  const scheduleStart = shift.schedule
+    ? formatOutletDateTime(shift.schedule.startAt, shift.timezone)
+    : null;
+  const scheduleEnd = shift.schedule
+    ? formatOutletDateTime(shift.schedule.endAt, shift.timezone)
+    : null;
+  let correctedBreakMinutes = 0;
+  try {
+    correctedBreakMinutes = breaks.reduce((total, item) => {
+      if (!item.startedAt || !item.endedAt) return total;
+      return (
+        total +
+        Math.max(
+          0,
+          Math.round(
+            (Date.parse(toISO(item.endedAt)) -
+              Date.parse(toISO(item.startedAt))) /
+              60_000,
+          ),
+        )
+      );
+    }, 0);
+  } catch {
+    correctedBreakMinutes = 0;
+  }
+  let scheduleVariance: ReturnType<typeof correctionScheduleVariance> | null =
+    null;
+  if (shift.schedule && clockInAt && clockOutAt) {
+    try {
+      scheduleVariance = correctionScheduleVariance(shift.schedule, {
+        clockInAt: toISO(clockInAt),
+        clockOutAt: toISO(clockOutAt),
+        breakMinutes: correctedBreakMinutes,
+      });
+    } catch {
+      scheduleVariance = null;
+    }
+  }
 
   function updateBreak(index: number, patch: Partial<ShiftCorrectionBreak>) {
     setBreaks((current) =>
@@ -120,6 +180,7 @@ export function ShiftCorrectionDialog({
     setIsSubmitting(true);
     setError(null);
     let applied = 0;
+    let workSessionId = shift.id;
     // Once a request has been applied, the shift has changed, so the dialog closes and reports the failure.
     const fail = async (failure: ErrorText) => {
       if (applied === 0) {
@@ -136,7 +197,7 @@ export function ShiftCorrectionDialog({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             outletId: shift.outletId,
-            workSessionId: shift.id,
+            workSessionId,
             ...(shift.staffUserId ? { staffUserId: shift.staffUserId } : {}),
             reasonCode,
             reason:
@@ -152,6 +213,7 @@ export function ShiftCorrectionDialog({
           });
           return;
         }
+        workSessionId = result.session?.id ?? workSessionId;
         applied += 1;
       }
       await onSaved(null);
@@ -192,6 +254,50 @@ export function ShiftCorrectionDialog({
           className="timesheet-edit-fields timesheet-edit-modal-fields"
           onSubmit={(event) => void handleSubmit(event)}
         >
+          {shift.schedule && scheduleStart && scheduleEnd && (
+            <section
+              className="shift-correction-schedule"
+              aria-label="Published schedule"
+            >
+              <div>
+                <span>Published schedule</span>
+                <strong>
+                  {scheduleStart.slice(11)} - {scheduleEnd.slice(11)}
+                </strong>
+                <small>
+                  {shift.schedule.templateName ?? "Custom shift"} ·{" "}
+                  {shift.schedule.breakMinutes}m break
+                </small>
+              </div>
+              {shift.schedule.note && <p>{shift.schedule.note}</p>}
+              <div className="shift-correction-schedule-actions">
+                <button
+                  className="btn btn-ghost btn-sm"
+                  type="button"
+                  onClick={() => setClockInAt(scheduleStart)}
+                >
+                  Use scheduled start
+                </button>
+                <button
+                  className="btn btn-ghost btn-sm"
+                  type="button"
+                  onClick={() => setClockOutAt(scheduleEnd)}
+                >
+                  Use scheduled end
+                </button>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  type="button"
+                  onClick={() => {
+                    setClockInAt(scheduleStart);
+                    setClockOutAt(scheduleEnd);
+                  }}
+                >
+                  Use both
+                </button>
+              </div>
+            </section>
+          )}
           <label>
             {t.clockIn}
             <input
@@ -205,11 +311,28 @@ export function ShiftCorrectionDialog({
             {t.clockOut}
             <input
               type="datetime-local"
-              required={original.clockOutAt !== ""}
+              required={shift.id === null || original.clockOutAt !== ""}
               value={clockOutAt}
               onChange={(event) => setClockOutAt(event.target.value)}
             />
           </label>
+          {scheduleVariance && (
+            <div className="shift-correction-variance" aria-live="polite">
+              <span>Schedule variance</span>
+              <strong>
+                Start {formatVariance(scheduleVariance.startMinutes ?? 0)} · End{" "}
+                {formatVariance(scheduleVariance.endMinutes ?? 0)}
+              </strong>
+              <small>
+                Paid {formatDuration(scheduleVariance.paidMinutes ?? 0)} vs{" "}
+                {formatDuration(scheduleVariance.scheduledPaidMinutes)}{" "}
+                scheduled
+                {scheduleVariance.breakMinutes !== 0
+                  ? ` · Break ${formatVariance(scheduleVariance.breakMinutes)}`
+                  : ""}
+              </small>
+            </div>
+          )}
 
           <div className="timesheet-break-editor">
             <div className="timesheet-break-heading">
@@ -285,11 +408,10 @@ export function ShiftCorrectionDialog({
             {CORRECTION_REASON_CODES.map((code) => (
               <label key={code} className="correction-reason-option">
                 <input
-                  type="checkbox"
+                  type="radio"
+                  name="shift-correction-reason"
                   checked={reasonCode === code}
-                  onChange={(event) =>
-                    setReasonCode(event.target.checked ? code : "")
-                  }
+                  onChange={() => setReasonCode(code)}
                 />
                 {t.reasonOptions[code]}
               </label>

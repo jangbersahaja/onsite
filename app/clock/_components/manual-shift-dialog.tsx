@@ -249,11 +249,10 @@ export function ManualShiftDialog({
             {CORRECTION_REASON_CODES.map((code) => (
               <label key={code} className="manual-shift-reason-option">
                 <input
-                  type="checkbox"
+                  type="radio"
+                  name="manual-shift-reason"
                   checked={reasonCode === code}
-                  onChange={(event) =>
-                    setReasonCode(event.target.checked ? code : "")
-                  }
+                  onChange={() => setReasonCode(code)}
                 />
                 {c.reasonOptions[code]}
               </label>

@@ -15,6 +15,10 @@ import {
   type DashboardShiftStatus,
 } from "@/lib/dashboard-data";
 import type { AttendanceFlag } from "@/lib/schedule-rules";
+import {
+  bestCorrectionSchedule,
+  correctionSessionDefault,
+} from "@/lib/shift-correction";
 import { animate, motion, MotionConfig, useReducedMotion } from "motion/react";
 import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
@@ -23,8 +27,12 @@ import { flushSync } from "react-dom";
 type DashboardView = "today" | "yesterday" | "custom";
 
 type DashboardSchedule = {
+  id: string;
   startAt: string;
   endAt: string;
+  breakMinutes: number;
+  templateName: string | null;
+  note: string | null;
   flags: AttendanceFlag[];
 };
 
@@ -218,7 +226,10 @@ function RosterRow({
   onOpen: (shift: DashboardShift) => void;
 }) {
   const isLive = shift.status === "on_shift" || shift.status === "on_break";
-  const isClickable = shift.sessions.length > 0;
+  const isClickable =
+    !!shift.userId &&
+    shift.source !== "storehub" &&
+    (shift.sessions.length > 0 || shift.source === "scheduled");
   const sessionSpans = shift.sessions.map((session) => ({
     session,
     span: getTimelineSpan(
@@ -279,7 +290,11 @@ function RosterRow({
       role={isClickable ? "button" : undefined}
       tabIndex={isClickable ? 0 : undefined}
       aria-label={
-        isClickable ? `Adjust ${shift.employeeName}'s shift` : undefined
+        isClickable
+          ? shift.sessions.length
+            ? `Adjust ${shift.employeeName}'s shift`
+            : `Add ${shift.employeeName}'s scheduled shift`
+          : undefined
       }
       onClick={isClickable ? () => onOpen(shift) : undefined}
       onKeyDown={
@@ -532,17 +547,41 @@ export default function ManagePage() {
   const [editing, setEditing] = useState<ShiftCorrectionShift | null>(null);
 
   const openShift = (shift: DashboardShift, outlet: DashboardOutlet) => {
+    if (!shift.userId) return;
     const session = shift.sessions[shift.sessions.length - 1];
-    if (!session || !shift.userId) return;
+    const schedule = bestCorrectionSchedule(
+      shift.schedules,
+      session
+        ? { clockInAt: session.clockInAt, clockOutAt: session.clockOutAt }
+        : {
+            clockInAt: shift.schedules[0]?.startAt ?? "",
+            clockOutAt: shift.schedules[0]?.endAt ?? null,
+          },
+    );
+    if (!session && !schedule) return;
+    const defaults = correctionSessionDefault({ session, schedule });
     setEditing({
-      id: session.id,
+      id: defaults.id,
       outletId: outlet.id,
       outletName: outlet.name,
       timezone: outlet.timezone,
-      clockInAt: session.clockInAt,
-      clockOutAt: session.clockOutAt,
-      breaks: session.breaks,
+      clockInAt: defaults.clockInAt,
+      clockOutAt: defaults.clockOutAt,
+      breaks: session
+        ? defaults.breaks.flatMap((item) =>
+            item.id
+              ? [
+                  {
+                    id: item.id,
+                    startedAt: item.startedAt,
+                    endedAt: item.endedAt || null,
+                  },
+                ]
+              : [],
+          )
+        : [],
       staffUserId: shift.userId,
+      schedule: defaults.schedule,
     });
   };
 
@@ -762,7 +801,7 @@ export default function ManagePage() {
         )}
         {editing && (
           <ShiftCorrectionDialog
-            key={editing.id}
+            key={`${editing.id ?? "new"}-${editing.schedule?.id ?? "unscheduled"}`}
             shift={editing}
             onOpenChange={(open) => {
               if (!open) setEditing(null);

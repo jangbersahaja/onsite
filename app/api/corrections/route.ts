@@ -3,6 +3,8 @@ import {
   outletMemberships,
   outlets,
   punchSourceEnum,
+  scheduledShifts,
+  shiftTemplates,
   staffDeviceEnrollments,
   user,
   workBreaks,
@@ -23,7 +25,14 @@ import {
 import { CORRECTION_REASON_CODES } from "@/lib/correction-reasons";
 import { getCorrectionTimeError } from "@/lib/correction-time";
 import { getDb } from "@/lib/db";
+import { formatOutletDateTime } from "@/lib/outlet-time";
 import { notifyOutletManagers } from "@/lib/push-notifications";
+import {
+  bestCorrectionSchedule,
+  snapshotCorrectionSchedule,
+  type CorrectionSchedule,
+  type CorrectionScheduleSnapshot,
+} from "@/lib/shift-correction";
 import {
   findApprovedStaffDevice,
   getStaffDeviceCookieName,
@@ -31,7 +40,18 @@ import {
   staffDeviceCookieOptions,
 } from "@/lib/staff-device";
 import { getTeamAccess } from "@/lib/team-access";
-import { and, desc, eq, gt, inArray, isNull, lte, ne, or } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  gte,
+  inArray,
+  isNull,
+  lte,
+  ne,
+  or,
+} from "drizzle-orm";
 import { cookies } from "next/headers";
 import { z } from "zod";
 
@@ -92,6 +112,27 @@ const correctionSchema = z
       });
     }
   });
+
+const correctionScheduleSnapshotSchema = z.object({
+  scheduleId: z.string(),
+  scheduledStartAt: z.string().datetime({ offset: true }),
+  scheduledEndAt: z.string().datetime({ offset: true }),
+  breakMinutes: z.number().int().min(0),
+  templateName: z.string().nullable(),
+  matchedAt: z.string().datetime({ offset: true }),
+});
+
+function readCorrectionScheduleSnapshot(
+  value: unknown,
+): CorrectionScheduleSnapshot | null {
+  if (typeof value !== "object" || value === null) return null;
+  const parsed = correctionScheduleSnapshotSchema.safeParse(
+    "scheduleSnapshot" in value
+      ? (value as { scheduleSnapshot?: unknown }).scheduleSnapshot
+      : undefined,
+  );
+  return parsed.success ? parsed.data : null;
+}
 
 function unavailable() {
   return Response.json(
@@ -176,6 +217,7 @@ export async function GET(request: Request) {
         appliedAt: correctionRequests.appliedAt,
         reconciledAt: correctionRequests.reconciledAt,
         reviewReason: correctionRequests.reviewReason,
+        previousValues: correctionRequests.previousValues,
         createdAt: correctionRequests.createdAt,
       })
       .from(correctionRequests)
@@ -192,7 +234,129 @@ export async function GET(request: Request) {
       .orderBy(desc(correctionRequests.createdAt))
       .limit(review ? 100 : 20);
 
-    return Response.json({ requests, review });
+    const liveSchedules = await getDb()
+      .select({
+        id: scheduledShifts.id,
+        shiftDate: scheduledShifts.shiftDate,
+        userId: scheduledShifts.userId,
+        outletId: scheduledShifts.outletId,
+        startAt: scheduledShifts.startAt,
+        endAt: scheduledShifts.endAt,
+        breakMinutes: scheduledShifts.breakMinutes,
+        note: scheduledShifts.note,
+        templateName: shiftTemplates.name,
+      })
+      .from(scheduledShifts)
+      .leftJoin(
+        shiftTemplates,
+        eq(scheduledShifts.templateId, shiftTemplates.id),
+      )
+      .where(
+        and(
+          eq(scheduledShifts.status, "published"),
+          inArray(scheduledShifts.outletId, [
+            ...new Set(requests.map((request) => request.outletId)),
+          ]),
+          inArray(scheduledShifts.userId, [
+            ...new Set(requests.map((request) => request.requestedBy)),
+          ]),
+        ),
+      );
+
+    return Response.json({
+      requests: requests.map(({ previousValues, ...request }) => {
+        const previous =
+          typeof previousValues === "object" && previousValues !== null
+            ? (previousValues as Record<string, unknown>)
+            : {};
+        const previousPunch =
+          typeof previous.at === "string" ||
+          typeof previous.clockInAt === "string" ||
+          typeof previous.clockOutAt === "string"
+            ? {
+                clockInAt:
+                  request.event === "clock_in"
+                    ? typeof previous.at === "string"
+                      ? previous.at
+                      : typeof previous.clockInAt === "string"
+                        ? previous.clockInAt
+                        : null
+                    : typeof previous.clockInAt === "string"
+                      ? previous.clockInAt
+                      : null,
+                clockOutAt:
+                  request.event === "clock_out"
+                    ? typeof previous.at === "string"
+                      ? previous.at
+                      : typeof previous.clockOutAt === "string"
+                        ? previous.clockOutAt
+                        : null
+                    : typeof previous.clockOutAt === "string"
+                      ? previous.clockOutAt
+                      : null,
+              }
+            : null;
+        const previousBreak =
+          typeof previous.startedAt === "string"
+            ? {
+                startedAt: previous.startedAt,
+                endedAt:
+                  typeof previous.endedAt === "string"
+                    ? previous.endedAt
+                    : null,
+              }
+            : null;
+        const storedSchedule = readCorrectionScheduleSnapshot(previousValues);
+        const liveMatch = bestCorrectionSchedule(
+          liveSchedules
+            .filter(
+              (schedule) =>
+                schedule.userId === request.requestedBy &&
+                schedule.outletId === request.outletId,
+            )
+            .map((schedule) => ({
+              id: schedule.id,
+              startAt: schedule.startAt.toISOString(),
+              endAt: schedule.endAt.toISOString(),
+              breakMinutes: schedule.breakMinutes,
+              templateName: schedule.templateName,
+              note: schedule.note,
+            })),
+          {
+            clockInAt: request.requestedAt.toISOString(),
+            clockOutAt: request.requestedAt.toISOString(),
+          },
+        );
+        const liveScheduleSnapshot = liveMatch
+          ? snapshotCorrectionSchedule(liveMatch, new Date(request.createdAt))
+          : null;
+        const localRequestedDate = formatOutletDateTime(
+          request.requestedAt,
+          request.timezone,
+        ).slice(0, 10);
+        const staffSchedules = liveSchedules.filter(
+          (schedule) =>
+            schedule.userId === request.requestedBy &&
+            schedule.outletId === request.outletId,
+        );
+        const scheduleStatus =
+          storedSchedule || liveScheduleSnapshot
+            ? ("matched" as const)
+            : staffSchedules.some(
+                  (schedule) => schedule.shiftDate === localRequestedDate,
+                )
+              ? ("no-match" as const)
+              : ("none-published" as const);
+        return {
+          ...request,
+          scheduleSnapshot: storedSchedule ?? liveScheduleSnapshot,
+          scheduleStatus,
+          previousPunch,
+          previousBreak,
+        };
+      }),
+      review,
+    });
   } catch {
     return Response.json(
       {
@@ -211,6 +375,52 @@ type CorrectionInput = z.infer<typeof correctionSchema>;
 type CorrectionRow = typeof correctionRequests.$inferSelect;
 type WorkSessionRow = typeof workSessions.$inferSelect;
 type PunchSource = (typeof punchSourceEnum.enumValues)[number];
+
+async function loadCorrectionSchedule(
+  tx: DbTransaction,
+  input: {
+    userId: string;
+    outletId: string;
+    clockInAt: Date;
+    clockOutAt: Date | null;
+  },
+): Promise<CorrectionSchedule | null> {
+  const lowerBound = new Date(input.clockInAt.getTime() - 3 * 60 * 60 * 1000);
+  const upperBound = new Date(
+    (input.clockOutAt ?? input.clockInAt).getTime() + 3 * 60 * 60 * 1000,
+  );
+  const rows = await tx
+    .select({
+      id: scheduledShifts.id,
+      startAt: scheduledShifts.startAt,
+      endAt: scheduledShifts.endAt,
+      breakMinutes: scheduledShifts.breakMinutes,
+      note: scheduledShifts.note,
+      templateName: shiftTemplates.name,
+    })
+    .from(scheduledShifts)
+    .leftJoin(shiftTemplates, eq(scheduledShifts.templateId, shiftTemplates.id))
+    .where(
+      and(
+        eq(scheduledShifts.userId, input.userId),
+        eq(scheduledShifts.outletId, input.outletId),
+        eq(scheduledShifts.status, "published"),
+        gte(scheduledShifts.endAt, lowerBound),
+        lte(scheduledShifts.startAt, upperBound),
+      ),
+    );
+  return bestCorrectionSchedule(
+    rows.map((row) => ({
+      ...row,
+      startAt: row.startAt.toISOString(),
+      endAt: row.endAt.toISOString(),
+    })),
+    {
+      clockInAt: input.clockInAt.toISOString(),
+      clockOutAt: input.clockOutAt?.toISOString() ?? null,
+    },
+  );
+}
 // Punch values captured before a clock correction, used to restore them on reject.
 type PunchSnapshot = {
   at: string | null;
@@ -351,6 +561,15 @@ async function submitBreakCorrection(
         endedAt: plan.target.endedAt?.toISOString() ?? null,
       }
     : null;
+  const schedule = await loadCorrectionSchedule(tx, {
+    userId,
+    outletId: input.outletId,
+    clockInAt: shift.clockInAt,
+    clockOutAt: shift.clockOutAt,
+  });
+  const scheduleSnapshot = schedule
+    ? snapshotCorrectionSchedule(schedule, now)
+    : null;
 
   let breakId: string;
   if (change.kind === "add") {
@@ -403,7 +622,10 @@ async function submitBreakCorrection(
       reason: input.reason,
       status: "reconciliation",
       appliedAt: now,
-      previousValues: previousBreak,
+      previousValues: {
+        ...(previousBreak ?? {}),
+        scheduleSnapshot,
+      },
     })
     .returning();
 
@@ -417,6 +639,7 @@ async function submitBreakCorrection(
       newValues: {
         workSessionId: shift.id,
         event,
+        scheduleSnapshot,
         workBreakId: change.kind === "delete" ? null : breakId,
         breakStartedAt: recordedStart.toISOString(),
         breakEndedAt: recordedEnd?.toISOString() ?? null,
@@ -1288,6 +1511,9 @@ export async function PATCH(request: Request) {
           previousValues: {
             status: "reconciliation",
             requestedAt: correction.requestedAt.toISOString(),
+            scheduleSnapshot: readCorrectionScheduleSnapshot(
+              correction.previousValues,
+            ),
           },
           newValues: {
             status: "approved",
@@ -1355,11 +1581,11 @@ export async function POST(request: Request) {
         { error: "Sign in required.", code: "unauthorized" },
         { status: 401 },
       );
-    if (!session.user.canAccessClock)
+    if (!session.user.canAccessClock && !session.user.canAccessBackoffice)
       return Response.json(
         {
-          error: "Clock access is not enabled.",
-          code: "clock_access_disabled",
+          error: "Correction access is not enabled.",
+          code: "correction_access_disabled",
         },
         { status: 403 },
       );
@@ -1417,6 +1643,15 @@ export async function POST(request: Request) {
 
     const actingForStaff =
       input.staffUserId !== undefined && input.staffUserId !== session.user.id;
+    if (!session.user.canAccessClock && !actingForStaff) {
+      return Response.json(
+        {
+          error: "Clock access is not enabled.",
+          code: "clock_access_disabled",
+        },
+        { status: 403 },
+      );
+    }
     if (actingForStaff) {
       const access = await getTeamAccess(session.user.id);
       if (!access?.outletIds.includes(input.outletId)) {
@@ -1691,6 +1926,15 @@ export async function POST(request: Request) {
         };
       }
 
+      const schedule = await loadCorrectionSchedule(tx, {
+        userId: subjectUserId,
+        outletId: input.outletId,
+        clockInAt: updatedSession.clockInAt,
+        clockOutAt: updatedSession.clockOutAt,
+      });
+      const scheduleSnapshot = schedule
+        ? snapshotCorrectionSchedule(schedule, now)
+        : null;
       const [correction] = await tx
         .insert(correctionRequests)
         .values({
@@ -1704,7 +1948,10 @@ export async function POST(request: Request) {
           reason: input.reason,
           status: "reconciliation",
           appliedAt: now,
-          previousValues: punchSnapshot,
+          previousValues: {
+            ...(punchSnapshot ?? {}),
+            scheduleSnapshot,
+          },
         })
         .returning();
 
@@ -1728,6 +1975,7 @@ export async function POST(request: Request) {
           newValues: {
             workSessionId: updatedSession.id,
             event: input.event,
+            scheduleSnapshot,
             requestedAt: requestedAt.toISOString(),
             status: "reconciliation",
             appliedAt: now.toISOString(),

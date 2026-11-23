@@ -379,11 +379,10 @@ export function CorrectionDialog({
             {CORRECTION_REASON_CODES.map((code) => (
               <label key={code} className="correction-reason-option">
                 <input
-                  type="checkbox"
+                  type="radio"
+                  name="correction-reason"
                   checked={reasonCode === code}
-                  onChange={(inputEvent) =>
-                    setReasonCode(inputEvent.target.checked ? code : "")
-                  }
+                  onChange={() => setReasonCode(code)}
                 />
                 {t.reasonOptions[code]}
               </label>

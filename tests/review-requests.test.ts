@@ -1,6 +1,10 @@
 import { CORRECTION_EVENTS } from "@/lib/break-corrections";
 import {
   CORRECTION_EVENT_LABELS,
+  formatReviewDate,
+  formatReviewDateTime,
+  formatReviewRange,
+  formatReviewTime,
   formatWaitingSince,
   isOverdue,
   mergeReviewList,
@@ -17,6 +21,29 @@ test("every correction event has a readable label", () => {
     assert.ok(CORRECTION_EVENT_LABELS[event].length > 0, event);
     assert.ok(!CORRECTION_EVENT_LABELS[event].includes("_"), event);
   }
+});
+
+test("review timestamps use DD MMM YYYY and 24-hour HH:mm", () => {
+  const value = "2026-11-13T14:05:00.000Z";
+  assert.equal(formatReviewDate(value, "UTC"), "13 Nov 2026");
+  assert.equal(formatReviewTime(value, "UTC"), "14:05");
+  assert.equal(formatReviewDateTime(value, "UTC"), "13 Nov 2026, 14:05");
+  assert.equal(
+    formatReviewRange(
+      "2026-11-13T14:00:00.000Z",
+      "2026-11-13T22:00:00.000Z",
+      "UTC",
+    ),
+    "13 Nov 2026, 14:00 – 22:00",
+  );
+  assert.equal(
+    formatReviewRange(
+      "2026-11-13T22:00:00.000Z",
+      "2026-11-14T06:00:00.000Z",
+      "UTC",
+    ),
+    "13 Nov 2026, 22:00 – 14 Nov 2026, 06:00",
+  );
 });
 
 test("formatWaitingSince scales from minutes to days", () => {
