@@ -210,7 +210,7 @@ export function ShiftDialog({
           onSubmit={(event) => void handleSubmit(event)}
         >
           <fieldset className="schedule-form-fields" disabled={readOnly}>
-          <label>
+          <label className="schedule-form-staff">
             Staff
             <select
               required
