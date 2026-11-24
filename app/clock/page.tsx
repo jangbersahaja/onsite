@@ -8,6 +8,7 @@ import {
   ClockOutSummaryDialog,
   type ClockOutSummaryData,
 } from "@/app/clock/_components/clock-out-summary-dialog";
+import { DutyBoard } from "@/app/clock/_components/duty-board";
 import { PinSettingsPanel } from "@/app/clock/_components/pin-settings-panel";
 import { SetupScreen } from "@/app/clock/_components/setup-screen";
 import { SignInForm } from "@/app/clock/_components/sign-in-form";
@@ -1243,6 +1244,13 @@ export default function Home() {
           </div>
 
           <aside className="day-column">
+            {selectedOutlet && (
+              <DutyBoard
+                key={selectedOutlet.id}
+                outlet={selectedOutlet}
+                refreshKey={`${activeSession?.id ?? ""}:${activeBreak?.id ?? ""}`}
+              />
+            )}
             {staffDeviceStatus?.required &&
               staffDeviceStatus.currentBrowserApproved && (
                 <PinSettingsPanel
