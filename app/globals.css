@@ -10902,7 +10902,7 @@ body input[type="datetime-local"]::-webkit-datetime-edit {
   form
   input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(
     [type="hidden"]
-  ),
+  ):not(.pin-digit-group *),
 .workspace-dialog form select,
 .workspace-dialog form textarea,
 .auth-form input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
@@ -10955,7 +10955,9 @@ body input[type="datetime-local"]::-webkit-datetime-edit {
 }
 .workspace-dialog
   form
-  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):hover,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(
+    .pin-digit-group *
+  ):hover,
 .workspace-dialog form select:hover,
 .workspace-dialog form textarea:hover,
 .auth-form input:hover,
