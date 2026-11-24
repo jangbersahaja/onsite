@@ -11320,17 +11320,63 @@ body input[type="datetime-local"]::-webkit-datetime-edit {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-#clock .duty-rail {
+#clock .duty-gantt {
+  display: grid;
+  gap: 8px;
+}
+#clock .duty-lane {
+  display: grid;
+  grid-template-columns: minmax(0, 96px) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+#clock .duty-lane-label {
+  display: grid;
+  min-width: 0;
+  line-height: 1.25;
+}
+#clock .duty-lane-label strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 800;
+}
+#clock .duty-lane-label > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+#clock .duty-lane.is-me .duty-lane-label strong {
+  color: var(--green-dark);
+}
+#clock .duty-track {
   position: relative;
-  height: 46px;
+  height: 30px;
   border-radius: 999px;
   background: var(--paper);
   border: 1px solid var(--line);
 }
+#clock .duty-axis {
+  height: 14px;
+  border: 0;
+  background: none;
+}
+#clock .duty-axis > span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 #clock .duty-pill {
   position: absolute;
-  top: 5px;
-  bottom: 5px;
+  top: 3px;
+  bottom: 3px;
   min-width: 34px;
   display: flex;
   align-items: center;
@@ -11362,10 +11408,7 @@ body input[type="datetime-local"]::-webkit-datetime-edit {
   box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--green);
   transform: translateY(-1px);
 }
-#clock .duty-pill.is-me {
-  outline: 1px dashed var(--green);
-  outline-offset: -4px;
-}
+
 #clock .duty-pill-upcoming {
   background: #eef1f8;
   color: var(--muted);

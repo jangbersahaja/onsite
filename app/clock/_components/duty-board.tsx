@@ -184,6 +184,20 @@ export function DutyBoard({
 
   const nowTime = formatOutletDateTime(now, outlet.timezone).slice(11);
   const nowMinutes = minutesOfDay(nowTime);
+  const axisTicks = [];
+  if (timeline) {
+    const step = 180;
+    const max = timeline.low + timeline.span;
+    for (let m = Math.ceil(timeline.low / step) * step; m < max; m += step) {
+      if (m <= timeline.low) continue;
+      const hour = Math.floor(m / 60) % 24;
+      axisTicks.push({
+        minutes: m,
+        left: ((m - timeline.low) / timeline.span) * 100,
+        label: `${String(hour).padStart(2, "0")}:00`,
+      });
+    }
+  }
   const scheduledCount = board.shifts.length;
   const formatDuration = (minutes: number) =>
     format(messages.clock.duration, {
@@ -271,11 +285,20 @@ export function DutyBoard({
         <p className="duty-empty">{copy.nothingScheduled}</p>
       ) : (
         <>
-          <div
-            className="duty-rail"
-            role="group"
-            aria-label={copy.timeline}
-          >
+          <div className="duty-gantt" aria-label={copy.timeline}>
+            <div className="duty-lane duty-lane-axis" aria-hidden="true">
+              <span />
+              <div className="duty-track duty-axis">
+                {axisTicks.map((tick) => (
+                  <span
+                    key={tick.minutes}
+                    style={{ left: `${tick.left}%` }}
+                  >
+                    {tick.label}
+                  </span>
+                ))}
+              </div>
+            </div>
             {board.shifts.map((row) => {
               const start = minutesOfDay(row.shift.startTime);
               const endRaw = minutesOfDay(row.shift.endTime);
@@ -284,33 +307,44 @@ export function DutyBoard({
               const width = ((end - start) / timeline.span) * 100;
               const selected = focus?.shift.id === row.shift.id;
               return (
-                <button
+                <div
                   key={row.shift.id}
-                  type="button"
-                  className={`duty-pill duty-pill-${row.state}${selected ? " is-selected" : ""}${row.person.isCurrentUser ? " is-me" : ""}`}
-                  style={{
-                    left: `${Math.max(0, left)}%`,
-                    width: `${Math.min(100 - Math.max(0, left), width)}%`,
-                  }}
-                  aria-pressed={selected}
-                  aria-label={`${personName(row.person)} ${row.shift.startTime}–${row.shift.endTime}, ${copy.states[row.state]}`}
-                  onClick={() => setSelectedShiftId(row.shift.id)}
+                  className={`duty-lane${row.person.isCurrentUser ? " is-me" : ""}`}
                 >
-                  <StateGlyph state={row.state} />
-                  <span>{initials(row.person.name)}</span>
-                </button>
+                  <span className="duty-lane-label">
+                    <strong>{personName(row.person)}</strong>
+                    <span>
+                      {row.shift.startTime}–{row.shift.endTime}
+                    </span>
+                  </span>
+                  <div className="duty-track">
+                    <button
+                      type="button"
+                      className={`duty-pill duty-pill-${row.state}${selected ? " is-selected" : ""}`}
+                      style={{
+                        left: `${Math.max(0, left)}%`,
+                        width: `${Math.min(100 - Math.max(0, left), width)}%`,
+                      }}
+                      aria-pressed={selected}
+                      aria-label={`${personName(row.person)} ${row.shift.startTime}–${row.shift.endTime}, ${copy.states[row.state]}`}
+                      onClick={() => setSelectedShiftId(row.shift.id)}
+                    >
+                      <StateGlyph state={row.state} />
+                    </button>
+                    {nowMinutes >= timeline.low &&
+                    nowMinutes <= timeline.low + timeline.span ? (
+                      <span
+                        className="duty-now"
+                        aria-label={copy.nowLabel}
+                        style={{
+                          left: `${((nowMinutes - timeline.low) / timeline.span) * 100}%`,
+                        }}
+                      />
+                    ) : null}
+                  </div>
+                </div>
               );
             })}
-            {nowMinutes >= timeline.low &&
-            nowMinutes <= timeline.low + timeline.span ? (
-              <span
-                className="duty-now"
-                aria-label={copy.nowLabel}
-                style={{
-                  left: `${((nowMinutes - timeline.low) / timeline.span) * 100}%`,
-                }}
-              />
-            ) : null}
           </div>
 
           {focus ? (
