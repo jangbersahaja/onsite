@@ -11199,3 +11199,338 @@ body input[type="datetime-local"]::-webkit-datetime-edit {
   position: static;
   bottom: auto;
 }
+
+/* Clock duty board: who is on duty and scheduled today. */
+#clock .duty-board {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-card);
+  color: var(--ink);
+}
+#clock .duty-board p,
+#clock .duty-board h2,
+#clock .duty-board h3 {
+  margin: 0;
+}
+#clock .duty-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+#clock .duty-header h2 {
+  font-size: 15px;
+  font-weight: 800;
+}
+#clock .duty-summary,
+#clock .duty-empty,
+#clock .duty-focus-time,
+#clock .duty-focus-state {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+#clock .duty-subtitle {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+#clock .duty-people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+#clock .duty-person {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  width: 58px;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-align: center;
+}
+#clock .duty-avatar {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--mint);
+  color: var(--green-dark);
+  font-weight: 800;
+  overflow: hidden;
+}
+#clock .duty-avatar img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  border-radius: 50%;
+  object-fit: cover;
+}
+#clock .duty-glyph {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+#clock .duty-person-badge {
+  position: absolute;
+  top: 24px;
+  right: 2px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--success);
+  color: #fff;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+#clock .duty-person-badge .duty-glyph {
+  width: 12px;
+  height: 12px;
+}
+#clock .duty-person-on_break .duty-person-badge {
+  background: var(--break);
+}
+#clock .duty-person-on_break .duty-avatar {
+  box-shadow: 0 0 0 2px var(--break-soft);
+}
+#clock .duty-person-on_duty .duty-avatar {
+  box-shadow: 0 0 0 2px var(--lime);
+}
+#clock .duty-person-on_duty .duty-person-badge {
+  animation: duty-pulse 2.4s ease-out infinite;
+}
+#clock .duty-person-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#clock .duty-gantt {
+  display: grid;
+  gap: 8px;
+}
+#clock .duty-lane {
+  display: grid;
+  grid-template-columns: minmax(0, 96px) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+#clock .duty-lane-label {
+  display: grid;
+  min-width: 0;
+  line-height: 1.25;
+}
+#clock .duty-lane-label strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 800;
+}
+#clock .duty-lane-label > span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+#clock .duty-lane.is-me .duty-lane-label strong {
+  color: var(--green-dark);
+}
+#clock .duty-track {
+  position: relative;
+  height: 30px;
+  border-radius: 999px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+}
+#clock .duty-axis {
+  height: 14px;
+  border: 0;
+  background: none;
+}
+#clock .duty-axis > span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+#clock .duty-pill {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  min-width: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--mint);
+  color: var(--green-dark);
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: pointer;
+  overflow: hidden;
+  white-space: nowrap;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+#clock .duty-pill .duty-glyph {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+#clock .duty-pill:focus-visible {
+  outline: 2px solid var(--green);
+  outline-offset: 2px;
+}
+#clock .duty-pill.is-selected {
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--green);
+  transform: translateY(-1px);
+}
+
+#clock .duty-pill-upcoming {
+  background: #eef1f8;
+  color: var(--muted);
+}
+#clock .duty-pill-late {
+  background: #fde8e6;
+  color: var(--danger);
+  animation: duty-shake 3s ease-in-out infinite;
+}
+#clock .duty-pill-on_duty {
+  background: var(--lime);
+  color: var(--success);
+}
+#clock .duty-pill-on_break {
+  background: var(--break-soft);
+  color: var(--amber);
+}
+#clock .duty-pill-completed {
+  background: #eef1f8;
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+#clock .duty-pill-absent {
+  background: transparent;
+  border: 1px dashed var(--danger);
+  color: var(--danger);
+}
+#clock .duty-now {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  margin-left: -1px;
+  border-radius: 2px;
+  background: var(--danger);
+  pointer-events: none;
+}
+#clock .duty-focus {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+}
+#clock .duty-focus > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+#clock .duty-focus-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: var(--mint);
+  color: var(--green-dark);
+}
+#clock .duty-focus-icon .duty-glyph {
+  width: 18px;
+  height: 18px;
+}
+#clock .duty-focus-on_duty .duty-focus-icon {
+  background: var(--lime);
+  color: var(--success);
+}
+#clock .duty-focus-on_break .duty-focus-icon {
+  background: var(--break-soft);
+  color: var(--amber);
+}
+#clock .duty-focus-late .duty-focus-icon,
+#clock .duty-focus-absent .duty-focus-icon {
+  background: #fde8e6;
+  color: var(--danger);
+}
+#clock .duty-focus-state {
+  font-weight: 700;
+}
+#clock .duty-board .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+#clock .duty-board-error,
+#clock .duty-board-loading {
+  padding: 14px 16px;
+  color: var(--muted);
+  font-size: 13px;
+}
+#clock .duty-board-error button {
+  justify-self: start;
+  margin-top: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+@keyframes duty-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(20, 125, 100, 0.45); }
+  70% { box-shadow: 0 0 0 9px rgba(20, 125, 100, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(20, 125, 100, 0); }
+}
+@keyframes duty-shake {
+  0%, 84%, 100% { transform: translateX(0); }
+  88% { transform: translateX(-2px); }
+  92% { transform: translateX(2px); }
+  96% { transform: translateX(-1px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #clock .duty-person-on_duty .duty-person-badge,
+  #clock .duty-pill-late {
+    animation: none;
+  }
+}
