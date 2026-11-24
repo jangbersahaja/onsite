@@ -11260,19 +11260,30 @@ body input[type="datetime-local"]::-webkit-datetime-edit {
   position: relative;
   display: grid;
   place-items: center;
+  flex: none;
   width: 42px;
   height: 42px;
   border-radius: 50%;
   background: var(--mint);
   color: var(--green-dark);
   font-weight: 800;
-  overflow: visible;
+  overflow: hidden;
 }
 #clock .duty-avatar img {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
+  max-width: none;
   border-radius: 50%;
   object-fit: cover;
+}
+#clock .duty-glyph {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 #clock .duty-person-badge {
   position: absolute;
