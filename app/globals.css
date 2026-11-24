@@ -11057,9 +11057,6 @@ body input[type="datetime-local"]::-webkit-datetime-edit {
 .workspace-dialog .pin-setup-actions,
 .workspace-dialog .schedule-form-actions,
 .workspace-dialog .correction-decision-actions {
-  position: sticky;
-  bottom: -28px;
-  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -11146,7 +11143,6 @@ body input[type="datetime-local"]::-webkit-datetime-edit {
   .workspace-dialog .pin-setup-actions,
   .workspace-dialog .schedule-form-actions,
   .workspace-dialog .correction-decision-actions {
-    bottom: -18px;
     flex-direction: column-reverse;
     align-items: stretch;
     margin: 22px -18px -18px;
