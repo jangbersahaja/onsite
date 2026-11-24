@@ -10905,7 +10905,10 @@ body input[type="datetime-local"]::-webkit-datetime-edit {
   ):not(.pin-digit-group *),
 .workspace-dialog form select,
 .workspace-dialog form textarea,
-.auth-form input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.auth-form
+  input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not(
+    .pin-digit-group *
+  ),
 .auth-form select,
 .register-form
   input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
