@@ -9734,6 +9734,10 @@ body .schedule-brush-custom input {
   .schedule-attendance-card {
     grid-template-columns: 1fr 1fr;
   }
+  .schedule-form-staff,
+  .schedule-form-actions {
+    grid-column: 1 / -1;
+  }
   .schedule-form-actions {
     flex-wrap: wrap;
   }
